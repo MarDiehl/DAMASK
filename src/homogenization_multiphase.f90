@@ -5,8 +5,7 @@
 !--------------------------------------------------------------------------------------------------
 module homogenization_multiphase
  use prec, only: &
-   pInt, &
-   tState
+   pInt
  
  implicit none
  private
@@ -21,8 +20,6 @@ module homogenization_multiphase
    homogenization_multiphase_Noutput                                                                 !< number of outputs per homog instance
  integer(pInt),               dimension(:),   allocatable,         private :: &
    homogenization_multiphase_Ngrains
- type(tState),                dimension(:),   allocatable,         private :: &
-   homogenization_multiphase_phaseFrac
 
  enum, bind(c) 
    enumerator :: undefined_ID, &
@@ -80,10 +77,10 @@ subroutine homogenization_multiphase_init(fileUnit)
    mesh_element
  
  implicit none
- integer(pInt),                                      intent(in) :: fileUnit
+ integer(pInt),                intent(in) :: fileUnit
  integer(pInt), allocatable, dimension(:) :: chunkPos
  integer(pInt) :: &
-   section = 0_pInt, i, mySize, o, el, ip, gr, offset
+   section = 0_pInt, i, mySize, o, el, ip, gr
  integer :: &
    maxNinstance, &
    homog, &
@@ -114,7 +111,6 @@ subroutine homogenization_multiphase_init(fileUnit)
  allocate(homogenization_multiphase_outputID(maxval(homogenization_Noutput),maxNinstance), &
                                                                            source=undefined_ID)
  allocate(homogenization_multiphase_mixtureID(maxNinstance),               source=isostrain_ID)
- allocate(homogenization_multiphase_phaseFrac(maxNinstance))
 
  rewind(fileUnit)
  do while (trim(line) /= IO_EOF .and. IO_lc(IO_getTag(line,'<','>')) /= material_partHomogenization)! wind forward to <homogenization>
@@ -209,13 +205,19 @@ subroutine homogenization_multiphase_init(fileUnit)
      enddo outputsLoop
 
 ! allocate state arrays
-     allocate(homogenization_multiphase_phaseFrac(instance)% &
-                state(homogenization_Ngrains(homog),NofMyHomog), source=0.0_pReal)
      homogState(homog)%sizeState = 0_pInt
      homogState(homog)%sizePostResults = homogenization_multiphase_sizePostResults(instance)
      allocate(homogState(homog)%state0   (homogState(homog)%sizeState,NofMyHomog), source=0.0_pReal)
      allocate(homogState(homog)%subState0(homogState(homog)%sizeState,NofMyHomog), source=0.0_pReal)
      allocate(homogState(homog)%state    (homogState(homog)%sizeState,NofMyHomog), source=0.0_pReal)
+
+     nullify(phasefracMapping(homog)%p)
+     phasefracMapping(homog)%p => mappingHomogenization(1,:,:)
+     do gr = 1_pInt, homogenization_Ngrains(homog)
+       deallocate(phasefrac(gr,homog)%p)
+       allocate  (phasefrac(gr,homog)%p(NofMyHomog))
+     enddo  
+
    endif myHomog
  enddo initializeInstances
  
@@ -224,10 +226,8 @@ subroutine homogenization_multiphase_init(fileUnit)
      homog = mesh_element(3,el)
      micro = mesh_element(4,el)
      if (homogenization_type(homog) == HOMOGENIZATION_MULTIPHASE_ID) then
-       instance = homogenization_typeInstance(homog)
-       offset = mappingHomogenization(1,ip,el)
        do gr = 1_pInt, homogenization_Ngrains(homog)
-         homogenization_multiphase_phaseFrac(instance)%state(gr,offset) = &
+         phasefrac(gr,homog)%p(phasefracMapping(homog)%p(ip,el)) = &
            microstructure_fraction(gr,micro)
        enddo    
      endif
@@ -248,8 +248,7 @@ subroutine homogenization_multiphase_partitionDeformation(F,avgF,ip,el)
  use material, only: &
    homogenization_maxNgrains, &
    homogenization_Ngrains, &
-   homogenization_typeInstance, &
-   mappingHomogenization
+   homogenization_typeInstance
  
  implicit none
  real(pReal),   dimension (3,3,homogenization_maxNgrains), intent(out) :: F                         !< partioned def grad per grain
@@ -287,7 +286,8 @@ subroutine homogenization_multiphase_averageStressAndItsTangent(avgP,dAvgPdAvgF,
    homogenization_maxNgrains, &
    homogenization_Ngrains, &
    homogenization_typeInstance, &
-   mappingHomogenization
+   phasefracMapping, &
+   phasefrac
  
  implicit none
  real(pReal),   dimension (3,3),                               intent(out) :: avgP                  !< average stress at material point
@@ -303,18 +303,16 @@ subroutine homogenization_multiphase_averageStressAndItsTangent(avgP,dAvgPdAvgF,
 
  homog = mesh_element(3,el)
  instance = homogenization_typeInstance(homog)
- offset = mappingHomogenization(1,ip,el)
+ offset = phasefracMapping(homog)%p(ip,el)
  select case(homogenization_multiphase_mixtureID(instance))
    case(isostrain_ID)
      avgP = 0.0_pReal
      dAvgPdAvgF = 0.0_pReal
      do gr = 1_pInt, homogenization_Ngrains(homog)
        avgP = avgP + &
-              homogenization_multiphase_phaseFrac(instance)%state(gr,offset)* &
-              P(1:3,1:3,gr) 
+              phasefrac(gr,homog)%p(offset)*P(1:3,1:3,gr) 
        dAvgPdAvgF = dAvgPdAvgF + &
-              homogenization_multiphase_phaseFrac(instance)%state(gr,offset)* &
-              dPdF(1:3,1:3,1:3,1:3,gr) 
+                    phasefrac(gr,homog)%p(offset)*dPdF(1:3,1:3,1:3,1:3,gr) 
      enddo
 
    case(isostress_ID)
@@ -337,23 +335,20 @@ function homogenization_multiphase_updateState(ip,el)
  use mesh, only: &
    mesh_element
  use material, only: &
-   homogenization_maxNgrains, &
-   homogenization_Ngrains, &
    homogenization_typeInstance, &
-   mappingHomogenization
+   phasefracMapping
  
  implicit none
  logical,       dimension (2)             :: homogenization_multiphase_updateState                  !< average stress at material point
  integer(pInt),                intent(in) :: ip, el                                                 !< element number
  integer(pInt) :: &
-   gr, &
    homog, & 
    instance, &
    offset
 
  homog = mesh_element(3,el)
  instance = homogenization_typeInstance(homog)
- offset = mappingHomogenization(1,ip,el)
+ offset = phasefracMapping(homog)%p(ip,el)
  select case(homogenization_multiphase_mixtureID(instance))
    case(isostrain_ID)
      homogenization_multiphase_updateState = [.true., .true.]
@@ -372,7 +367,7 @@ end function homogenization_multiphase_updateState
 !--------------------------------------------------------------------------------------------------
 !> @brief set module wide phase fractions 
 !--------------------------------------------------------------------------------------------------
-subroutine homogenization_multiphase_putPhaseFrac(phaseFrac,ip,el)
+subroutine homogenization_multiphase_putPhaseFrac(frac,ip,el)
  use prec, only: &
    pReal
  use mesh, only: &
@@ -380,12 +375,13 @@ subroutine homogenization_multiphase_putPhaseFrac(phaseFrac,ip,el)
  use material, only: &
    homogenization_Ngrains, &
    homogenization_typeInstance, &
-   mappingHomogenization
+   phasefracMapping, &
+   phasefrac
  
  implicit none
  integer(pInt),                                                intent(in)  :: ip, el                !< element number
  real(pReal),   dimension (homogenization_Ngrains(mesh_element(3,el))),     &
-                                                               intent(in)  :: phaseFrac             !< array of current phase fractions
+                                                               intent(in)  :: frac             !< array of current phase fractions
  integer(pInt) :: &
    gr, &
    homog, & 
@@ -394,10 +390,9 @@ subroutine homogenization_multiphase_putPhaseFrac(phaseFrac,ip,el)
 
  homog = mesh_element(3,el)
  instance = homogenization_typeInstance(homog)
- offset = mappingHomogenization(1,ip,el)
+ offset = phasefracMapping(homog)%p(ip,el)
  do gr = 1_pInt, homogenization_Ngrains(homog)
-   homogenization_multiphase_phaseFrac(instance)%state(gr,offset) = &
-          phaseFrac(gr) 
+   phasefrac(gr,homog)%p(offset) =  frac(gr) 
  enddo
 
 end subroutine homogenization_multiphase_putPhaseFrac

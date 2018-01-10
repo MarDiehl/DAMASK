@@ -292,7 +292,8 @@ module material
    damageMapping, &                                                                                 !< mapping for damage state/fields
    vacancyfluxMapping, &                                                                            !< mapping for vacancy conc state/fields
    porosityMapping, &                                                                               !< mapping for porosity state/fields
-   hydrogenfluxMapping                                                                              !< mapping for hydrogen conc state/fields
+   hydrogenfluxMapping, &
+   phasefracMapping                                                                              !< mapping for hydrogen conc state/fields
 
  type(p_vec),         allocatable, dimension(:), public :: &
    temperature, &                                                                                   !< temperature field
@@ -302,7 +303,10 @@ module material
    hydrogenConc, &                                                                                  !< hydrogen conc field
    temperatureRate, &                                                                               !< temperature change rate field
    vacancyConcRate, &                                                                               !< vacancy conc change field
-   hydrogenConcRate                                                                                 !< hydrogen conc change field
+   hydrogenConcRate
+
+ type(p_vec),         allocatable, dimension(:,:), public :: &
+   phasefrac                                                                                 !< hydrogen conc change field
 
  public :: &
    material_init, &
@@ -451,6 +455,10 @@ subroutine material_init()
  allocate(vacancyConcRate    (material_Nhomogenization))
  allocate(hydrogenConcRate   (material_Nhomogenization))
 
+ allocate(phasefracMapping   (material_Nhomogenization))
+ allocate(phasefrac          (homogenization_maxNgrains,&
+                              material_Nhomogenization))
+
  do m = 1_pInt,material_Nmicrostructure
    if(microstructure_crystallite(m) < 1_pInt .or. &
       microstructure_crystallite(m) > material_Ncrystallite) &
@@ -521,6 +529,7 @@ subroutine material_init()
    vacancyfluxMapping (myHomog)%p => mappingHomogenizationConst
    porosityMapping    (myHomog)%p => mappingHomogenizationConst
    hydrogenfluxMapping(myHomog)%p => mappingHomogenizationConst
+   phasefracMapping   (myHomog)%p => mappingHomogenizationConst
    allocate(temperature     (myHomog)%p(1), source=thermal_initialT(myHomog))
    allocate(damage          (myHomog)%p(1), source=damage_initialPhi(myHomog))
    allocate(vacancyConc     (myHomog)%p(1), source=vacancyflux_initialCv(myHomog))
@@ -529,6 +538,10 @@ subroutine material_init()
    allocate(temperatureRate (myHomog)%p(1), source=0.0_pReal)
    allocate(vacancyConcRate (myHomog)%p(1), source=0.0_pReal)
    allocate(hydrogenConcRate(myHomog)%p(1), source=0.0_pReal)
+   do g = 1_pInt,homogenization_Ngrains(mesh_element(3,e))
+     allocate(phasefrac(g,myHomog)%p(1), &
+              source=1.0_pReal/real(homogenization_Ngrains(mesh_element(3,e)),pReal))
+   enddo
  enddo
 
 end subroutine material_init
