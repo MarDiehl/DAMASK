@@ -3,23 +3,24 @@
 !> @author Pratheek Shanthraj, Max-Planck-Institut für Eisenforschung GmbH
 !> @brief Isostress homogenization scheme
 !--------------------------------------------------------------------------------------------------
-module homogenization_isostress
+module homogenization_multiphase
  use prec, only: &
    pInt
  
  implicit none
  private
  integer(pInt),               dimension(:),   allocatable,         public, protected :: &
-   homogenization_isostress_sizePostResults
+   homogenization_multiphase_sizePostResults
  integer(pInt),               dimension(:,:), allocatable, target, public :: &
-   homogenization_isostress_sizePostResult
+   homogenization_multiphase_sizePostResult
  
  character(len=64),           dimension(:,:), allocatable, target, public :: &
-  homogenization_isostress_output                                                                   !< name of each post result output
+  homogenization_multiphase_output                                                                   !< name of each post result output
  integer(pInt),               dimension(:),   allocatable, target, public :: &
-   homogenization_isostress_Noutput                                                                 !< number of outputs per homog instance
+   homogenization_multiphase_Noutput                                                                 !< number of outputs per homog instance
  integer(pInt),               dimension(:),   allocatable,         private :: &
-   homogenization_isostress_Ngrains
+   homogenization_multiphase_Ngrains
+
  enum, bind(c) 
    enumerator :: undefined_ID, &
                  nconstituents_ID, &
@@ -27,26 +28,34 @@ module homogenization_isostress
                  avgdefgrad_ID, &
                  avgfirstpiola_ID
  end enum
- enum, bind(c) 
-   enumerator :: parallel_ID, &
-                 average_ID
- end enum
+
  integer(kind(undefined_ID)), dimension(:,:), allocatable,         private :: &
-  homogenization_isostress_outputID                                                                 !< ID of each post result output
+  homogenization_multiphase_outputID                                                                 !< ID of each post result output
+
+ enum, bind(c) 
+   enumerator :: isostrain_ID, &
+                 isostress_ID, &
+                 rankone_ID, &
+                 laminate_ID
+ end enum
+
+ integer(kind(isostrain_ID)), dimension(:),   allocatable,         private :: &
+  homogenization_multiphase_mixtureID                                                                !< ID of mixture rule
 
 
  public :: &
-   homogenization_isostress_init, &
-   homogenization_isostress_partitionDeformation, &
-   homogenization_isostress_averageStressAndItsTangent, &
-   homogenization_isostress_postResults
+   homogenization_multiphase_init, &
+   homogenization_multiphase_partitionDeformation, &
+   homogenization_multiphase_averageStressAndItsTangent, &
+   homogenization_multiphase_updateState, &
+   homogenization_multiphase_postResults
 
 contains
 
 !--------------------------------------------------------------------------------------------------
 !> @brief allocates all neccessary fields, reads information from material configuration file
 !--------------------------------------------------------------------------------------------------
-subroutine homogenization_isostress_init(fileUnit)
+subroutine homogenization_multiphase_init(fileUnit)
 #ifdef __GFORTRAN__
  use, intrinsic :: iso_fortran_env, only: &
    compiler_version, &
@@ -60,12 +69,15 @@ subroutine homogenization_isostress_init(fileUnit)
    debug_levelBasic
  use IO
  use material
+ use mesh, only: &
+   mesh_NcpElems, &
+   mesh_element
  
  implicit none
  integer(pInt),                                      intent(in) :: fileUnit
  integer(pInt), allocatable, dimension(:) :: chunkPos
  integer(pInt) :: &
-   section = 0_pInt, i, mySize, o
+   section = 0_pInt, i, mySize, o, el, ip, gr
  integer :: &
    maxNinstance, &
    homog, &
@@ -76,24 +88,25 @@ subroutine homogenization_isostress_init(fileUnit)
    tag  = '', &
    line = ''
  
- write(6,'(/,a)')   ' <<<+-  homogenization_'//HOMOGENIZATION_ISOSTRESS_label//' init  -+>>>'
+ write(6,'(/,a)')   ' <<<+-  homogenization_'//HOMOGENIZATION_MULTIPHASE_label//' init  -+>>>'
  write(6,'(a15,a)') ' Current time: ',IO_timeStamp()
 #include "compilation_info.f90"
 
- maxNinstance = count(homogenization_type == HOMOGENIZATION_ISOSTRESS_ID)
+ maxNinstance = count(homogenization_type == HOMOGENIZATION_MULTIPHASE_ID)
  if (maxNinstance == 0) return
  
  if (iand(debug_level(debug_HOMOGENIZATION),debug_levelBasic) /= 0_pInt) &
    write(6,'(a16,1x,i5,/)') '# instances:',maxNinstance
- allocate(homogenization_isostress_sizePostResults(maxNinstance),          source=0_pInt)
- allocate(homogenization_isostress_sizePostResult(maxval(homogenization_Noutput),maxNinstance), &
+ allocate(homogenization_multiphase_sizePostResults(maxNinstance),          source=0_pInt)
+ allocate(homogenization_multiphase_sizePostResult(maxval(homogenization_Noutput),maxNinstance), &
                                                                            source=0_pInt)
- allocate(homogenization_isostress_Noutput(maxNinstance),                  source=0_pInt)
- allocate(homogenization_isostress_Ngrains(maxNinstance),                  source=0_pInt)
- allocate(homogenization_isostress_output(maxval(homogenization_Noutput),maxNinstance))
-          homogenization_isostress_output = ''
- allocate(homogenization_isostress_outputID(maxval(homogenization_Noutput),maxNinstance), &
+ allocate(homogenization_multiphase_Noutput(maxNinstance),                  source=0_pInt)
+ allocate(homogenization_multiphase_Ngrains(maxNinstance),                  source=0_pInt)
+ allocate(homogenization_multiphase_output(maxval(homogenization_Noutput),maxNinstance))
+          homogenization_multiphase_output = ''
+ allocate(homogenization_multiphase_outputID(maxval(homogenization_Noutput),maxNinstance), &
                                                                            source=undefined_ID)
+ allocate(homogenization_multiphase_mixtureID(maxNinstance),               source=isostrain_ID)
 
  rewind(fileUnit)
  do while (trim(line) /= IO_EOF .and. IO_lc(IO_getTag(line,'<','>')) /= material_partHomogenization)! wind forward to <homogenization>
@@ -112,7 +125,7 @@ subroutine homogenization_isostress_init(fileUnit)
      cycle
    endif
    if (section > 0_pInt ) then                                                                      ! do not short-circuit here (.and. with next if-statement). It's not safe in Fortran
-     if (homogenization_type(section) == HOMOGENIZATION_ISOSTRESS_ID) then                          ! one of my sections
+     if (homogenization_type(section) == HOMOGENIZATION_MULTIPHASE_ID) then                          ! one of my sections
        i = homogenization_typeInstance(section)                                                     ! which instance of my type is present homogenization
        chunkPos = IO_stringPos(line)
        tag = IO_lc(IO_stringValue(line,chunkPos,1_pInt))                                           ! extract key
@@ -120,29 +133,42 @@ subroutine homogenization_isostress_init(fileUnit)
          case ('(output)')
            select case(IO_lc(IO_stringValue(line,chunkPos,2_pInt)))
              case('nconstituents','ngrains')
-               homogenization_isostress_Noutput(i) = homogenization_isostress_Noutput(i) + 1_pInt
-               homogenization_isostress_outputID(homogenization_isostress_Noutput(i),i) = nconstituents_ID
-               homogenization_isostress_output(homogenization_isostress_Noutput(i),i) = &
+               homogenization_multiphase_Noutput(i) = homogenization_multiphase_Noutput(i) + 1_pInt
+               homogenization_multiphase_outputID(homogenization_multiphase_Noutput(i),i) = nconstituents_ID
+               homogenization_multiphase_output(homogenization_multiphase_Noutput(i),i) = &
                  IO_lc(IO_stringValue(line,chunkPos,2_pInt))
              case('ipcoords')
-               homogenization_isostress_Noutput(i) = homogenization_isostress_Noutput(i) + 1_pInt
-               homogenization_isostress_outputID(homogenization_isostress_Noutput(i),i) = ipcoords_ID
-               homogenization_isostress_output(homogenization_isostress_Noutput(i),i) = &
+               homogenization_multiphase_Noutput(i) = homogenization_multiphase_Noutput(i) + 1_pInt
+               homogenization_multiphase_outputID(homogenization_multiphase_Noutput(i),i) = ipcoords_ID
+               homogenization_multiphase_output(homogenization_multiphase_Noutput(i),i) = &
                  IO_lc(IO_stringValue(line,chunkPos,2_pInt))
              case('avgdefgrad','avgf')
-               homogenization_isostress_Noutput(i) = homogenization_isostress_Noutput(i) + 1_pInt
-               homogenization_isostress_outputID(homogenization_isostress_Noutput(i),i) = avgdefgrad_ID
-               homogenization_isostress_output(homogenization_isostress_Noutput(i),i) = &
+               homogenization_multiphase_Noutput(i) = homogenization_multiphase_Noutput(i) + 1_pInt
+               homogenization_multiphase_outputID(homogenization_multiphase_Noutput(i),i) = avgdefgrad_ID
+               homogenization_multiphase_output(homogenization_multiphase_Noutput(i),i) = &
                  IO_lc(IO_stringValue(line,chunkPos,2_pInt))
              case('avgp','avgfirstpiola','avg1stpiola')
-               homogenization_isostress_Noutput(i) = homogenization_isostress_Noutput(i) + 1_pInt
-               homogenization_isostress_outputID(homogenization_isostress_Noutput(i),i) = avgfirstpiola_ID
-               homogenization_isostress_output(homogenization_isostress_Noutput(i),i) = &
+               homogenization_multiphase_Noutput(i) = homogenization_multiphase_Noutput(i) + 1_pInt
+               homogenization_multiphase_outputID(homogenization_multiphase_Noutput(i),i) = avgfirstpiola_ID
+               homogenization_multiphase_output(homogenization_multiphase_Noutput(i),i) = &
                  IO_lc(IO_stringValue(line,chunkPos,2_pInt))
 
            end select
+
          case ('nconstituents','ngrains')
-           homogenization_isostress_Ngrains(i) = IO_intValue(line,chunkPos,2_pInt)
+           homogenization_multiphase_Ngrains(i) = IO_intValue(line,chunkPos,2_pInt)
+
+         case ('mixture_rule')
+           select case(IO_lc(IO_stringValue(line,chunkPos,2_pInt)))
+             case('isostrain')
+               homogenization_multiphase_mixtureID(i) = isostrain_ID
+             case('isostress')
+               homogenization_multiphase_mixtureID(i) = isostress_ID
+             case('rankone')
+               homogenization_multiphase_mixtureID(i) = rankone_ID
+             case('laminate')
+               homogenization_multiphase_mixtureID(i) = laminate_ID
+           end select
 
        end select
      endif
@@ -150,13 +176,13 @@ subroutine homogenization_isostress_init(fileUnit)
  enddo parsingFile
 
  initializeInstances: do homog = 1_pInt, material_Nhomogenization
-   myHomog: if (homogenization_type(homog) == HOMOGENIZATION_ISOSTRESS_ID) then
+   myHomog: if (homogenization_type(homog) == HOMOGENIZATION_MULTIPHASE_ID) then
      NofMyHomog = count(material_homog == homog)
      instance = homogenization_typeInstance(homog)
 
 ! *  Determine size of postResults array
-     outputsLoop: do o = 1_pInt, homogenization_isostress_Noutput(instance)
-       select case(homogenization_isostress_outputID(o,instance))
+     outputsLoop: do o = 1_pInt, homogenization_multiphase_Noutput(instance)
+       select case(homogenization_multiphase_outputID(o,instance))
         case(nconstituents_ID)
           mySize = 1_pInt
         case(ipcoords_ID)
@@ -168,33 +194,59 @@ subroutine homogenization_isostress_init(fileUnit)
        end select
 
        outputFound: if (mySize > 0_pInt) then
-        homogenization_isostress_sizePostResult(o,instance) = mySize
-        homogenization_isostress_sizePostResults(instance) = &
-          homogenization_isostress_sizePostResults(instance) + mySize
+        homogenization_multiphase_sizePostResult(o,instance) = mySize
+        homogenization_multiphase_sizePostResults(instance) = &
+          homogenization_multiphase_sizePostResults(instance) + mySize
        endif outputFound
      enddo outputsLoop
 
 ! allocate state arrays
-     homogState(homog)%sizeState = 0_pInt
-     homogState(homog)%sizePostResults = homogenization_isostress_sizePostResults(instance)
-     allocate(homogState(homog)%state0   (0_pInt,NofMyHomog), source=0.0_pReal)
-     allocate(homogState(homog)%subState0(0_pInt,NofMyHomog), source=0.0_pReal)
-     allocate(homogState(homog)%state    (0_pInt,NofMyHomog), source=0.0_pReal)
+     homogState(homog)%sizeState = homogenization_Ngrains(homo)
+     homogState(homog)%sizePostResults = homogenization_multiphase_sizePostResults(instance)
+     allocate(homogState(homog)%state0   (homogState(homog)%sizeState,NofMyHomog), source=0.0_pReal)
+     allocate(homogState(homog)%subState0(homogState(homog)%sizeState,NofMyHomog), source=0.0_pReal)
+     allocate(homogState(homog)%state    (homogState(homog)%sizeState,NofMyHomog), source=0.0_pReal)
+     
+     do el = 1_pInt, mesh_NcpElems
+       if ()
+     do mp = 1_pInt, NofMyHomog
+       do gr = 1_pInt, homogenization_Ngrains(homo)
+         homogState(homog)%state(gr,mp) = 
+       enddo
+     enddo
 
    endif myHomog
  enddo initializeInstances
+ 
+ do el = 1_pInt, mesh_NcpElems
+   do ip = 1_pInt, FE_Nips(FE_geomtype(mesh_element(2,el)))
+     homog = mesh_element(3,el)
+     micro = mesh_element(4,el)
+     if (homogenization_type(homog) == HOMOGENIZATION_MULTIPHASE_ID) then
+       instance = homogenization_typeInstance(homog)
+       do gr = 1_pInt, homogenization_Ngrains(homo)
+         homogState(homog)%state(gr,mappingHomogenization(1,ip,el)) = &
+           microstructure_fraction(gr,micro)
+       enddo    
+     endif
+   enddo
+ enddo    
 
-end subroutine homogenization_isostress_init
+end subroutine homogenization_multiphase_init
 
 
 !--------------------------------------------------------------------------------------------------
 !> @brief partitions the deformation gradient onto the constituents
 !--------------------------------------------------------------------------------------------------
-subroutine homogenization_isostress_partitionDeformation(F,avgF,el)
+subroutine homogenization_multiphase_partitionDeformation(F,avgF,ip,el)
  use prec, only: &
    pReal
  use mesh, only: &
    mesh_element
+ use crystallite, only: &
+   crystallite_P, &
+   crystallite_F, &
+   crystallite_dPdF
  use material, only: &
    homogenization_maxNgrains, &
    homogenization_Ngrains
@@ -203,18 +255,36 @@ subroutine homogenization_isostress_partitionDeformation(F,avgF,el)
  real(pReal),   dimension (3,3,homogenization_maxNgrains), intent(out) :: F                         !< partioned def grad per grain
  real(pReal),   dimension (3,3),                           intent(in)  :: avgF                      !< my average def grad
  integer(pInt),                                            intent(in)  :: &
-   el                                                                                               !< element number
- F=0.0_pReal
- F(1:3,1:3,1:homogenization_Ngrains(mesh_element(3,el)))= &
-   spread(avgF,3,homogenization_Ngrains(mesh_element(3,el)))
+   el, ip, g, homo                                                                                           !< element number
+ real(pReal),   dimension (3,3    ,homogenization_maxNgrains)     :: &
+   residual                                                                                         !< my average def grad
+ real(pReal),   dimension (3,3,3,3,homogenization_maxNgrains,homogenization_maxNgrains) :: &
+   jacobian                                                                                         !< my average def grad
+ 
+ homo = mesh_element(3,el)
+ do g = 1_pInt, homogenization_Ngrains(homo)-1_pInt
+  jacobian(1:3,1:3,1:3,1:3,g,g) = crystallite_dPdF(1:3,1:3,1:3,1:3,g,ip,el)
+  jacobian(1:3,1:3,1:3,1:3,g,g+1) = -crystallite_dPdF(1:3,1:3,1:3,1:3,g+1,ip,el)
+  residual(1:3,1:3,g) = crystallite_P(1:3,1:3,g,ip,el) - crystallite_P(1:3,1:3,g+1,ip,el)
+ enddo
+ resudual(1:3,1:3,homogenization_Ngrains) = avgF
+ do g = 1, homogenization_Ngrains(homo)
+   jacobian(1:3,1:3,1:3,1:3,homogenization_Ngrains(homo),g) = -volfrac*math_identity4th(3)
+   residual(1:3,1:3,homogenization_Ngrains(homo)) = residual(1:3,1:3,homogenization_Ngrains(homo)) - &
+                                                    volfrac*crystallite_F(1:3,1:3,g,ip,el)
+ enddo
+ invJ = ...
+ do g = 1, homogenization_Ngrains
+  F(1:3,1:3,g) = crystallite_F(1:3,1:3,g,ip,el) - invJ*R(1:3,1:3,g)
+ enddo
 
-end subroutine homogenization_isostress_partitionDeformation
+end subroutine homogenization_multiphase_partitionDeformation
 
 
 !--------------------------------------------------------------------------------------------------
 !> @brief derive average stress and stiffness from constituent quantities 
 !--------------------------------------------------------------------------------------------------
-subroutine homogenization_isostress_averageStressAndItsTangent(avgP,dAvgPdAvgF,P,dPdF,el)
+subroutine homogenization_multiphase_averageStressAndItsTangent(avgP,dAvgPdAvgF,P,dPdF,el)
  use prec, only: &
    pReal
  use mesh, only: &
@@ -239,13 +309,13 @@ subroutine homogenization_isostress_averageStressAndItsTangent(avgP,dAvgPdAvgF,P
  avgP       = sum(P,3)   /real(Ngrains,pReal)
  dAvgPdAvgF = sum(dPdF,5)/real(Ngrains,pReal)
 
-end subroutine homogenization_isostress_averageStressAndItsTangent
+end subroutine homogenization_multiphase_averageStressAndItsTangent
 
 
 !--------------------------------------------------------------------------------------------------
 !> @brief return array of homogenization results for post file inclusion 
 !--------------------------------------------------------------------------------------------------
-pure function homogenization_isostress_postResults(ip,el,avgP,avgF)
+pure function homogenization_multiphase_postResults(ip,el,avgP,avgF)
  use prec, only: &
    pReal
  use mesh, only: &
@@ -262,9 +332,9 @@ pure function homogenization_isostress_postResults(ip,el,avgP,avgF)
  real(pReal), dimension(3,3), intent(in) :: &
    avgP, &                                                                                          !< average stress at material point
    avgF                                                                                             !< average deformation gradient at material point
- real(pReal),  dimension(homogenization_isostress_sizePostResults &
+ real(pReal),  dimension(homogenization_multiphase_sizePostResults &
                          (homogenization_typeInstance(mesh_element(3,el)))) :: &
-   homogenization_isostress_postResults
+   homogenization_multiphase_postResults
  
  integer(pInt) :: &
    homID, &
@@ -272,25 +342,25 @@ pure function homogenization_isostress_postResults(ip,el,avgP,avgF)
    
  c = 0_pInt
  homID = homogenization_typeInstance(mesh_element(3,el))
- homogenization_isostress_postResults = 0.0_pReal
+ homogenization_multiphase_postResults = 0.0_pReal
  
  do o = 1_pInt,homogenization_Noutput(mesh_element(3,el))
-   select case(homogenization_isostress_outputID(o,homID))
+   select case(homogenization_multiphase_outputID(o,homID))
      case (nconstituents_ID)
-       homogenization_isostress_postResults(c+1_pInt) = real(homogenization_isostress_Ngrains(homID),pReal)
+       homogenization_multiphase_postResults(c+1_pInt) = real(homogenization_multiphase_Ngrains(homID),pReal)
        c = c + 1_pInt
      case (avgdefgrad_ID)
-       homogenization_isostress_postResults(c+1_pInt:c+9_pInt) = reshape(avgF,[9])
+       homogenization_multiphase_postResults(c+1_pInt:c+9_pInt) = reshape(avgF,[9])
        c = c + 9_pInt
      case (avgfirstpiola_ID)
-       homogenization_isostress_postResults(c+1_pInt:c+9_pInt) = reshape(avgP,[9])
+       homogenization_multiphase_postResults(c+1_pInt:c+9_pInt) = reshape(avgP,[9])
        c = c + 9_pInt
      case (ipcoords_ID)
-       homogenization_isostress_postResults(c+1_pInt:c+3_pInt) = mesh_ipCoordinates(1:3,ip,el)                       ! current ip coordinates
+       homogenization_multiphase_postResults(c+1_pInt:c+3_pInt) = mesh_ipCoordinates(1:3,ip,el)                       ! current ip coordinates
        c = c + 3_pInt
     end select
  enddo
 
-end function homogenization_isostress_postResults
+end function homogenization_multiphase_postResults
 
-end module homogenization_isostress
+end module homogenization_multiphase
