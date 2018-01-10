@@ -103,6 +103,7 @@ subroutine homogenization_init
  use material
  use homogenization_none
  use homogenization_isostrain
+ use homogenization_multiphase
  use homogenization_RGC
  use thermal_isothermal
  use thermal_adiabatic
@@ -142,6 +143,8 @@ subroutine homogenization_init
    call homogenization_none_init()
  if (any(homogenization_type == HOMOGENIZATION_ISOSTRAIN_ID)) &
    call homogenization_isostrain_init(FILEUNIT)
+ if (any(homogenization_type == HOMOGENIZATION_MULTIPHASE_ID)) &
+   call homogenization_multiphase_init(FILEUNIT)
  if (any(homogenization_type == HOMOGENIZATION_RGC_ID)) &
    call homogenization_RGC_init(FILEUNIT)
 
@@ -211,6 +214,11 @@ subroutine homogenization_init
            thisNoutput => homogenization_isostrain_Noutput
            thisOutput => homogenization_isostrain_output
            thisSize   => homogenization_isostrain_sizePostResult
+         case (HOMOGENIZATION_MULTIPHASE_ID)
+           outputName = HOMOGENIZATION_MULTIPHASE_label
+           thisNoutput => homogenization_multiphase_Noutput
+           thisOutput => homogenization_multiphase_output
+           thisSize   => homogenization_multiphase_sizePostResult
          case (HOMOGENIZATION_RGC_ID)
            outputName = HOMOGENIZATION_RGC_label
            thisNoutput => homogenization_RGC_Noutput
@@ -1049,11 +1057,14 @@ subroutine homogenization_partitionDeformation(ip,el)
    homogenization_maxNgrains, &
    HOMOGENIZATION_NONE_ID, &
    HOMOGENIZATION_ISOSTRAIN_ID, &
+   HOMOGENIZATION_MULTIPHASE_ID, &
    HOMOGENIZATION_RGC_ID
  use crystallite, only: &
    crystallite_partionedF
  use homogenization_isostrain, only: &
    homogenization_isostrain_partitionDeformation
+ use homogenization_multiphase, only: &
+   homogenization_multiphase_partitionDeformation
  use homogenization_RGC, only: &
    homogenization_RGC_partitionDeformation
 
@@ -1074,6 +1085,13 @@ subroutine homogenization_partitionDeformation(ip,el)
                           crystallite_partionedF(1:3,1:3,1:homogenization_maxNgrains,ip,el), &
                           materialpoint_subF(1:3,1:3,ip,el),&
                           el)
+
+   case (HOMOGENIZATION_MULTIPHASE_ID) chosenHomogenization
+     call homogenization_multiphase_partitionDeformation(&
+                          crystallite_partionedF(1:3,1:3,1:homogenization_maxNgrains,ip,el), &
+                          materialpoint_subF(1:3,1:3,ip,el),&
+                          ip, el)
+
    case (HOMOGENIZATION_RGC_ID) chosenHomogenization
      call homogenization_RGC_partitionDeformation(&
                          crystallite_partionedF(1:3,1:3,1:homogenization_maxNgrains,ip,el), &
@@ -1178,11 +1196,14 @@ subroutine homogenization_averageStressAndItsTangent(ip,el)
    homogenization_maxNgrains, &
    HOMOGENIZATION_NONE_ID, &
    HOMOGENIZATION_ISOSTRAIN_ID, &
+   HOMOGENIZATION_MULTIPHASE_ID, &
    HOMOGENIZATION_RGC_ID
  use crystallite, only: &
    crystallite_P,crystallite_dPdF
  use homogenization_isostrain, only: &
    homogenization_isostrain_averageStressAndItsTangent
+ use homogenization_multiphase, only: &
+   homogenization_multiphase_averageStressAndItsTangent
  use homogenization_RGC, only: &
    homogenization_RGC_averageStressAndItsTangent
 
@@ -1204,6 +1225,15 @@ subroutine homogenization_averageStressAndItsTangent(ip,el)
        crystallite_P(1:3,1:3,1:homogenization_maxNgrains,ip,el), &
        crystallite_dPdF(1:3,1:3,1:3,1:3,1:homogenization_maxNgrains,ip,el), &
        el)
+
+   case (HOMOGENIZATION_MULTIPHASE_ID) chosenHomogenization
+     call homogenization_multiphase_averageStressAndItsTangent(&
+       materialpoint_P(1:3,1:3,ip,el), &
+       materialpoint_dPdF(1:3,1:3,1:3,1:3,ip,el),&
+       crystallite_P(1:3,1:3,1:homogenization_maxNgrains,ip,el), &
+       crystallite_dPdF(1:3,1:3,1:3,1:3,1:homogenization_maxNgrains,ip,el), &
+       ip, el)
+
    case (HOMOGENIZATION_RGC_ID) chosenHomogenization
      call homogenization_RGC_averageStressAndItsTangent(&
        materialpoint_P(1:3,1:3,ip,el), &
@@ -1238,6 +1268,7 @@ function homogenization_postResults(ip,el)
    hydrogenflux_type, &
    HOMOGENIZATION_NONE_ID, &
    HOMOGENIZATION_ISOSTRAIN_ID, &
+   HOMOGENIZATION_MULTIPHASE_ID, &
    HOMOGENIZATION_RGC_ID, &
    THERMAL_isothermal_ID, &
    THERMAL_adiabatic_ID, &
@@ -1254,6 +1285,8 @@ function homogenization_postResults(ip,el)
    HYDROGENFLUX_cahnhilliard_ID
  use homogenization_isostrain, only: &
    homogenization_isostrain_postResults
+ use homogenization_multiphase, only: &
+   homogenization_multiphase_postResults
  use homogenization_RGC, only: &
    homogenization_RGC_postResults
  use thermal_adiabatic, only: &
@@ -1301,6 +1334,15 @@ function homogenization_postResults(ip,el)
                                   el, &
                                   materialpoint_P(1:3,1:3,ip,el), &
                                   materialpoint_F(1:3,1:3,ip,el))
+
+   case (HOMOGENIZATION_MULTIPHASE_ID) chosenHomogenization
+     homogenization_postResults(startPos:endPos) = &
+       homogenization_multiphase_postResults(&
+                                  ip, &
+                                  el, &
+                                  materialpoint_P(1:3,1:3,ip,el), &
+                                  materialpoint_F(1:3,1:3,ip,el))
+
    case (HOMOGENIZATION_RGC_ID) chosenHomogenization
      homogenization_postResults(startPos:endPos) = &
        homogenization_RGC_postResults(&
