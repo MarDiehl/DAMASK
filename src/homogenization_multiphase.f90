@@ -5,7 +5,8 @@
 !--------------------------------------------------------------------------------------------------
 module homogenization_multiphase
  use prec, only: &
-   pInt
+   pInt, &
+   tState
  
  implicit none
  private
@@ -20,6 +21,8 @@ module homogenization_multiphase
    homogenization_multiphase_Noutput                                                                 !< number of outputs per homog instance
  integer(pInt),               dimension(:),   allocatable,         private :: &
    homogenization_multiphase_Ngrains
+ type(tState),                dimension(:),   allocatable,         private :: &
+   homogenization_multiphase_phaseFrac
 
  enum, bind(c) 
    enumerator :: undefined_ID, &
@@ -47,7 +50,6 @@ module homogenization_multiphase
    homogenization_multiphase_init, &
    homogenization_multiphase_partitionDeformation, &
    homogenization_multiphase_averageStressAndItsTangent, &
-   homogenization_multiphase_updateState, &
    homogenization_multiphase_postResults
 
 contains
@@ -70,6 +72,8 @@ subroutine homogenization_multiphase_init(fileUnit)
  use IO
  use material
  use mesh, only: &
+   FE_Nips, &
+   FE_geomtype, &
    mesh_NcpElems, &
    mesh_element
  
@@ -77,10 +81,11 @@ subroutine homogenization_multiphase_init(fileUnit)
  integer(pInt),                                      intent(in) :: fileUnit
  integer(pInt), allocatable, dimension(:) :: chunkPos
  integer(pInt) :: &
-   section = 0_pInt, i, mySize, o, el, ip, gr
+   section = 0_pInt, i, mySize, o, el, ip, gr, offset
  integer :: &
    maxNinstance, &
    homog, &
+   micro, &
    instance
  integer :: &
    NofMyHomog                                                                                       ! no pInt (stores a system dependen value from 'count'
@@ -107,6 +112,7 @@ subroutine homogenization_multiphase_init(fileUnit)
  allocate(homogenization_multiphase_outputID(maxval(homogenization_Noutput),maxNinstance), &
                                                                            source=undefined_ID)
  allocate(homogenization_multiphase_mixtureID(maxNinstance),               source=isostrain_ID)
+ allocate(homogenization_multiphase_phaseFrac(maxNinstance))
 
  rewind(fileUnit)
  do while (trim(line) /= IO_EOF .and. IO_lc(IO_getTag(line,'<','>')) /= material_partHomogenization)! wind forward to <homogenization>
@@ -201,20 +207,13 @@ subroutine homogenization_multiphase_init(fileUnit)
      enddo outputsLoop
 
 ! allocate state arrays
-     homogState(homog)%sizeState = homogenization_Ngrains(homo)
+     allocate(homogenization_multiphase_phaseFrac(instance)% &
+                state(homogenization_Ngrains(homog),NofMyHomog), source=0.0_pReal)
+     homogState(homog)%sizeState = 0_pInt
      homogState(homog)%sizePostResults = homogenization_multiphase_sizePostResults(instance)
      allocate(homogState(homog)%state0   (homogState(homog)%sizeState,NofMyHomog), source=0.0_pReal)
      allocate(homogState(homog)%subState0(homogState(homog)%sizeState,NofMyHomog), source=0.0_pReal)
      allocate(homogState(homog)%state    (homogState(homog)%sizeState,NofMyHomog), source=0.0_pReal)
-     
-     do el = 1_pInt, mesh_NcpElems
-       if ()
-     do mp = 1_pInt, NofMyHomog
-       do gr = 1_pInt, homogenization_Ngrains(homo)
-         homogState(homog)%state(gr,mp) = 
-       enddo
-     enddo
-
    endif myHomog
  enddo initializeInstances
  
@@ -224,8 +223,9 @@ subroutine homogenization_multiphase_init(fileUnit)
      micro = mesh_element(4,el)
      if (homogenization_type(homog) == HOMOGENIZATION_MULTIPHASE_ID) then
        instance = homogenization_typeInstance(homog)
-       do gr = 1_pInt, homogenization_Ngrains(homo)
-         homogState(homog)%state(gr,mappingHomogenization(1,ip,el)) = &
+       offset = mappingHomogenization(1,ip,el)
+       do gr = 1_pInt, homogenization_Ngrains(homog)
+         homogenization_multiphase_phaseFrac(instance)%state(gr,offset) = &
            microstructure_fraction(gr,micro)
        enddo    
      endif
@@ -243,40 +243,32 @@ subroutine homogenization_multiphase_partitionDeformation(F,avgF,ip,el)
    pReal
  use mesh, only: &
    mesh_element
- use crystallite, only: &
-   crystallite_P, &
-   crystallite_F, &
-   crystallite_dPdF
  use material, only: &
    homogenization_maxNgrains, &
-   homogenization_Ngrains
+   homogenization_Ngrains, &
+   homogenization_typeInstance, &
+   mappingHomogenization
  
  implicit none
  real(pReal),   dimension (3,3,homogenization_maxNgrains), intent(out) :: F                         !< partioned def grad per grain
  real(pReal),   dimension (3,3),                           intent(in)  :: avgF                      !< my average def grad
  integer(pInt),                                            intent(in)  :: &
-   el, ip, g, homo                                                                                           !< element number
- real(pReal),   dimension (3,3    ,homogenization_maxNgrains)     :: &
-   residual                                                                                         !< my average def grad
- real(pReal),   dimension (3,3,3,3,homogenization_maxNgrains,homogenization_maxNgrains) :: &
-   jacobian                                                                                         !< my average def grad
+   el, ip
+ integer(pInt) :: homog, instance                                                                                             !< element number
  
- homo = mesh_element(3,el)
- do g = 1_pInt, homogenization_Ngrains(homo)-1_pInt
-  jacobian(1:3,1:3,1:3,1:3,g,g) = crystallite_dPdF(1:3,1:3,1:3,1:3,g,ip,el)
-  jacobian(1:3,1:3,1:3,1:3,g,g+1) = -crystallite_dPdF(1:3,1:3,1:3,1:3,g+1,ip,el)
-  residual(1:3,1:3,g) = crystallite_P(1:3,1:3,g,ip,el) - crystallite_P(1:3,1:3,g+1,ip,el)
- enddo
- resudual(1:3,1:3,homogenization_Ngrains) = avgF
- do g = 1, homogenization_Ngrains(homo)
-   jacobian(1:3,1:3,1:3,1:3,homogenization_Ngrains(homo),g) = -volfrac*math_identity4th(3)
-   residual(1:3,1:3,homogenization_Ngrains(homo)) = residual(1:3,1:3,homogenization_Ngrains(homo)) - &
-                                                    volfrac*crystallite_F(1:3,1:3,g,ip,el)
- enddo
- invJ = ...
- do g = 1, homogenization_Ngrains
-  F(1:3,1:3,g) = crystallite_F(1:3,1:3,g,ip,el) - invJ*R(1:3,1:3,g)
- enddo
+ homog = mesh_element(3,el)
+ instance = homogenization_typeInstance(homog)
+ select case(homogenization_multiphase_mixtureID(instance))
+   case(isostrain_ID)
+     F(1:3,1:3,1:homogenization_Ngrains(mesh_element(3,el)))= &
+       spread(avgF,3,homogenization_Ngrains(mesh_element(3,el)))
+   case(isostress_ID)
+
+   case(rankone_ID)
+
+   case(laminate_ID)
+
+ end select
 
 end subroutine homogenization_multiphase_partitionDeformation
 
@@ -284,7 +276,7 @@ end subroutine homogenization_multiphase_partitionDeformation
 !--------------------------------------------------------------------------------------------------
 !> @brief derive average stress and stiffness from constituent quantities 
 !--------------------------------------------------------------------------------------------------
-subroutine homogenization_multiphase_averageStressAndItsTangent(avgP,dAvgPdAvgF,P,dPdF,el)
+subroutine homogenization_multiphase_averageStressAndItsTangent(avgP,dAvgPdAvgF,P,dPdF,ip,el)
  use prec, only: &
    pReal
  use mesh, only: &
@@ -292,22 +284,44 @@ subroutine homogenization_multiphase_averageStressAndItsTangent(avgP,dAvgPdAvgF,
  use material, only: &
    homogenization_maxNgrains, &
    homogenization_Ngrains, &
-   homogenization_typeInstance
+   homogenization_typeInstance, &
+   mappingHomogenization
  
  implicit none
  real(pReal),   dimension (3,3),                               intent(out) :: avgP                  !< average stress at material point
  real(pReal),   dimension (3,3,3,3),                           intent(out) :: dAvgPdAvgF            !< average stiffness at material point
  real(pReal),   dimension (3,3,homogenization_maxNgrains),     intent(in)  :: P                     !< array of current grain stresses
  real(pReal),   dimension (3,3,3,3,homogenization_maxNgrains), intent(in)  :: dPdF                  !< array of current grain stiffnesses
- integer(pInt),                                                intent(in)  :: el                    !< element number
+ integer(pInt),                                                intent(in)  :: ip, el                !< element number
  integer(pInt) :: &
-   homID, & 
-   Ngrains
+   gr, &
+   homog, & 
+   instance, &
+   offset
 
- homID = homogenization_typeInstance(mesh_element(3,el))
- Ngrains = homogenization_Ngrains(mesh_element(3,el))
- avgP       = sum(P,3)   /real(Ngrains,pReal)
- dAvgPdAvgF = sum(dPdF,5)/real(Ngrains,pReal)
+ homog = mesh_element(3,el)
+ instance = homogenization_typeInstance(homog)
+ offset = mappingHomogenization(1,ip,el)
+ select case(homogenization_multiphase_mixtureID(instance))
+   case(isostrain_ID)
+     avgP = 0.0_pReal
+     dAvgPdAvgF = 0.0_pReal
+     do gr = 1_pInt, homogenization_Ngrains(homog)
+       avgP = avgP + &
+              homogenization_multiphase_phaseFrac(instance)%state(gr,offset)* &
+              P(1:3,1:3,gr) 
+       dAvgPdAvgF = dAvgPdAvgF + &
+              homogenization_multiphase_phaseFrac(instance)%state(gr,offset)* &
+              dPdF(1:3,1:3,1:3,1:3,gr) 
+     enddo
+
+   case(isostress_ID)
+
+   case(rankone_ID)
+
+   case(laminate_ID)
+
+ end select
 
 end subroutine homogenization_multiphase_averageStressAndItsTangent
 

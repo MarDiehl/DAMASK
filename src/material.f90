@@ -269,7 +269,7 @@ module material
    microstructure_phase, &                                                                          !< phase IDs of each microstructure
    microstructure_texture                                                                           !< texture IDs of each microstructure
 
- real(pReal), dimension(:,:), allocatable, private :: &
+ real(pReal), dimension(:,:),   allocatable, public :: &
    microstructure_fraction                                                                          !< vol fraction of each constituent in microstructure
 
  real(pReal), dimension(:,:,:), allocatable, private :: &
