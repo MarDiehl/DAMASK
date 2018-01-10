@@ -1516,6 +1516,8 @@ subroutine IO_error(error_ID,el,ip,g,instance,ext_msg)
    msg = 'index out of bounds'
  case (151_pInt)
    msg = 'microstructure has no constituents'
+ case (152_pInt)
+   msg = 'number of constituents an grains mismatch'
  case (153_pInt)
    msg = 'sum of phase fractions differs from 1'
  case (154_pInt)
@@ -1526,6 +1528,8 @@ subroutine IO_error(error_ID,el,ip,g,instance,ext_msg)
    msg = 'reading from ODF file'
  case (157_pInt)
    msg = 'illegal texture transformation specified'
+ case (158_pInt)
+   msg = 'inconsistent texture format'
  case (160_pInt)
    msg = 'no entries in config part'
  case (165_pInt)
