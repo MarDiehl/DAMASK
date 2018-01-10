@@ -1116,6 +1116,7 @@ function homogenization_updateState(ip,el)
    damage_type, &
    vacancyflux_type, &
    homogenization_maxNgrains, &
+   HOMOGENIZATION_MULTIPHASE_ID, &
    HOMOGENIZATION_RGC_ID, &
    THERMAL_adiabatic_ID, &
    DAMAGE_local_ID, &
@@ -1125,6 +1126,8 @@ function homogenization_updateState(ip,el)
    crystallite_dPdF, &
    crystallite_partionedF,&
    crystallite_partionedF0
+ use homogenization_multiphase, only: &
+   homogenization_multiphase_updateState
  use homogenization_RGC, only: &
    homogenization_RGC_updateState
  use thermal_adiabatic, only: &
@@ -1142,6 +1145,11 @@ function homogenization_updateState(ip,el)
 
  homogenization_updateState = .true.
  chosenHomogenization: select case(homogenization_type(mesh_element(3,el)))
+   case (HOMOGENIZATION_MULTIPHASE_ID) chosenHomogenization
+     homogenization_updateState = &
+       homogenization_updateState .and. &
+        homogenization_multiphase_updateState(ip,el)
+
    case (HOMOGENIZATION_RGC_ID) chosenHomogenization
      homogenization_updateState = &
        homogenization_updateState .and. &
