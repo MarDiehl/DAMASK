@@ -137,7 +137,7 @@ module material
    enumerator :: HOMOGENIZATION_undefined_ID, &
                  HOMOGENIZATION_none_ID, &
                  HOMOGENIZATION_isostrain_ID, &
-                 HOMOGENIZATION_isostressn_ID, &
+                 HOMOGENIZATION_isostress_ID, &
                  HOMOGENIZATION_rgc_ID
  end enum
 
