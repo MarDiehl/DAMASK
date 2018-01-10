@@ -112,6 +112,7 @@ list(APPEND OBJECTFILES $<TARGET_OBJECTS:CRYSTALLITE>)
 add_library(HOMOGENIZATION OBJECT
   "homogenization_RGC.f90"
   "homogenization_isostrain.f90"
+  "homogenization_multiphase.f90"
   "homogenization_none.f90")
 add_dependencies(HOMOGENIZATION CRYSTALLITE)
 list(APPEND OBJECTFILES $<TARGET_OBJECTS:HOMOGENIZATION>)
