@@ -1,7 +1,7 @@
 !--------------------------------------------------------------------------------------------------
 !> @author Kishan Govind, Max-Planck-Institut für Eisenforschung GmbH
 !> @author Pratheek Shanthraj, Max-Planck-Institut für Eisenforschung GmbH
-!> @brief Isostress homogenization scheme
+!> @brief Mixture homogenization models
 !--------------------------------------------------------------------------------------------------
 module homogenization_multiphase
  use prec, only: &
@@ -50,6 +50,8 @@ module homogenization_multiphase
    homogenization_multiphase_init, &
    homogenization_multiphase_partitionDeformation, &
    homogenization_multiphase_averageStressAndItsTangent, &
+   homogenization_multiphase_updateState, &
+   homogenization_multiphase_putPhaseFrac, &
    homogenization_multiphase_postResults
 
 contains
@@ -324,6 +326,81 @@ subroutine homogenization_multiphase_averageStressAndItsTangent(avgP,dAvgPdAvgF,
  end select
 
 end subroutine homogenization_multiphase_averageStressAndItsTangent
+
+
+!--------------------------------------------------------------------------------------------------
+!> @brief state update for different mixture rules 
+!--------------------------------------------------------------------------------------------------
+function homogenization_multiphase_updateState(ip,el)
+ use prec, only: &
+   pReal
+ use mesh, only: &
+   mesh_element
+ use material, only: &
+   homogenization_maxNgrains, &
+   homogenization_Ngrains, &
+   homogenization_typeInstance, &
+   mappingHomogenization
+ 
+ implicit none
+ logical,       dimension (2)             :: homogenization_multiphase_updateState                  !< average stress at material point
+ integer(pInt),                intent(in) :: ip, el                                                 !< element number
+ integer(pInt) :: &
+   gr, &
+   homog, & 
+   instance, &
+   offset
+
+ homog = mesh_element(3,el)
+ instance = homogenization_typeInstance(homog)
+ offset = mappingHomogenization(1,ip,el)
+ select case(homogenization_multiphase_mixtureID(instance))
+   case(isostrain_ID)
+     homogenization_multiphase_updateState = [.true., .true.]
+
+   case(isostress_ID)
+
+   case(rankone_ID)
+
+   case(laminate_ID)
+
+ end select
+
+end function homogenization_multiphase_updateState
+
+
+!--------------------------------------------------------------------------------------------------
+!> @brief set module wide phase fractions 
+!--------------------------------------------------------------------------------------------------
+subroutine homogenization_multiphase_putPhaseFrac(phaseFrac,ip,el)
+ use prec, only: &
+   pReal
+ use mesh, only: &
+   mesh_element
+ use material, only: &
+   homogenization_Ngrains, &
+   homogenization_typeInstance, &
+   mappingHomogenization
+ 
+ implicit none
+ integer(pInt),                                                intent(in)  :: ip, el                !< element number
+ real(pReal),   dimension (homogenization_Ngrains(mesh_element(3,el))),     &
+                                                               intent(in)  :: phaseFrac             !< array of current phase fractions
+ integer(pInt) :: &
+   gr, &
+   homog, & 
+   instance, &
+   offset
+
+ homog = mesh_element(3,el)
+ instance = homogenization_typeInstance(homog)
+ offset = mappingHomogenization(1,ip,el)
+ do gr = 1_pInt, homogenization_Ngrains(homog)
+   homogenization_multiphase_phaseFrac(instance)%state(gr,offset) = &
+          phaseFrac(gr) 
+ enddo
+
+end subroutine homogenization_multiphase_putPhaseFrac
 
 
 !--------------------------------------------------------------------------------------------------
