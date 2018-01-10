@@ -59,7 +59,8 @@ module material
    HYDROGENFLUX_cahnhilliard_label      = 'cahnhilliard', &
    HOMOGENIZATION_none_label            = 'none', &
    HOMOGENIZATION_isostrain_label       = 'isostrain', &
-   HOMOGENIZATION_rgc_label             = 'rgc'
+   HOMOGENIZATION_rgc_label             = 'rgc', &
+   HOMOGENIZATION_isostress_label       = 'isostress'
 
 
 
@@ -136,6 +137,7 @@ module material
    enumerator :: HOMOGENIZATION_undefined_ID, &
                  HOMOGENIZATION_none_ID, &
                  HOMOGENIZATION_isostrain_ID, &
+                 HOMOGENIZATION_isostressn_ID, &
                  HOMOGENIZATION_rgc_ID
  end enum
 
@@ -342,6 +344,7 @@ module material
    HYDROGENFLUX_cahnhilliard_ID, &
    HOMOGENIZATION_none_ID, &
    HOMOGENIZATION_isostrain_ID, &
+   HOMOGENIZATION_isostress_ID, &
    HOMOGENIZATION_RGC_ID
 
  private :: &
@@ -624,6 +627,8 @@ subroutine material_parseHomogenization(fileUnit,myPart)
              homogenization_Ngrains(section) = 1_pInt
            case(HOMOGENIZATION_ISOSTRAIN_label)
              homogenization_type(section) = HOMOGENIZATION_ISOSTRAIN_ID
+           case(HOMOGENIZATION_ISOSTRESS_label)
+             homogenization_type(section) = HOMOGENIZATION_ISOSTRESS_ID
            case(HOMOGENIZATION_RGC_label)
              homogenization_type(section) = HOMOGENIZATION_RGC_ID
            case default
@@ -1260,10 +1265,6 @@ subroutine material_populateGrains
  allocate(material_homog(mesh_maxNips,mesh_NcpElems),                                  source=0_pInt)
  allocate(material_texture(homogenization_maxNgrains,mesh_maxNips,mesh_NcpElems),      source=0_pInt)
  allocate(material_EulerAngles(3,homogenization_maxNgrains,mesh_maxNips,mesh_NcpElems),source=0.0_pReal)
-
-
-
-! populating homogenization schemes in each
 
 !--------------------------------------------------------------------------------------------------
  element:           do e = 1_pInt, mesh_NcpElems; 
