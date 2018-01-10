@@ -420,7 +420,6 @@ module mesh
 
  private :: &
 #ifdef Spectral
-   mesh_spectral_getHomogenization, &
    mesh_spectral_count, &
    mesh_spectral_mapNodesAndElems, &
    mesh_spectral_count_cpSizes, &
@@ -1123,70 +1122,6 @@ end function mesh_spectral_getSize
 
 
 !--------------------------------------------------------------------------------------------------
-!> @brief Reads homogenization information from geometry file. If fileUnit is given, 
-!! assumes an opened file, otherwise tries to open the one specified in geometryFile
-!--------------------------------------------------------------------------------------------------
-integer(pInt) function mesh_spectral_getHomogenization(fileUnit)
- use IO, only: &
-   IO_checkAndRewind, &
-   IO_open_file, &
-   IO_stringPos, &
-   IO_lc, &
-   IO_stringValue, &
-   IO_intValue, &
-   IO_error
- use DAMASK_interface, only: &
-   geometryFile
-  
- implicit none
- integer(pInt), intent(in), optional              :: fileUnit
- integer(pInt), allocatable, dimension(:)         :: chunkPos
- integer(pInt)                                    :: headerLength = 0_pInt
- character(len=1024) :: line, &
-                        keyword
- integer(pInt) :: i, myFileUnit
- logical :: gotHomogenization = .false.
- 
- mesh_spectral_getHomogenization = -1_pInt
- if(.not. present(fileUnit)) then
-   myFileUnit = 289_pInt
-   call IO_open_file(myFileUnit,trim(geometryFile))
- else
-   myFileUnit = fileUnit
- endif
- 
- call IO_checkAndRewind(myFileUnit)
-
- read(myFileUnit,'(a1024)') line
- chunkPos = IO_stringPos(line)
- keyword = IO_lc(IO_StringValue(line,chunkPos,2_pInt,.true.))
- if (keyword(1:4) == 'head') then
-   headerLength = IO_intValue(line,chunkPos,1_pInt) + 1_pInt
- else
-   call IO_error(error_ID=841_pInt, ext_msg='mesh_spectral_getHomogenization')
- endif
- rewind(myFileUnit)
- do i = 1_pInt, headerLength
-   read(myFileUnit,'(a1024)') line
-   chunkPos = IO_stringPos(line)             
-   select case ( IO_lc(IO_StringValue(line,chunkPos,1,.true.)) )
-     case ('homogenization')
-       gotHomogenization = .true.
-       mesh_spectral_getHomogenization = IO_intValue(line,chunkPos,2_pInt)
-   end select
- enddo
- 
- if(.not. present(fileUnit)) close(myFileUnit)
- 
- if (.not. gotHomogenization ) &
-   call IO_error(error_ID = 845_pInt, ext_msg='homogenization')
- if (mesh_spectral_getHomogenization<1_pInt) &
-   call IO_error(error_ID = 842_pInt, ext_msg='mesh_spectral_getHomogenization')
-   
-end function mesh_spectral_getHomogenization
-
-
-!--------------------------------------------------------------------------------------------------
 !> @brief Count overall number of nodes and elements in mesh and stores them in
 !! 'mesh_Nelems', 'mesh_Nnodes' and 'mesh_NcpElems'
 !--------------------------------------------------------------------------------------------------
@@ -1297,11 +1232,12 @@ subroutine mesh_spectral_build_elements(fileUnit)
    e, i, &
    headerLength = 0_pInt, &
    maxIntCount, &
-   homog, &
    elemType, &
    elemOffset
  integer(pInt),     dimension(:), allocatable :: &
-   microstructures, &
+   intValues, &
+   bucket, &
+   mesh_homogGlobal, &
    mesh_microGlobal
  integer(pInt),     dimension(1,1) :: &
    dummySet = 0_pInt
@@ -1310,8 +1246,6 @@ subroutine mesh_spectral_build_elements(fileUnit)
    keyword
  character(len=64), dimension(1) :: &
    dummyName = ''
-
- homog = mesh_spectral_getHomogenization(fileUnit)
 
 !--------------------------------------------------------------------------------------------------
 ! get header length
@@ -1339,8 +1273,10 @@ subroutine mesh_spectral_build_elements(fileUnit)
    i = IO_countContinuousIntValues(fileUnit)
    maxIntCount = max(maxIntCount, i)
  enddo
- allocate (mesh_element    (4_pInt+mesh_maxNnodes,mesh_NcpElems), source = 0_pInt)
- allocate (microstructures (1_pInt+maxIntCount),  source = 1_pInt)
+ allocate (mesh_element (4_pInt+mesh_maxNnodes,mesh_NcpElems), source = 0_pInt)
+ allocate (intValues    (1_pInt+maxIntCount),  source = 1_pInt)
+ allocate (bucket       (mesh_NcpElemsGlobal*2_pInt), source = 1_pInt)
+ allocate (mesh_homogGlobal(mesh_NcpElemsGlobal), source = 1_pInt)
  allocate (mesh_microGlobal(mesh_NcpElemsGlobal), source = 1_pInt)
 
 !--------------------------------------------------------------------------------------------------
@@ -1351,13 +1287,16 @@ subroutine mesh_spectral_build_elements(fileUnit)
  enddo
  
  e = 0_pInt
- do while (e < mesh_NcpElemsGlobal .and. microstructures(1) > 0_pInt)                               ! fill expected number of elements, stop at end of data (or blank line!)
-   microstructures = IO_continuousIntValues(fileUnit,maxIntCount,dummyName,dummySet,0_pInt)         ! get affected elements
-   do i = 1_pInt,microstructures(1_pInt)
+ do while (e < mesh_NcpElemsGlobal*2_pInt .and. intValues(1) > 0_pInt)                               ! fill expected number of elements, stop at end of data (or blank line!)
+   intValues = IO_continuousIntValues(fileUnit,maxIntCount,dummyName,dummySet,0_pInt)         ! get affected elements
+   do i = 1_pInt,intValues(1_pInt)
      e = e+1_pInt                                                                                   ! valid element entry
-     mesh_microGlobal(e) = microstructures(1_pInt+i)
+     bucket(e) = intValues(1_pInt+i)
    enddo
  enddo
+
+ mesh_homogGlobal = bucket(                    1_pInt:mesh_NcpElemsGlobal)
+ mesh_microGlobal = bucket(mesh_NcpElemsGlobal+1_pInt:mesh_NcpElemsGlobal*2_pInt)
 
  elemType = FE_mapElemtype('C3D8R') 
  elemOffset = product(grid(1:2))*grid3Offset
@@ -1366,7 +1305,7 @@ subroutine mesh_spectral_build_elements(fileUnit)
    e = e+1_pInt                                                                                     ! valid element entry
    mesh_element( 1,e) = e                                                                           ! FE id
    mesh_element( 2,e) = elemType                                                                    ! elem type
-   mesh_element( 3,e) = homog                                                                       ! homogenization
+   mesh_element( 3,e) = mesh_homogGlobal(e+elemOffset)                                              ! homogenization
    mesh_element( 4,e) = mesh_microGlobal(e+elemOffset)                                              ! microstructure
    mesh_element( 5,e) = e + (e-1_pInt)/grid(1) + &
                                      ((e-1_pInt)/(grid(1)*grid(2)))*(grid(1)+1_pInt)                ! base node
@@ -1381,7 +1320,9 @@ subroutine mesh_spectral_build_elements(fileUnit)
    mesh_maxValStateVar(2) = max(mesh_maxValStateVar(2),mesh_element(4,e))              
  enddo
 
- deallocate(microstructures)
+ deallocate(intValues)
+ deallocate(bucket)
+ deallocate(mesh_homogGlobal)
  deallocate(mesh_microGlobal)
  if (e /= mesh_NcpElems) call IO_error(880_pInt,e)
 
