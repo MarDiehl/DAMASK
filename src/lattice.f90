@@ -1083,6 +1083,7 @@ module lattice
    lattice_trans_mu, &
    lattice_trans_nu
  real(pReal),                              dimension(:,:,:),   allocatable, public, protected :: &
+   lattice_initialPlasticStrain, &
    lattice_thermalConductivity33, &
    lattice_thermalExpansion33, &
    lattice_damageDiffusion33, &
@@ -1278,7 +1279,7 @@ subroutine lattice_init
    tag  = '', &
    line = ''
  integer(pInt), allocatable, dimension(:) :: chunkPos
- integer(pInt) :: section = 0_pInt,i
+ integer(pInt) :: section = 0_pInt,i, j, ctr
  real(pReal),  dimension(:), allocatable :: &
    CoverA, &                                                                                        !!!!!!< c/a ratio for low symmetry type lattice
    CoverA_trans, &                                                                                  !< c/a ratio for transformed hex type lattice
@@ -1380,6 +1381,7 @@ subroutine lattice_init
  allocate(lattice_C3333(3,3,3,3,Nphases),  source=0.0_pReal)
  allocate(lattice_trans_C66(6,6,Nphases),  source=0.0_pReal)
  allocate(lattice_trans_C3333(3,3,3,3,Nphases),  source=0.0_pReal)
+ allocate(lattice_initialPlasticStrain   (3,3,Nphases), source=0.0_pReal)
  allocate(lattice_thermalConductivity33  (3,3,Nphases), source=0.0_pReal)
  allocate(lattice_thermalExpansion33     (3,3,Nphases), source=0.0_pReal)
  allocate(lattice_damageDiffusion33      (3,3,Nphases), source=0.0_pReal)
@@ -1538,6 +1540,11 @@ subroutine lattice_init
        a_fcc(section) = IO_floatValue(line,chunkPos,2_pInt)
      case ('a_bcc')
        a_bcc(section) = IO_floatValue(line,chunkPos,2_pInt)
+     case ('initialplasticstrain')
+       ctr = 0_pInt
+       do j = 1_pInt, 3_pInt; do i = 1_pInt, 3_pInt
+         lattice_initialPlasticStrain(i,j,section) = IO_floatValue(line,chunkPos,1_pInt+ctr)
+       enddo; enddo  
      case ('thermal_conductivity11')
        lattice_thermalConductivity33(1,1,section) = IO_floatValue(line,chunkPos,2_pInt)
      case ('thermal_conductivity22')
