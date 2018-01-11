@@ -407,12 +407,13 @@ subroutine crystallite_init
    do e = FEsolving_execElem(1),FEsolving_execElem(2)
      myNcomponents = homogenization_Ngrains(mesh_element(3,e))
      forall (i = FEsolving_execIP(1,e):FEsolving_execIP(2,e), c = 1_pInt:myNcomponents)
-       crystallite_Fp0(1:3,1:3,c,i,e) = math_EulerToR(material_EulerAngles(1:3,c,i,e))              ! plastic def gradient reflects init orientation
-       crystallite_Fi0(1:3,1:3,c,i,e) = constitutive_initialFi(c,i,e)
-       crystallite_F0(1:3,1:3,c,i,e)  = math_I3
+       crystallite_Fp0(1:3,1:3,c,i,e) = math_I3                                                    ! plastic def gradient reflects init orientation
+       crystallite_Fi0(1:3,1:3,c,i,e) = math_mul33x33(math_EulerToR(material_EulerAngles(1:3,c,i,e)), &
+                                                      constitutive_initialFi(c,i,e))
+       crystallite_F0(1:3,1:3,c,i,e)  = math_mul33x33(crystallite_Fi0(1:3,1:3,c,i,e), &
+                                                      crystallite_Fp0(1:3,1:3,c,i,e))
        crystallite_localPlasticity(c,i,e) = phase_localPlasticity(material_phase(c,i,e))
-       crystallite_Fe(1:3,1:3,c,i,e)  = math_inv33(math_mul33x33(crystallite_Fi0(1:3,1:3,c,i,e), &
-                                                                 crystallite_Fp0(1:3,1:3,c,i,e)))   ! assuming that euler angles are given in internal strain free configuration
+       crystallite_Fe(1:3,1:3,c,i,e)  = math_I3                                                     ! assuming that euler angles are given in internal strain free configuration
        crystallite_Fp(1:3,1:3,c,i,e)  = crystallite_Fp0(1:3,1:3,c,i,e)
        crystallite_Fi(1:3,1:3,c,i,e)  = crystallite_Fi0(1:3,1:3,c,i,e)
        crystallite_requested(c,i,e) = .true.
