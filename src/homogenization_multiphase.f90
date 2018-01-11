@@ -69,12 +69,21 @@ subroutine homogenization_multiphase_init(fileUnit)
    debug_level, &
    debug_levelBasic
  use IO
+ use math, only: &
+   math_I3, &
+   math_inv33, &
+   math_mul33x33
  use material
  use mesh, only: &
    FE_Nips, &
    FE_geomtype, &
    mesh_NcpElems, &
    mesh_element
+ use crystallite, only: &
+   crystallite_F0, &
+   crystallite_Fe, &
+   crystallite_Fp0, &
+   crystallite_Fi0  
  
  implicit none
  integer(pInt),                intent(in) :: fileUnit
@@ -227,9 +236,37 @@ subroutine homogenization_multiphase_init(fileUnit)
      micro = mesh_element(4,el)
      if (homogenization_type(homog) == HOMOGENIZATION_MULTIPHASE_ID) then
        do gr = 1_pInt, homogenization_Ngrains(homog)
-         phasefrac(gr,homog)%p(phasefracMapping(homog)%p(ip,el)) = &
-           microstructure_fraction(gr,micro)
+         phasefrac(gr,homog)%p(phasefracMapping(homog)%p(ip,el)) = microstructure_fraction(gr,micro)
        enddo    
+       instance = homogenization_typeInstance(homog)
+       select case(homogenization_multiphase_mixtureID(instance))
+         case(isostrain_ID)
+           
+         case(isostress_ID)
+           do gr = 1_pInt, homogenization_Ngrains(homog)
+             crystallite_F0(1:3,1:3,gr,ip,el) = &
+               math_I3 + &
+               crystallite_Fp0(1:3,1:3,gr                           ,ip,el) - &
+               crystallite_Fp0(1:3,1:3,homogenization_Ngrains(homog),ip,el)
+             do o = 1_pInt,  homogenization_Ngrains(homog)
+               crystallite_F0(1:3,1:3,gr,ip,el) = &
+                 crystallite_F0(1:3,1:3,gr,ip,el) - &
+                 phasefrac(gr,homog)%p(phasefracMapping(homog)%p(ip,el))* &
+                 (crystallite_Fp0(1:3,1:3,gr                           ,ip,el) - &
+                  crystallite_Fp0(1:3,1:3,homogenization_Ngrains(homog),ip,el))
+             enddo
+           enddo    
+           do gr = 1_pInt, homogenization_Ngrains(homog)
+             crystallite_Fe(1:3,1:3,gr,ip,el) = math_mul33x33(crystallite_F0(1:3,1:3,gr,ip,el), &
+                                                              math_inv33(math_mul33x33(crystallite_Fi0(1:3,1:3,gr,ip,el), & 
+                                                                                       crystallite_Fp0(1:3,1:3,gr,ip,el))))
+           enddo    
+           
+         case(rankone_ID)
+
+         case(laminate_ID)
+
+       end select
      endif
    enddo
  enddo    
