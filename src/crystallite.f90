@@ -179,6 +179,8 @@ subroutine crystallite_init
    IO_write_jobFile, &
    IO_error, &
    IO_EOF
+ use lattice, only: &
+   lattice_initialPlasticStrain
  use material
  use constitutive, only: &
    constitutive_initialFi, &
@@ -407,7 +409,7 @@ subroutine crystallite_init
    do e = FEsolving_execElem(1),FEsolving_execElem(2)
      myNcomponents = homogenization_Ngrains(mesh_element(3,e))
      forall (i = FEsolving_execIP(1,e):FEsolving_execIP(2,e), c = 1_pInt:myNcomponents)
-       crystallite_Fp0(1:3,1:3,c,i,e) = math_I3                                                    ! plastic def gradient reflects init orientation
+       crystallite_Fp0(1:3,1:3,c,i,e) = math_I3 + lattice_initialPlasticStrain(1:3,1:3,material_phase(c,i,e))                                                   ! plastic def gradient reflects init orientation
        crystallite_Fi0(1:3,1:3,c,i,e) = math_mul33x33(math_EulerToR(material_EulerAngles(1:3,c,i,e)), &
                                                       constitutive_initialFi(c,i,e))
        crystallite_F0(1:3,1:3,c,i,e)  = math_mul33x33(crystallite_Fi0(1:3,1:3,c,i,e), &
