@@ -1543,6 +1543,7 @@ subroutine lattice_init
      case ('initialplasticstrain')
        ctr = 0_pInt
        do j = 1_pInt, 3_pInt; do i = 1_pInt, 3_pInt
+         ctr = ctr + 1_pInt
          lattice_initialPlasticStrain(i,j,section) = IO_floatValue(line,chunkPos,1_pInt+ctr)
        enddo; enddo  
      case ('thermal_conductivity11')
