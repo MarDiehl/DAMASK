@@ -89,7 +89,7 @@ subroutine homogenization_multiphase_init(fileUnit)
  integer(pInt),                intent(in) :: fileUnit
  integer(pInt), allocatable, dimension(:) :: chunkPos
  integer(pInt) :: &
-   section = 0_pInt, i, mySize, o, el, ip, gr
+   section = 0_pInt, i, mySize = 0_pInt, o, el, ip, gr
  integer :: &
    maxNinstance, &
    homog, &
@@ -232,7 +232,6 @@ subroutine homogenization_multiphase_init(fileUnit)
          homogState(homog)%sizeState = (homogenization_Ngrains(homog) - 1_pInt)*6_pInt
 
      end select
-     homogState(homog)%sizeState = 0_pInt
      homogState(homog)%sizePostResults = homogenization_multiphase_sizePostResults(instance)
      allocate(homogState(homog)%state0   (homogState(homog)%sizeState,NofMyHomog), source=0.0_pReal)
      allocate(homogState(homog)%subState0(homogState(homog)%sizeState,NofMyHomog), source=0.0_pReal)
@@ -451,38 +450,37 @@ function homogenization_multiphase_updateState(avgP,ip,el)
      enddo
      stressTol = max(maxval(abs(avgP))*homogenization_multiphase_relTol(instance), &
                                        homogenization_multiphase_absTol(instance))
-     if (maxval(abs(residual)) < stressTol) then
+     convergence: if (maxval(abs(residual)) < stressTol) then
        homogenization_multiphase_updateState = [.true., .true.]
        exit myMixRule
-     else
+     else convergence
        homogenization_multiphase_updateState = [.false., .true.]
-     endif  
+       do grI = 1_pInt,  homogenization_Ngrains(homog)-1
+         jacobian(9_pInt*grI-8_pInt:9_pInt*grI,9_pInt*grI-8_pInt:9_pInt*grI) = &
+           reshape(crystallite_dPdF(1:3,1:3,1:3,1:3,grI,ip,el),[9,9])
+         do grJ = 1_pInt,  homogenization_Ngrains(homog)-1
+           jacobian(9_pInt*grI-8_pInt:9_pInt*grI,9_pInt*grJ-8_pInt:9_pInt*grJ) = &
+             jacobian(9_pInt*grI-8_pInt:9_pInt*grI,9_pInt*grJ-8_pInt:9_pInt*grJ) - &
+             phasefrac(grJ,homog)%p(offset)* &
+             reshape(crystallite_dPdF(1:3,1:3,1:3,1:3,grJ,ip,el),[9,9]) + &
+             phasefrac(homogenization_Ngrains(homog),homog)%p(offset)* &
+             reshape(crystallite_dPdF(1:3,1:3,1:3,1:3,homogenization_Ngrains(homog),ip,el),[9,9])
+         enddo
+       enddo    
+       call dgesv(homogState(homog)%sizeState,1, &
+                  jacobian, &
+                  homogState(homog)%sizeState,ipiv, &
+                  residual, &
+                  homogState(homog)%sizeState,ierr)                                                   !< solve Jacobian * delta state = -residual for delta state
+       if (ierr == 0_pInt) then
+         homogState(homog)%state(1:homogState(homog)%sizeState,offset) = &
+           homogState(homog)%state(1:homogState(homog)%sizeState,offset) - &
+           residual
+       else
+        call IO_error(400_pInt,el=el,ip=ip,ext_msg='homogenization multiphase')
+       endif        
+     endif convergence 
      
-     do grI = 1_pInt,  homogenization_Ngrains(homog)-1
-       jacobian(9_pInt*grI-8_pInt:9_pInt*grI,9_pInt*grI-8_pInt:9_pInt*grI) = &
-         reshape(crystallite_dPdF(1:3,1:3,1:3,1:3,grI,ip,el),[9,9])
-       do grJ = 1_pInt,  homogenization_Ngrains(homog)-1
-         jacobian(9_pInt*grI-8_pInt:9_pInt*grI,9_pInt*grJ-8_pInt:9_pInt*grJ) = &
-           jacobian(9_pInt*grI-8_pInt:9_pInt*grI,9_pInt*grJ-8_pInt:9_pInt*grJ) - &
-           phasefrac(grJ,homog)%p(offset)* &
-           reshape(crystallite_dPdF(1:3,1:3,1:3,1:3,grJ,ip,el),[9,9]) - &
-           phasefrac(homogenization_Ngrains(homog),homog)%p(offset)* &
-           reshape(crystallite_dPdF(1:3,1:3,1:3,1:3,homogenization_Ngrains(homog),ip,el),[9,9])
-       enddo
-     enddo    
-     call dgesv(homogState(homog)%sizeState,1, &
-                jacobian, &
-                homogState(homog)%sizeState,ipiv, &
-                residual, &
-                homogState(homog)%sizeState,ierr)                                                   !< solve Jacobian * delta state = -residual for delta state
-     if (ierr == 0_pInt) then
-       homogState(homog)%state(1:homogState(homog)%sizeState,offset) = &
-         homogState(homog)%state(1:homogState(homog)%sizeState,offset) - &
-         residual
-     else
-      call IO_error(400_pInt,el=el,ip=ip,ext_msg='homogenization multiphase')
-     endif        
-
    case(rankone_ID) myMixRule
 
    case(laminate_ID) myMixRule
