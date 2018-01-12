@@ -189,7 +189,7 @@ subroutine homogenization_multiphase_init(fileUnit)
  enddo parsingFile
 
  initializeInstances: do homog = 1_pInt, material_Nhomogenization
-   myHomog: if (homogenization_type(homog) == HOMOGENIZATION_MULTIPHASE_ID) then
+   myHomog1: if (homogenization_type(homog) == HOMOGENIZATION_MULTIPHASE_ID) then
      NofMyHomog = count(material_homog == homog)
      instance = homogenization_typeInstance(homog)
 
@@ -214,6 +214,20 @@ subroutine homogenization_multiphase_init(fileUnit)
      enddo outputsLoop
 
 ! allocate state arrays
+     select case(homogenization_multiphase_mixtureID(instance))
+       case(isostrain_ID)
+         homogState(homog)%sizeState = 0_pInt
+         
+       case(isostress_ID)
+         homogState(homog)%sizeState = (homogenization_Ngrains(homog) - 1_pInt)*9_pInt
+         
+       case(rankone_ID)
+         homogState(homog)%sizeState = (homogenization_Ngrains(homog) - 1_pInt)*3_pInt
+
+       case(laminate_ID)
+         homogState(homog)%sizeState = (homogenization_Ngrains(homog) - 1_pInt)*6_pInt
+
+     end select
      homogState(homog)%sizeState = 0_pInt
      homogState(homog)%sizePostResults = homogenization_multiphase_sizePostResults(instance)
      allocate(homogState(homog)%state0   (homogState(homog)%sizeState,NofMyHomog), source=0.0_pReal)
@@ -227,14 +241,15 @@ subroutine homogenization_multiphase_init(fileUnit)
        allocate  (phasefrac(gr,homog)%p(NofMyHomog))
      enddo  
 
-   endif myHomog
+   endif myHomog1
  enddo initializeInstances
  
- do el = 1_pInt, mesh_NcpElems
-   do ip = 1_pInt, FE_Nips(FE_geomtype(mesh_element(2,el)))
+! state init
+ elementLoop: do el = 1_pInt, mesh_NcpElems
+   IpLoop: do ip = 1_pInt, FE_Nips(FE_geomtype(mesh_element(2,el)))
      homog = mesh_element(3,el)
      micro = mesh_element(4,el)
-     if (homogenization_type(homog) == HOMOGENIZATION_MULTIPHASE_ID) then
+     myHomog2: if (homogenization_type(homog) == HOMOGENIZATION_MULTIPHASE_ID) then
        do gr = 1_pInt, homogenization_Ngrains(homog)
          phasefrac(gr,homog)%p(phasefracMapping(homog)%p(ip,el)) = microstructure_fraction(gr,micro)
        enddo    
@@ -243,20 +258,26 @@ subroutine homogenization_multiphase_init(fileUnit)
          case(isostrain_ID)
            
          case(isostress_ID)
-           do gr = 1_pInt, homogenization_Ngrains(homog)
+           do gr = 1_pInt, homogenization_Ngrains(homog)-1_pInt
+             homogState(homog)%state0   (9_pInt*gr-8_pInt:9_pInt*gr,mappingHomogenization(1,ip,el)) = &
+               reshape(crystallite_Fp0(1:3,1:3,gr,ip,el) - math_I3,[9])
+             homogState(homog)%subState0(9_pInt*gr-8_pInt:9_pInt*gr,mappingHomogenization(1,ip,el)) = &
+               reshape(crystallite_Fp0(1:3,1:3,gr,ip,el) - math_I3,[9])
+             homogState(homog)%state    (9_pInt*gr-8_pInt:9_pInt*gr,mappingHomogenization(1,ip,el)) = &
+               reshape(crystallite_Fp0(1:3,1:3,gr,ip,el) - math_I3,[9])
+           enddo    
+           do gr = 1_pInt, homogenization_Ngrains(homog)-1
              crystallite_F0(1:3,1:3,gr,ip,el) = &
                math_I3 + &
-               crystallite_Fp0(1:3,1:3,gr                           ,ip,el) - &
-               crystallite_Fp0(1:3,1:3,homogenization_Ngrains(homog),ip,el)
-             do o = 1_pInt,  homogenization_Ngrains(homog)
+               reshape(homogState(homog)%state(9_pInt*gr-8_pInt:9_pInt*gr, &
+                                               mappingHomogenization(1,ip,el)),[3,3])
+             do o = 1_pInt,  homogenization_Ngrains(homog)-1
                crystallite_F0(1:3,1:3,gr,ip,el) = &
                  crystallite_F0(1:3,1:3,gr,ip,el) - &
-                 phasefrac(gr,homog)%p(phasefracMapping(homog)%p(ip,el))* &
-                 (crystallite_Fp0(1:3,1:3,gr                           ,ip,el) - &
-                  crystallite_Fp0(1:3,1:3,homogenization_Ngrains(homog),ip,el))
+                 phasefrac(o,homog)%p(phasefracMapping(homog)%p(ip,el))* &
+                 reshape(homogState(homog)%state(9_pInt*o-8_pInt:9_pInt*o, &
+                                                 mappingHomogenization(1,ip,el)),[3,3])
              enddo
-           enddo    
-           do gr = 1_pInt, homogenization_Ngrains(homog)
              crystallite_Fe(1:3,1:3,gr,ip,el) = math_mul33x33(crystallite_F0(1:3,1:3,gr,ip,el), &
                                                               math_inv33(math_mul33x33(crystallite_Fi0(1:3,1:3,gr,ip,el), & 
                                                                                        crystallite_Fp0(1:3,1:3,gr,ip,el))))
@@ -267,9 +288,9 @@ subroutine homogenization_multiphase_init(fileUnit)
          case(laminate_ID)
 
        end select
-     endif
-   enddo
- enddo    
+     endif myHomog2
+   enddo IPLoop
+ enddo elementLoop    
 
 end subroutine homogenization_multiphase_init
 
@@ -283,6 +304,10 @@ subroutine homogenization_multiphase_partitionDeformation(F,avgF,ip,el)
  use mesh, only: &
    mesh_element
  use material, only: &
+   phasefrac, &
+   phasefracMapping, &
+   homogState, &
+   mappingHomogenization, &
    homogenization_maxNgrains, &
    homogenization_Ngrains, &
    homogenization_typeInstance
@@ -291,8 +316,10 @@ subroutine homogenization_multiphase_partitionDeformation(F,avgF,ip,el)
  real(pReal),   dimension (3,3,homogenization_maxNgrains), intent(out) :: F                         !< partioned def grad per grain
  real(pReal),   dimension (3,3),                           intent(in)  :: avgF                      !< my average def grad
  integer(pInt),                                            intent(in)  :: &
-   el, ip
- integer(pInt) :: homog, instance                                                                                             !< element number
+   el, ip                                                                                     !< element number
+ integer(pInt) :: homog, instance, grI, grJ  
+ real(pReal),   dimension(:),   allocatable :: residual
+ real(pReal),   dimension(:,:), allocatable :: jacobian                                                                                           
  
  homog = mesh_element(3,el)
  instance = homogenization_typeInstance(homog)
@@ -300,7 +327,29 @@ subroutine homogenization_multiphase_partitionDeformation(F,avgF,ip,el)
    case(isostrain_ID)
      F(1:3,1:3,1:homogenization_Ngrains(mesh_element(3,el)))= &
        spread(avgF,3,homogenization_Ngrains(mesh_element(3,el)))
+   
    case(isostress_ID)
+     do grI = 1_pInt, homogenization_Ngrains(homog)-1
+       F(1:3,1:3,grI) = &
+         avgF + &
+         reshape(homogState(homog)%state(9_pInt*grI-8_pInt:9_pInt*grI, &
+                                         mappingHomogenization(1,ip,el)),[3,3])
+       do grJ = 1_pInt,  homogenization_Ngrains(homog)-1
+         F(1:3,1:3,grI) = &
+           F(1:3,1:3,grI) - &
+           phasefrac(grJ,homog)%p(phasefracMapping(homog)%p(ip,el))* &
+           reshape(homogState(homog)%state(9_pInt*grJ-8_pInt:9_pInt*grJ, &
+                                           mappingHomogenization(1,ip,el)),[3,3])
+       enddo
+     enddo    
+     F(1:3,1:3,homogenization_Ngrains(homog)) = avgF
+     do grJ = 1_pInt,  homogenization_Ngrains(homog)-1
+       F(1:3,1:3,homogenization_Ngrains(homog)) = &
+         F(1:3,1:3,homogenization_Ngrains(homog)) - &
+         phasefrac(grJ,homog)%p(phasefracMapping(homog)%p(ip,el))* &
+         reshape(homogState(homog)%state(9_pInt*grJ-8_pInt:9_pInt*grJ, &
+                                         mappingHomogenization(1,ip,el)),[3,3])
+     enddo
 
    case(rankone_ID)
 
