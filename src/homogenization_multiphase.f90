@@ -5,7 +5,8 @@
 !--------------------------------------------------------------------------------------------------
 module homogenization_multiphase
  use prec, only: &
-   pInt
+   pInt, &
+   pReal
  
  implicit none
  private
@@ -18,8 +19,9 @@ module homogenization_multiphase
   homogenization_multiphase_output                                                                   !< name of each post result output
  integer(pInt),               dimension(:),   allocatable, target, public :: &
    homogenization_multiphase_Noutput                                                                 !< number of outputs per homog instance
- integer(pInt),               dimension(:),   allocatable,         private :: &
-   homogenization_multiphase_Ngrains
+ real(pReal),                 dimension(:),   allocatable,         private :: &
+   homogenization_multiphase_absTol, &
+   homogenization_multiphase_relTol
 
  enum, bind(c) 
    enumerator :: undefined_ID, &
@@ -62,8 +64,6 @@ subroutine homogenization_multiphase_init(fileUnit)
    compiler_version, &
    compiler_options
 #endif
- use prec, only: &
-   pReal
  use debug, only: &
    debug_HOMOGENIZATION, &
    debug_level, &
@@ -112,14 +112,15 @@ subroutine homogenization_multiphase_init(fileUnit)
    write(6,'(a16,1x,i5,/)') '# instances:',maxNinstance
  allocate(homogenization_multiphase_sizePostResults(maxNinstance),          source=0_pInt)
  allocate(homogenization_multiphase_sizePostResult(maxval(homogenization_Noutput),maxNinstance), &
-                                                                           source=0_pInt)
+                                                                            source=0_pInt)
  allocate(homogenization_multiphase_Noutput(maxNinstance),                  source=0_pInt)
- allocate(homogenization_multiphase_Ngrains(maxNinstance),                  source=0_pInt)
  allocate(homogenization_multiphase_output(maxval(homogenization_Noutput),maxNinstance))
           homogenization_multiphase_output = ''
  allocate(homogenization_multiphase_outputID(maxval(homogenization_Noutput),maxNinstance), &
                                                                            source=undefined_ID)
  allocate(homogenization_multiphase_mixtureID(maxNinstance),               source=isostrain_ID)
+ allocate(homogenization_multiphase_absTol(maxNinstance),                  source=0.0_pReal)
+ allocate(homogenization_multiphase_relTol(maxNinstance),                  source=0.0_pReal)
 
  rewind(fileUnit)
  do while (trim(line) /= IO_EOF .and. IO_lc(IO_getTag(line,'<','>')) /= material_partHomogenization)! wind forward to <homogenization>
@@ -168,9 +169,6 @@ subroutine homogenization_multiphase_init(fileUnit)
 
            end select
 
-         case ('nconstituents','ngrains')
-           homogenization_multiphase_Ngrains(i) = IO_intValue(line,chunkPos,2_pInt)
-
          case ('mixture_rule')
            select case(IO_lc(IO_stringValue(line,chunkPos,2_pInt)))
              case('isostrain')
@@ -182,6 +180,12 @@ subroutine homogenization_multiphase_init(fileUnit)
              case('laminate')
                homogenization_multiphase_mixtureID(i) = laminate_ID
            end select
+
+         case ('abs_tol')
+           homogenization_multiphase_absTol(i) = IO_floatValue(line,chunkPos,2_pInt)
+
+         case ('rel_tol')
+           homogenization_multiphase_relTol(i) = IO_floatValue(line,chunkPos,2_pInt)
 
        end select
      endif
@@ -299,8 +303,6 @@ end subroutine homogenization_multiphase_init
 !> @brief partitions the deformation gradient onto the constituents
 !--------------------------------------------------------------------------------------------------
 subroutine homogenization_multiphase_partitionDeformation(F,avgF,ip,el)
- use prec, only: &
-   pReal
  use mesh, only: &
    mesh_element
  use material, only: &
@@ -316,10 +318,8 @@ subroutine homogenization_multiphase_partitionDeformation(F,avgF,ip,el)
  real(pReal),   dimension (3,3,homogenization_maxNgrains), intent(out) :: F                         !< partioned def grad per grain
  real(pReal),   dimension (3,3),                           intent(in)  :: avgF                      !< my average def grad
  integer(pInt),                                            intent(in)  :: &
-   el, ip                                                                                     !< element number
+   el, ip                                                                                           !< element number
  integer(pInt) :: homog, instance, grI, grJ  
- real(pReal),   dimension(:),   allocatable :: residual
- real(pReal),   dimension(:,:), allocatable :: jacobian                                                                                           
  
  homog = mesh_element(3,el)
  instance = homogenization_typeInstance(homog)
@@ -364,14 +364,11 @@ end subroutine homogenization_multiphase_partitionDeformation
 !> @brief derive average stress and stiffness from constituent quantities 
 !--------------------------------------------------------------------------------------------------
 subroutine homogenization_multiphase_averageStressAndItsTangent(avgP,dAvgPdAvgF,P,dPdF,ip,el)
- use prec, only: &
-   pReal
  use mesh, only: &
    mesh_element
  use material, only: &
    homogenization_maxNgrains, &
    homogenization_Ngrains, &
-   homogenization_typeInstance, &
    phasefracMapping, &
    phasefrac
  
@@ -384,30 +381,18 @@ subroutine homogenization_multiphase_averageStressAndItsTangent(avgP,dAvgPdAvgF,
  integer(pInt) :: &
    gr, &
    homog, & 
-   instance, &
    offset
 
  homog = mesh_element(3,el)
- instance = homogenization_typeInstance(homog)
  offset = phasefracMapping(homog)%p(ip,el)
- select case(homogenization_multiphase_mixtureID(instance))
-   case(isostrain_ID)
-     avgP = 0.0_pReal
-     dAvgPdAvgF = 0.0_pReal
-     do gr = 1_pInt, homogenization_Ngrains(homog)
-       avgP = avgP + &
-              phasefrac(gr,homog)%p(offset)*P(1:3,1:3,gr) 
-       dAvgPdAvgF = dAvgPdAvgF + &
-                    phasefrac(gr,homog)%p(offset)*dPdF(1:3,1:3,1:3,1:3,gr) 
-     enddo
-
-   case(isostress_ID)
-
-   case(rankone_ID)
-
-   case(laminate_ID)
-
- end select
+ avgP = 0.0_pReal
+ dAvgPdAvgF = 0.0_pReal
+ do gr = 1_pInt, homogenization_Ngrains(homog)
+   avgP = avgP + &
+          phasefrac(gr,homog)%p(offset)*P(1:3,1:3,gr) 
+   dAvgPdAvgF = dAvgPdAvgF + &
+                phasefrac(gr,homog)%p(offset)*dPdF(1:3,1:3,1:3,1:3,gr) 
+ enddo
 
 end subroutine homogenization_multiphase_averageStressAndItsTangent
 
@@ -415,37 +400,94 @@ end subroutine homogenization_multiphase_averageStressAndItsTangent
 !--------------------------------------------------------------------------------------------------
 !> @brief state update for different mixture rules 
 !--------------------------------------------------------------------------------------------------
-function homogenization_multiphase_updateState(ip,el)
- use prec, only: &
-   pReal
+function homogenization_multiphase_updateState(avgP,ip,el)
+ use IO, only: &
+   IO_error
  use mesh, only: &
    mesh_element
  use material, only: &
-   homogenization_typeInstance, &
-   phasefracMapping
+   phasefrac, &
+   phasefracMapping, &
+   homogState, &
+   homogenization_Ngrains, &
+   homogenization_typeInstance
+ use crystallite, only: &
+   crystallite_P, &
+   crystallite_dPdF
  
  implicit none
- logical,       dimension (2)             :: homogenization_multiphase_updateState                  !< average stress at material point
- integer(pInt),                intent(in) :: ip, el                                                 !< element number
+ logical,       dimension (2)               :: homogenization_multiphase_updateState                !< average stress at material point
+ real(pReal),   dimension (3,3), intent(in) :: avgP                                                 !< average stress at material point
+ integer(pInt),                  intent(in) :: ip, el                                               !< element number
+ real(pReal),   dimension(:),   allocatable :: residual  
+ real(pReal),   dimension(:,:), allocatable :: jacobian
+ integer(pInt), dimension(9)                :: ipiv                                                 !< needed for matrix inversion by LAPACK
  integer(pInt) :: &
    homog, & 
    instance, &
-   offset
+   offset, grI, grJ, &
+   ierr
+ real(pReal) :: &
+   stressTol
+
+ external :: &
+   dgesv
 
  homog = mesh_element(3,el)
  instance = homogenization_typeInstance(homog)
  offset = phasefracMapping(homog)%p(ip,el)
- select case(homogenization_multiphase_mixtureID(instance))
-   case(isostrain_ID)
+ myMixRule: select case(homogenization_multiphase_mixtureID(instance))
+   case(isostrain_ID) myMixRule
      homogenization_multiphase_updateState = [.true., .true.]
 
-   case(isostress_ID)
+   case(isostress_ID) myMixRule
+     allocate(residual(homogState(homog)%sizeState), source=0.0_pReal)
+     allocate(jacobian(homogState(homog)%sizeState, &
+                       homogState(homog)%sizeState), source=0.0_pReal)
+     do grI = 1_pInt, homogenization_Ngrains(homog)-1
+       residual(9_pInt*grI-8_pInt:9_pInt*grI) = &
+        reshape(crystallite_P(1:3,1:3,grI                          ,ip,el) - &
+                crystallite_P(1:3,1:3,homogenization_Ngrains(homog),ip,el), [9_pInt])
+     enddo
+     stressTol = max(maxval(abs(avgP))*homogenization_multiphase_relTol(instance), &
+                                       homogenization_multiphase_absTol(instance))
+     if (maxval(abs(residual)) < stressTol) then
+       homogenization_multiphase_updateState = [.true., .true.]
+       exit myMixRule
+     else
+       homogenization_multiphase_updateState = [.false., .true.]
+     endif  
+     
+     do grI = 1_pInt,  homogenization_Ngrains(homog)-1
+       jacobian(9_pInt*grI-8_pInt:9_pInt*grI,9_pInt*grI-8_pInt:9_pInt*grI) = &
+         reshape(crystallite_dPdF(1:3,1:3,1:3,1:3,grI,ip,el),[9,9])
+       do grJ = 1_pInt,  homogenization_Ngrains(homog)-1
+         jacobian(9_pInt*grI-8_pInt:9_pInt*grI,9_pInt*grJ-8_pInt:9_pInt*grJ) = &
+           jacobian(9_pInt*grI-8_pInt:9_pInt*grI,9_pInt*grJ-8_pInt:9_pInt*grJ) - &
+           phasefrac(grJ,homog)%p(offset)* &
+           reshape(crystallite_dPdF(1:3,1:3,1:3,1:3,grJ,ip,el),[9,9]) - &
+           phasefrac(homogenization_Ngrains(homog),homog)%p(offset)* &
+           reshape(crystallite_dPdF(1:3,1:3,1:3,1:3,homogenization_Ngrains(homog),ip,el),[9,9])
+       enddo
+     enddo    
+     call dgesv(homogState(homog)%sizeState,1, &
+                jacobian, &
+                homogState(homog)%sizeState,ipiv, &
+                residual, &
+                homogState(homog)%sizeState,ierr)                                                   !< solve Jacobian * delta state = -residual for delta state
+     if (ierr == 0_pInt) then
+       homogState(homog)%state(1:homogState(homog)%sizeState,offset) = &
+         homogState(homog)%state(1:homogState(homog)%sizeState,offset) - &
+         residual
+     else
+      call IO_error(400_pInt,el=el,ip=ip,ext_msg='homogenization multiphase')
+     endif        
 
-   case(rankone_ID)
+   case(rankone_ID) myMixRule
 
-   case(laminate_ID)
+   case(laminate_ID) myMixRule
 
- end select
+ end select myMixRule
 
 end function homogenization_multiphase_updateState
 
@@ -454,8 +496,6 @@ end function homogenization_multiphase_updateState
 !> @brief set module wide phase fractions 
 !--------------------------------------------------------------------------------------------------
 subroutine homogenization_multiphase_putPhaseFrac(frac,ip,el)
- use prec, only: &
-   pReal
  use mesh, only: &
    mesh_element
  use material, only: &
@@ -488,12 +528,11 @@ end subroutine homogenization_multiphase_putPhaseFrac
 !> @brief return array of homogenization results for post file inclusion 
 !--------------------------------------------------------------------------------------------------
 pure function homogenization_multiphase_postResults(ip,el,avgP,avgF)
- use prec, only: &
-   pReal
  use mesh, only: &
    mesh_element, &
    mesh_ipCoordinates
  use material, only: &
+   homogenization_Ngrains, &
    homogenization_typeInstance, &
    homogenization_Noutput
  
@@ -519,7 +558,7 @@ pure function homogenization_multiphase_postResults(ip,el,avgP,avgF)
  do o = 1_pInt,homogenization_Noutput(mesh_element(3,el))
    select case(homogenization_multiphase_outputID(o,homID))
      case (nconstituents_ID)
-       homogenization_multiphase_postResults(c+1_pInt) = real(homogenization_multiphase_Ngrains(homID),pReal)
+       homogenization_multiphase_postResults(c+1_pInt) = real(homogenization_Ngrains(mesh_element(3,el)),pReal)
        c = c + 1_pInt
      case (avgdefgrad_ID)
        homogenization_multiphase_postResults(c+1_pInt:c+9_pInt) = reshape(avgF,[9])
