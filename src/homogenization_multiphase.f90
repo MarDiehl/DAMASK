@@ -72,7 +72,9 @@ subroutine homogenization_multiphase_init(fileUnit)
  use math, only: &
    math_I3, &
    math_inv33, &
-   math_mul33x33
+   math_mul33x33, &
+   math_transpose33, &
+   math_EulerToR
  use material
  use mesh, only: &
    FE_Nips, &
@@ -220,7 +222,7 @@ subroutine homogenization_multiphase_init(fileUnit)
 ! allocate state arrays
      select case(homogenization_multiphase_mixtureID(instance))
        case(isostrain_ID)
-         homogState(homog)%sizeState = 0_pInt
+         homogState(homog)%sizeState =                                          0_pInt
          
        case(isostress_ID)
          homogState(homog)%sizeState = (homogenization_Ngrains(homog) - 1_pInt)*9_pInt
@@ -263,11 +265,17 @@ subroutine homogenization_multiphase_init(fileUnit)
          case(isostress_ID)
            do gr = 1_pInt, homogenization_Ngrains(homog)-1_pInt
              homogState(homog)%state0   (9_pInt*gr-8_pInt:9_pInt*gr,mappingHomogenization(1,ip,el)) = &
-               reshape(crystallite_Fp0(1:3,1:3,gr,ip,el) - math_I3,[9])
+             reshape(math_mul33x33(math_transpose33(math_EulerToR(material_EulerAngles(1:3,gr,ip,el))), &
+                                   crystallite_Fp0(1:3,1:3,gr,ip,el)) - &
+                     math_I3,[9])
              homogState(homog)%subState0(9_pInt*gr-8_pInt:9_pInt*gr,mappingHomogenization(1,ip,el)) = &
-               reshape(crystallite_Fp0(1:3,1:3,gr,ip,el) - math_I3,[9])
+             reshape(math_mul33x33(math_transpose33(math_EulerToR(material_EulerAngles(1:3,gr,ip,el))), &
+                                   crystallite_Fp0(1:3,1:3,gr,ip,el)) - &
+                     math_I3,[9])
              homogState(homog)%state    (9_pInt*gr-8_pInt:9_pInt*gr,mappingHomogenization(1,ip,el)) = &
-               reshape(crystallite_Fp0(1:3,1:3,gr,ip,el) - math_I3,[9])
+             reshape(math_mul33x33(math_transpose33(math_EulerToR(material_EulerAngles(1:3,gr,ip,el))), &
+                                   crystallite_Fp0(1:3,1:3,gr,ip,el)) - &
+                     math_I3,[9])
            enddo    
            do gr = 1_pInt, homogenization_Ngrains(homog)-1
              crystallite_F0(1:3,1:3,gr,ip,el) = &
@@ -462,8 +470,8 @@ function homogenization_multiphase_updateState(avgP,ip,el)
            jacobian(9_pInt*grI-8_pInt:9_pInt*grI,9_pInt*grJ-8_pInt:9_pInt*grJ) = &
              jacobian(9_pInt*grI-8_pInt:9_pInt*grI,9_pInt*grJ-8_pInt:9_pInt*grJ) - &
              phasefrac(grJ,homog)%p(offset)* &
-             reshape(crystallite_dPdF(1:3,1:3,1:3,1:3,grJ,ip,el),[9,9]) + &
-             phasefrac(homogenization_Ngrains(homog),homog)%p(offset)* &
+             reshape(crystallite_dPdF(1:3,1:3,1:3,1:3,grI,ip,el),[9,9]) + &
+             phasefrac(grJ,homog)%p(offset)* &
              reshape(crystallite_dPdF(1:3,1:3,1:3,1:3,homogenization_Ngrains(homog),ip,el),[9,9])
          enddo
        enddo    
