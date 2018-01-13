@@ -407,7 +407,7 @@ end subroutine homogenization_multiphase_averageStressAndItsTangent
 !--------------------------------------------------------------------------------------------------
 !> @brief state update for different mixture rules 
 !--------------------------------------------------------------------------------------------------
-function homogenization_multiphase_updateState(avgP,ip,el)
+function homogenization_multiphase_updateState(ip,el)
  use IO, only: &
    IO_error
  use mesh, only: &
@@ -424,11 +424,11 @@ function homogenization_multiphase_updateState(avgP,ip,el)
  
  implicit none
  logical,       dimension (2)               :: homogenization_multiphase_updateState                !< average stress at material point
- real(pReal),   dimension (3,3), intent(in) :: avgP                                                 !< average stress at material point
  integer(pInt),                  intent(in) :: ip, el                                               !< element number
  real(pReal),   dimension(:),   allocatable :: residual  
  real(pReal),   dimension(:,:), allocatable :: jacobian
  integer(pInt), dimension(9)                :: ipiv                                                 !< needed for matrix inversion by LAPACK
+ real(pReal),   dimension(3,3)              :: avgP                                                 !< average stress at material point
  integer(pInt) :: &
    homog, & 
    instance, &
@@ -451,16 +451,19 @@ function homogenization_multiphase_updateState(avgP,ip,el)
      allocate(residual(homogState(homog)%sizeState), source=0.0_pReal)
      allocate(jacobian(homogState(homog)%sizeState, &
                        homogState(homog)%sizeState), source=0.0_pReal)
+     avgP = crystallite_P(1:3,1:3,homogenization_Ngrains(homog),ip,el)
      do grI = 1_pInt, homogenization_Ngrains(homog)-1
        residual(9_pInt*grI-8_pInt:9_pInt*grI) = &
         reshape(crystallite_P(1:3,1:3,grI                          ,ip,el) - &
                 crystallite_P(1:3,1:3,homogenization_Ngrains(homog),ip,el), [9_pInt])
+       avgP = avgP + crystallite_P(1:3,1:3,grI,ip,el)
      enddo
-     stressTol = max(maxval(abs(avgP))*homogenization_multiphase_relTol(instance), &
-                                       homogenization_multiphase_absTol(instance))
-     convergence: if (maxval(abs(residual)) < stressTol) then
+     avgP = avgP/real(homogenization_Ngrains(homog),pReal)
+     stressTol = max(norm2(avgP)*homogenization_multiphase_relTol(instance), &
+                                 homogenization_multiphase_absTol(instance))
+     convergence: if (norm2(residual) < stressTol) then
        homogenization_multiphase_updateState = [.true., .true.]
-       exit myMixRule
+       exit convergence
      else convergence
        homogenization_multiphase_updateState = [.false., .true.]
        do grI = 1_pInt,  homogenization_Ngrains(homog)-1

@@ -1148,7 +1148,7 @@ function homogenization_updateState(ip,el)
    case (HOMOGENIZATION_MULTIPHASE_ID) chosenHomogenization
      homogenization_updateState = &
        homogenization_updateState .and. &
-        homogenization_multiphase_updateState(materialpoint_P(1:3,1:3,ip,el),ip,el)
+        homogenization_multiphase_updateState(ip,el)
 
    case (HOMOGENIZATION_RGC_ID) chosenHomogenization
      homogenization_updateState = &
