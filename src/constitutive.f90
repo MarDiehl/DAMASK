@@ -754,6 +754,7 @@ subroutine constitutive_hooke_TandItsTangent(T, dT_dFe, dT_dFi, Fe, Fi, ipc, ip,
    math_mul3x3, &
    math_mul33x33, &
    math_mul3333xx33, &
+   math_mul3333xx3333, &
    math_Mandel66to3333, &
    math_trace33, &
    math_I3
@@ -781,14 +782,14 @@ subroutine constitutive_hooke_TandItsTangent(T, dT_dFe, dT_dFi, Fe, Fi, ipc, ip,
    T                                                                                                !< 2nd Piola-Kirchhoff stress tensor in lattice configuration
  real(pReal),   intent(out), dimension(3,3,3,3) :: &
    dT_dFe, &                                                                                        !< derivative of 2nd P-K stress with respect to elastic deformation gradient
-   dT_dFi                                                                                           !< derivative of 2nd P-K stress with respect to intermediate deformation gradient
+   dT_dFi
  real(pReal), dimension(3,3) :: E
- real(pReal), dimension(3,3,3,3) :: C
+ real(pReal), dimension(3,3,3,3) :: C, dEi_dFe, dEi_dFi
  integer(pInt) :: &
    ho, &                                                                                            !< homogenization
    d                                                                                                !< counter in degradation loop
  integer(pInt) :: &
-   i, j
+   i, j, k, l
 
  ho = material_homog(ip,el)
 
@@ -807,14 +808,20 @@ subroutine constitutive_hooke_TandItsTangent(T, dT_dFe, dT_dFi, Fe, Fi, ipc, ip,
  T = math_mul3333xx33(C,math_mul33x33(math_mul33x33(transpose(Fi),E),Fi))                           !< 2PK stress in lattice configuration in work conjugate with GL strain pulled back to lattice configuration
 
  dT_dFe = 0.0_pReal
- forall (i=1_pInt:3_pInt, j=1_pInt:3_pInt)
-   dT_dFe(i,j,1:3,1:3) = &
-     math_mul33x33(Fe,math_mul33x33(math_mul33x33(Fi,C(i,j,1:3,1:3)),transpose(Fi)))                !< dT_ij/dFe_kl = C_ijmn * Fi_lm * Fi_on * Fe_ko
-   dT_dFi(i,j,1:3,1:3) = 2.0_pReal*math_mul33x33(math_mul33x33(E,Fi),C(i,j,1:3,1:3))                !< dT_ij/dFi_kl = C_ijln * E_km * Fe_mn
- end forall
+ do i=1_pInt,3_pInt; do j=1_pInt,3_pInt; do k=1_pInt,3_pInt; do l=1_pInt,3_pInt
+   dEi_dFe(i,j,k,l) = (Fi(l,i)*sum(Fe(k,1:3)*Fi(1:3,j)) + &
+                       Fi(l,j)*sum(Fe(k,1:3)*Fi(1:3,i)))/2.0_pReal
+ enddo; enddo; enddo; enddo
+ dT_dFe = math_mul3333xx3333(C,dEi_dFe)
+
+ do i=1_pInt,3_pInt; do j=1_pInt,3_pInt; do k=1_pInt,3_pInt; do l=1_pInt,3_pInt
+   dEi_dFi(i,j,k,l) = (math_I3(i,l)*sum(E(k,1:3)*Fi(1:3,j)) + &
+                       math_I3(j,l)*sum(E(k,1:3)*Fi(1:3,i))) 
+ enddo; enddo; enddo; enddo
+
+ dT_dFi = math_mul3333xx3333(C,dEi_dFi)
 
 end subroutine constitutive_hooke_TandItsTangent
-
 
 !--------------------------------------------------------------------------------------------------
 !> @brief contains the constitutive equation for calculating the rate of change of microstructure
