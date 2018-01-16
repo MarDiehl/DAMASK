@@ -81,6 +81,9 @@ module math
    math_delta, &
    math_crossproduct, &
    math_tensorproduct33, &
+   math_tensorproduct3333, &
+   math_tensorcomp3333, &
+   math_tensorcomptransp3333, &
    math_mul3x3, &
    math_mul6x6, &
    math_mul33xx33, &
@@ -520,6 +523,54 @@ pure function math_tensorproduct33(A,B)
  forall (i=1_pInt:3_pInt,j=1_pInt:3_pInt) math_tensorproduct33(i,j) = A(i)*B(j)
 
 end function math_tensorproduct33
+
+
+!--------------------------------------------------------------------------------------------------
+!> @brief tensor product A \odot B of size-3 2nd order tensors A and B
+!--------------------------------------------------------------------------------------------------
+pure function math_tensorproduct3333(A,B)
+
+ implicit none
+ real(pReal), dimension(3,3,3,3) ::  math_tensorproduct3333
+ real(pReal), dimension(3,3), intent(in) ::  A,B
+ integer(pInt) :: i,j,k,l
+
+ forall (i=1_pInt:3_pInt,j=1_pInt:3_pInt,k=1_pInt:3_pInt,l=1_pInt:3_pInt) &
+   math_tensorproduct3333(i,j,k,l) = A(i,j)*B(k,l)
+
+end function math_tensorproduct3333
+
+
+!--------------------------------------------------------------------------------------------------
+!> @brief tensor composition A \boxtimes B of size-3 2nd order tensors A and B
+!--------------------------------------------------------------------------------------------------
+pure function math_tensorcomp3333(A,B)
+
+ implicit none
+ real(pReal), dimension(3,3,3,3) ::  math_tensorcomp3333
+ real(pReal), dimension(3,3), intent(in) ::  A,B
+ integer(pInt) :: i,j,k,l
+
+ forall (i=1_pInt:3_pInt,j=1_pInt:3_pInt,k=1_pInt:3_pInt,l=1_pInt:3_pInt) &
+   math_tensorcomp3333(i,j,k,l) = A(i,k)*B(l,j)
+
+end function math_tensorcomp3333
+
+
+!--------------------------------------------------------------------------------------------------
+!> @brief transpose tensor composition A \boxtimes B of size-3 2nd order tensors A and B
+!--------------------------------------------------------------------------------------------------
+pure function math_tensorcomptransp3333(A,B)
+
+ implicit none
+ real(pReal), dimension(3,3,3,3) ::  math_tensorcomptransp3333
+ real(pReal), dimension(3,3), intent(in) ::  A,B
+ integer(pInt) :: i,j,k,l
+
+ forall (i=1_pInt:3_pInt,j=1_pInt:3_pInt,k=1_pInt:3_pInt,l=1_pInt:3_pInt) &
+   math_tensorcomptransp3333(i,j,k,l) = A(i,l)*B(k,j)
+
+end function math_tensorcomptransp3333
 
 
 !--------------------------------------------------------------------------------------------------
