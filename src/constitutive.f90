@@ -807,7 +807,7 @@ subroutine constitutive_hooke_TandItsTangent(T, dT_dFe, dT_dFi, Fe, Fi, ipc, ip,
 
  dEi_dFe = (math_tensorcomp3333(math_transpose33(math_mul33x33(Fe,Fi)),Fi) + &
             math_tensorcomptransp3333(math_transpose33(Fi),math_mul33x33(Fe,Fi)))/2.0_pReal
- dEi_dFe = (math_tensorcomp3333(math_transpose33(math_mul33x33(E,Fi)),math_I3) + &
+ dEi_dFi = (math_tensorcomp3333(math_transpose33(math_mul33x33(E,Fi)),math_I3) + &
             math_tensorcomptransp3333(math_I3,math_mul33x33(E,Fi)))/2.0_pReal 
  dT_dFe = math_mul3333xx3333(C,dEi_dFe)
  dT_dFi = math_mul3333xx3333(C,dEi_dFi)
