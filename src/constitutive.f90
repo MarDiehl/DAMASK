@@ -753,8 +753,11 @@ subroutine constitutive_hooke_TandItsTangent(T, dT_dFe, dT_dFi, Fe, Fi, ipc, ip,
  use math, only : &
    math_mul3x3, &
    math_mul33x33, &
+   math_transpose33, &
    math_mul3333xx33, &
    math_mul3333xx3333, &
+   math_tensorcomp3333, &
+   math_tensorcomptransp3333, &
    math_Mandel66to3333, &
    math_trace33, &
    math_I3
@@ -788,8 +791,6 @@ subroutine constitutive_hooke_TandItsTangent(T, dT_dFe, dT_dFi, Fe, Fi, ipc, ip,
  integer(pInt) :: &
    ho, &                                                                                            !< homogenization
    d                                                                                                !< counter in degradation loop
- integer(pInt) :: &
-   i, j, k, l
 
  ho = material_homog(ip,el)
 
@@ -804,21 +805,14 @@ subroutine constitutive_hooke_TandItsTangent(T, dT_dFe, dT_dFi, Fe, Fi, ipc, ip,
    end select degradationType
  enddo DegradationLoop
 
- E = 0.5_pReal*(math_mul33x33(transpose(Fe),Fe)-math_I3)                                            !< Green-Lagrange strain in unloaded configuration
+ E = 0.5_pReal*(math_mul33x33(math_transpose33(Fe),Fe)-math_I3)                                            !< Green-Lagrange strain in unloaded configuration
  T = math_mul3333xx33(C,math_mul33x33(math_mul33x33(transpose(Fi),E),Fi))                           !< 2PK stress in lattice configuration in work conjugate with GL strain pulled back to lattice configuration
 
- dT_dFe = 0.0_pReal
- do i=1_pInt,3_pInt; do j=1_pInt,3_pInt; do k=1_pInt,3_pInt; do l=1_pInt,3_pInt
-   dEi_dFe(i,j,k,l) = (Fi(l,i)*sum(Fe(k,1:3)*Fi(1:3,j)) + &
-                       Fi(l,j)*sum(Fe(k,1:3)*Fi(1:3,i)))/2.0_pReal
- enddo; enddo; enddo; enddo
+ dEi_dFe = (math_tensorcomp3333(math_transpose33(math_mul33x33(Fe,Fi)),Fi) + &
+            math_tensorcomptransp3333(math_transpose33(Fi),math_mul33x33(Fe,Fi)))/2.0_pReal
+ dEi_dFe = (math_tensorcomp3333(math_transpose33(math_mul33x33(E,Fi)),math_I3) + &
+            math_tensorcomptransp3333(math_I3,math_mul33x33(E,Fi)))/2.0_pReal 
  dT_dFe = math_mul3333xx3333(C,dEi_dFe)
-
- do i=1_pInt,3_pInt; do j=1_pInt,3_pInt; do k=1_pInt,3_pInt; do l=1_pInt,3_pInt
-   dEi_dFi(i,j,k,l) = (math_I3(i,l)*sum(E(k,1:3)*Fi(1:3,j)) + &
-                       math_I3(j,l)*sum(E(k,1:3)*Fi(1:3,i))) 
- enddo; enddo; enddo; enddo
-
  dT_dFi = math_mul3333xx3333(C,dEi_dFi)
 
 end subroutine constitutive_hooke_TandItsTangent
