@@ -853,6 +853,7 @@ subroutine materialpoint_stressAndItsTangent(updateJaco,dt)
 ! crystallite integration
 ! based on crystallite_partionedF0,.._partionedF
 ! incrementing by crystallite_dt
+     write(*,*) 'iter',NiterationMPstate
      call crystallite_stressAndItsTangent(updateJaco)                                                ! request stress and tangent calculation for constituent grains
 
 !--------------------------------------------------------------------------------------------------
@@ -866,7 +867,7 @@ subroutine materialpoint_stressAndItsTangent(updateJaco,dt)
              materialpoint_doneAndHappy(1:2,i,e) = [.true.,.false.]
              materialpoint_converged(i,e) = .false.
            else
-             materialpoint_doneAndHappy(1:2,i,e) = homogenization_updateState(i,e)
+             materialpoint_doneAndHappy(1:2,i,e) = homogenization_updateState(NiterationMPstate,i,e)
              materialpoint_converged(i,e) = all(materialpoint_doneAndHappy(1:2,i,e))                  ! converged if done and happy
            endif
            !$OMP FLUSH(materialpoint_converged)
@@ -1089,7 +1090,7 @@ subroutine homogenization_partitionDeformation(ip,el)
    case (HOMOGENIZATION_MULTIPHASE_ID) chosenHomogenization
      call homogenization_multiphase_partitionDeformation(&
                           crystallite_partionedF(1:3,1:3,1:homogenization_maxNgrains,ip,el), &
-                          materialpoint_subF(1:3,1:3,ip,el),&
+                          materialpoint_subF(1:3,1:3,ip,el), &
                           ip, el)
 
    case (HOMOGENIZATION_RGC_ID) chosenHomogenization
@@ -1107,7 +1108,7 @@ end subroutine homogenization_partitionDeformation
 !> @brief update the internal state of the homogenization scheme and tell whether "done" and
 !> "happy" with result
 !--------------------------------------------------------------------------------------------------
-function homogenization_updateState(ip,el)
+function homogenization_updateState(iter,ip,el)
  use mesh, only: &
    mesh_element
  use material, only: &
@@ -1139,6 +1140,7 @@ function homogenization_updateState(ip,el)
 
  implicit none
  integer(pInt), intent(in) :: &
+   iter, &
    ip, &                                                                                            !< integration point
    el                                                                                               !< element number
  logical, dimension(2) :: homogenization_updateState
@@ -1148,7 +1150,7 @@ function homogenization_updateState(ip,el)
    case (HOMOGENIZATION_MULTIPHASE_ID) chosenHomogenization
      homogenization_updateState = &
        homogenization_updateState .and. &
-        homogenization_multiphase_updateState(ip,el)
+        homogenization_multiphase_updateState(iter,ip,el)
 
    case (HOMOGENIZATION_RGC_ID) chosenHomogenization
      homogenization_updateState = &

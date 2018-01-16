@@ -19,7 +19,7 @@ module homogenization_multiphase
   homogenization_multiphase_output                                                                   !< name of each post result output
  integer(pInt),               dimension(:),   allocatable, target, public :: &
    homogenization_multiphase_Noutput                                                                 !< number of outputs per homog instance
- real(pReal),                 dimension(:),   allocatable,         private :: &
+ real(pReal),                 dimension(:),   allocatable,        private :: &
    homogenization_multiphase_absTol, &
    homogenization_multiphase_relTol
 
@@ -44,6 +44,18 @@ module homogenization_multiphase
  integer(kind(isostrain_ID)), dimension(:),   allocatable,         private :: &
   homogenization_multiphase_mixtureID                                                                !< ID of mixture rule
 
+ type, private :: tMultiphaseState                                                                     !< internal state aliases
+   real(pReal), pointer, dimension(:,:) :: &                                                        ! scalars along NipcMyInstance
+     newIter, &
+     oldIter, &
+     searchDir
+   real(pReal), pointer, dimension(:)   :: &                                                        ! scalars along NipcMyInstance
+     residual, &
+     stepLength
+ end type
+
+ type(tMultiphaseState),      dimension(:),   allocatable,         private :: &                                       !< state aliases per instance
+   state
 
  public :: &
    homogenization_multiphase_init, &
@@ -74,7 +86,11 @@ subroutine homogenization_multiphase_init(fileUnit)
    math_inv33, &
    math_mul33x33, &
    math_transpose33, &
-   math_EulerToR
+   math_EulerToR, &
+   math_Mandel6to33, &
+   math_Mandel33to6
+ use lattice, only: &
+   lattice_initialPlasticStrain
  use material
  use mesh, only: &
    FE_Nips, &
@@ -96,7 +112,9 @@ subroutine homogenization_multiphase_init(fileUnit)
    maxNinstance, &
    homog, &
    micro, &
-   instance
+   instance, &
+   offset, &
+   xioffset
  integer :: &
    NofMyHomog                                                                                       ! no pInt (stores a system dependen value from 'count'
  character(len=65536) :: &
@@ -194,6 +212,7 @@ subroutine homogenization_multiphase_init(fileUnit)
    endif
  enddo parsingFile
 
+ allocate(state(maxNinstance))                                                                      ! internal state aliases
  initializeInstances: do homog = 1_pInt, material_Nhomogenization
    myHomog1: if (homogenization_type(homog) == HOMOGENIZATION_MULTIPHASE_ID) then
      NofMyHomog = count(material_homog == homog)
@@ -222,10 +241,10 @@ subroutine homogenization_multiphase_init(fileUnit)
 ! allocate state arrays
      select case(homogenization_multiphase_mixtureID(instance))
        case(isostrain_ID)
-         homogState(homog)%sizeState =                                          0_pInt
+         homogState(homog)%sizeState = 0_pInt
          
        case(isostress_ID)
-         homogState(homog)%sizeState = (homogenization_Ngrains(homog) - 1_pInt)*9_pInt
+         homogState(homog)%sizeState = (homogenization_Ngrains(homog) - 1_pInt)*18_pInt + 2_pInt
          
        case(rankone_ID)
          homogState(homog)%sizeState = (homogenization_Ngrains(homog) - 1_pInt)*3_pInt
@@ -238,6 +257,35 @@ subroutine homogenization_multiphase_init(fileUnit)
      allocate(homogState(homog)%state0   (homogState(homog)%sizeState,NofMyHomog), source=0.0_pReal)
      allocate(homogState(homog)%subState0(homogState(homog)%sizeState,NofMyHomog), source=0.0_pReal)
      allocate(homogState(homog)%state    (homogState(homog)%sizeState,NofMyHomog), source=0.0_pReal)
+
+     select case(homogenization_multiphase_mixtureID(instance))
+       case(isostrain_ID)
+         homogState(homog)%sizeState = 0_pInt
+         
+       case(isostress_ID)
+         state(instance)%newIter   => homogState(homog)% &
+                                        state((homogenization_Ngrains(homog) - 1_pInt)* 0_pInt + 1_pInt: &
+                                              (homogenization_Ngrains(homog) - 1_pInt)* 6_pInt,1:NofMyHomog)
+         state(instance)%oldIter   => homogState(homog)% &
+                                        state((homogenization_Ngrains(homog) - 1_pInt)* 6_pInt + 1_pInt: &
+                                              (homogenization_Ngrains(homog) - 1_pInt)*12_pInt,1:NofMyHomog)
+         state(instance)%searchDir => homogState(homog)% &
+                                        state((homogenization_Ngrains(homog) - 1_pInt)*12_pInt + 1_pInt: &
+                                              (homogenization_Ngrains(homog) - 1_pInt)*18_pInt,1:NofMyHomog)
+         state(instance)%residual  => homogState(homog)% &
+                                        state((homogenization_Ngrains(homog) - 1_pInt)*18_pInt + 1_pInt, &
+                                                                                               1:NofMyHomog)
+         state(instance)%stepLength=> homogState(homog)% &
+                                        state((homogenization_Ngrains(homog) - 1_pInt)*18_pInt + 2_pInt, &
+                                                                                               1:NofMyHomog)
+
+       case(rankone_ID)
+         homogState(homog)%sizeState = (homogenization_Ngrains(homog) - 1_pInt)*3_pInt
+
+       case(laminate_ID)
+         homogState(homog)%sizeState = (homogenization_Ngrains(homog) - 1_pInt)*6_pInt
+
+     end select
 
      nullify(phasefracMapping(homog)%p)
      phasefracMapping(homog)%p => mappingHomogenization(1,:,:)
@@ -254,6 +302,7 @@ subroutine homogenization_multiphase_init(fileUnit)
    IpLoop: do ip = 1_pInt, FE_Nips(FE_geomtype(mesh_element(2,el)))
      homog = mesh_element(3,el)
      micro = mesh_element(4,el)
+     instance = homogenization_typeInstance(homog)
      myHomog2: if (homogenization_type(homog) == HOMOGENIZATION_MULTIPHASE_ID) then
        do gr = 1_pInt, homogenization_Ngrains(homog)
          phasefrac(gr,homog)%p(phasefracMapping(homog)%p(ip,el)) = microstructure_fraction(gr,micro)
@@ -263,36 +312,50 @@ subroutine homogenization_multiphase_init(fileUnit)
          case(isostrain_ID)
            
          case(isostress_ID)
+           offset = mappingHomogenization(1,ip,el)
            do gr = 1_pInt, homogenization_Ngrains(homog)-1_pInt
-             homogState(homog)%state0   (9_pInt*gr-8_pInt:9_pInt*gr,mappingHomogenization(1,ip,el)) = &
-             reshape(math_mul33x33(math_transpose33(math_EulerToR(material_EulerAngles(1:3,gr,ip,el))), &
-                                   crystallite_Fp0(1:3,1:3,gr,ip,el)) - &
-                     math_I3,[9])
-             homogState(homog)%subState0(9_pInt*gr-8_pInt:9_pInt*gr,mappingHomogenization(1,ip,el)) = &
-             reshape(math_mul33x33(math_transpose33(math_EulerToR(material_EulerAngles(1:3,gr,ip,el))), &
-                                   crystallite_Fp0(1:3,1:3,gr,ip,el)) - &
-                     math_I3,[9])
-             homogState(homog)%state    (9_pInt*gr-8_pInt:9_pInt*gr,mappingHomogenization(1,ip,el)) = &
-             reshape(math_mul33x33(math_transpose33(math_EulerToR(material_EulerAngles(1:3,gr,ip,el))), &
-                                   crystallite_Fp0(1:3,1:3,gr,ip,el)) - &
-                     math_I3,[9])
+             xioffset = 6_pInt*(gr - 1_pInt)
+             state(instance)%newIter(xioffset+1:xioffset+6,offset) = &
+               math_Mandel33to6(math_mul33x33(math_transpose33(math_EulerToR(material_EulerAngles(1:3,gr,ip,el))), &
+                                              math_mul33x33(lattice_initialPlasticStrain(1:3,1:3,material_phase(gr,ip,el)), &
+                                                            math_EulerToR(material_EulerAngles(1:3,gr,ip,el)))))
+             state(instance)%oldIter(xioffset+1:xioffset+6,offset) = &
+               math_Mandel33to6(math_mul33x33(math_transpose33(math_EulerToR(material_EulerAngles(1:3,gr,ip,el))), &
+                                              math_mul33x33(lattice_initialPlasticStrain(1:3,1:3,material_phase(gr,ip,el)), &
+                                                            math_EulerToR(material_EulerAngles(1:3,gr,ip,el)))))
            enddo    
-           do gr = 1_pInt, homogenization_Ngrains(homog)-1
+           state(instance)%residual  (offset) = 0.0_pReal
+           state(instance)%stepLength(offset) = 1.0_pReal
+
+           homogState(homog)%state0   (1:homogState(homog)%sizeState,offset) = &
+             homogState(homog)%state(1:homogState(homog)%sizeState,offset)
+           homogState(homog)%subState0(1:homogState(homog)%sizeState,offset) = &
+             homogState(homog)%state(1:homogState(homog)%sizeState,offset)
+             
+           crystallite_F0(1:3,1:3,homogenization_Ngrains(homog),ip,el) = math_I3
+           do gr = 1_pInt, homogenization_Ngrains(homog)-1_pInt
+             xioffset = 6_pInt*(gr - 1_pInt)
              crystallite_F0(1:3,1:3,gr,ip,el) = &
                math_I3 + &
-               reshape(homogState(homog)%state(9_pInt*gr-8_pInt:9_pInt*gr, &
-                                               mappingHomogenization(1,ip,el)),[3,3])
-             do o = 1_pInt,  homogenization_Ngrains(homog)-1
+               math_Mandel6to33(state(instance)%newIter(xioffset+1:xioffset+6,offset))
+             crystallite_F0(1:3,1:3,homogenization_Ngrains(homog),ip,el) = &
+               crystallite_F0(1:3,1:3,homogenization_Ngrains(homog),ip,el) - &
+               phasefrac(gr,homog)%p(offset)* &
+               math_Mandel6to33(state(instance)%newIter(xioffset+1:xioffset+6,offset))                 
+             do o = 1_pInt, homogenization_Ngrains(homog)-1_pInt
+               xioffset = 6_pInt*(o - 1_pInt)
                crystallite_F0(1:3,1:3,gr,ip,el) = &
                  crystallite_F0(1:3,1:3,gr,ip,el) - &
-                 phasefrac(o,homog)%p(phasefracMapping(homog)%p(ip,el))* &
-                 reshape(homogState(homog)%state(9_pInt*o-8_pInt:9_pInt*o, &
-                                                 mappingHomogenization(1,ip,el)),[3,3])
+                 phasefrac(o,homog)%p(offset)* &
+                 math_Mandel6to33(state(instance)%newIter(xioffset+1:xioffset+6,offset))                 
              enddo
-             crystallite_Fe(1:3,1:3,gr,ip,el) = math_mul33x33(crystallite_F0(1:3,1:3,gr,ip,el), &
-                                                              math_inv33(math_mul33x33(crystallite_Fi0(1:3,1:3,gr,ip,el), & 
-                                                                                       crystallite_Fp0(1:3,1:3,gr,ip,el))))
-           enddo    
+           enddo                 
+           do gr = 1_pInt, homogenization_Ngrains(homog)-1_pInt
+             crystallite_Fe(1:3,1:3,gr,ip,el)  = &
+               math_mul33x33(crystallite_F0(1:3,1:3,gr,ip,el), &
+                             math_inv33(math_mul33x33(crystallite_Fi0(1:3,1:3,gr,ip,el), & 
+                                                      crystallite_Fp0(1:3,1:3,gr,ip,el))))
+           enddo                 
            
          case(rankone_ID)
 
@@ -310,13 +373,13 @@ end subroutine homogenization_multiphase_init
 !> @brief partitions the deformation gradient onto the constituents
 !--------------------------------------------------------------------------------------------------
 subroutine homogenization_multiphase_partitionDeformation(F,avgF,ip,el)
+ use math, only: &
+   math_Mandel6to33
  use mesh, only: &
    mesh_element
  use material, only: &
    phasefrac, &
    phasefracMapping, &
-   homogState, &
-   mappingHomogenization, &
    homogenization_maxNgrains, &
    homogenization_Ngrains, &
    homogenization_typeInstance
@@ -326,7 +389,7 @@ subroutine homogenization_multiphase_partitionDeformation(F,avgF,ip,el)
  real(pReal),   dimension (3,3),                           intent(in)  :: avgF                      !< my average def grad
  integer(pInt),                                            intent(in)  :: &
    el, ip                                                                                           !< element number
- integer(pInt) :: homog, instance, grI, grJ  
+ integer(pInt) :: homog, instance, grI, grJ, offset, xioffset  
  
  homog = mesh_element(3,el)
  instance = homogenization_typeInstance(homog)
@@ -336,27 +399,25 @@ subroutine homogenization_multiphase_partitionDeformation(F,avgF,ip,el)
        spread(avgF,3,homogenization_Ngrains(mesh_element(3,el)))
    
    case(isostress_ID)
-     do grI = 1_pInt, homogenization_Ngrains(homog)-1
+     offset = phasefracMapping(homog)%p(ip,el)
+     F(1:3,1:3,homogenization_Ngrains(homog)) = avgF
+     do grI = 1_pInt, homogenization_Ngrains(homog)-1_pInt
+       xioffset = 6_pInt*(grI - 1_pInt)
        F(1:3,1:3,grI) = &
          avgF + &
-         reshape(homogState(homog)%state(9_pInt*grI-8_pInt:9_pInt*grI, &
-                                         mappingHomogenization(1,ip,el)),[3,3])
-       do grJ = 1_pInt,  homogenization_Ngrains(homog)-1
-         F(1:3,1:3,grI) = &
-           F(1:3,1:3,grI) - &
-           phasefrac(grJ,homog)%p(phasefracMapping(homog)%p(ip,el))* &
-           reshape(homogState(homog)%state(9_pInt*grJ-8_pInt:9_pInt*grJ, &
-                                           mappingHomogenization(1,ip,el)),[3,3])
-       enddo
-     enddo    
-     F(1:3,1:3,homogenization_Ngrains(homog)) = avgF
-     do grJ = 1_pInt,  homogenization_Ngrains(homog)-1
+         math_Mandel6to33(state(instance)%newIter(xioffset+1:xioffset+6,offset))
        F(1:3,1:3,homogenization_Ngrains(homog)) = &
          F(1:3,1:3,homogenization_Ngrains(homog)) - &
-         phasefrac(grJ,homog)%p(phasefracMapping(homog)%p(ip,el))* &
-         reshape(homogState(homog)%state(9_pInt*grJ-8_pInt:9_pInt*grJ, &
-                                         mappingHomogenization(1,ip,el)),[3,3])
-     enddo
+         phasefrac(grI,homog)%p(offset)* &
+         math_Mandel6to33(state(instance)%newIter(xioffset+1:xioffset+6,offset))                 
+       do grJ = 1_pInt, homogenization_Ngrains(homog)-1_pInt
+         xioffset = 6_pInt*(grJ - 1_pInt)
+         F(1:3,1:3,grI) = &
+           F(1:3,1:3,grI) - &
+           phasefrac(grJ,homog)%p(offset)* &
+           math_Mandel6to33(state(instance)%newIter(xioffset+1:xioffset+6,offset))                 
+       enddo
+     enddo                 
 
    case(rankone_ID)
 
@@ -407,35 +468,50 @@ end subroutine homogenization_multiphase_averageStressAndItsTangent
 !--------------------------------------------------------------------------------------------------
 !> @brief state update for different mixture rules 
 !--------------------------------------------------------------------------------------------------
-function homogenization_multiphase_updateState(ip,el)
+function homogenization_multiphase_updateState(iter,ip,el)
  use IO, only: &
    IO_error
+ use math, only: &
+   math_I3, &
+   math_Mandel33to6, &
+   math_Mandel3333to66, &
+   math_tensorcomp3333, &
+   math_mul3333xx3333, &
+   math_mul33x33, &
+   math_inv33
  use mesh, only: &
    mesh_element
  use material, only: &
    phasefrac, &
    phasefracMapping, &
-   homogState, &
    homogenization_Ngrains, &
    homogenization_typeInstance
  use crystallite, only: &
+   crystallite_partionedF, &
    crystallite_P, &
    crystallite_dPdF
  
  implicit none
  logical,       dimension (2)               :: homogenization_multiphase_updateState                !< average stress at material point
- integer(pInt),                  intent(in) :: ip, el                                               !< element number
+ integer(pInt),                  intent(in) :: iter, ip, el                                         !< state loop iter, ip, element number
  real(pReal),   dimension(:),   allocatable :: residual  
- real(pReal),   dimension(:,:), allocatable :: jacobian
- integer(pInt), dimension(9)                :: ipiv                                                 !< needed for matrix inversion by LAPACK
- real(pReal),   dimension(3,3)              :: avgP                                                 !< average stress at material point
+ real(pReal),   dimension(:,:), allocatable :: jacobian, &
+                                               sPK 
+ integer(pInt), dimension(:),   allocatable :: ipiv  
  integer(pInt) :: &
    homog, & 
    instance, &
-   offset, grI, grJ, &
+   offset, &
+   xioffsetI, &
+   xioffsetJ, &
+   xisize, &
+   grI, grJ, &
    ierr
  real(pReal) :: &
-   stressTol
+   stressTol, &
+   dSi_dEi(6,6), &
+   dSN_dEN(6,6), &
+   Finv(3,3)
 
  external :: &
    dgesv
@@ -448,49 +524,86 @@ function homogenization_multiphase_updateState(ip,el)
      homogenization_multiphase_updateState = [.true., .true.]
 
    case(isostress_ID) myMixRule
-     allocate(residual(homogState(homog)%sizeState), source=0.0_pReal)
-     allocate(jacobian(homogState(homog)%sizeState, &
-                       homogState(homog)%sizeState), source=0.0_pReal)
-     avgP = crystallite_P(1:3,1:3,homogenization_Ngrains(homog),ip,el)
+     xisize = (homogenization_Ngrains(homog) - 1_pInt)*6_pInt
+     allocate(residual(xisize       ), source=0.0_pReal)
+     allocate(jacobian(xisize,xisize), source=0.0_pReal)
+     allocate(sPK(6,homogenization_Ngrains(homog)), source=0.0_pReal)
+     do grI = 1_pInt, homogenization_Ngrains(homog)
+       sPK(1:6,grI) = &
+         math_Mandel33to6(math_mul33x33(crystallite_partionedF(1:3,1:3,grI,ip,el), &
+                                        crystallite_P         (1:3,1:3,grI,ip,el)))
+     enddo     
      do grI = 1_pInt, homogenization_Ngrains(homog)-1
-       residual(9_pInt*grI-8_pInt:9_pInt*grI) = &
-        reshape(crystallite_P(1:3,1:3,grI                          ,ip,el) - &
-                crystallite_P(1:3,1:3,homogenization_Ngrains(homog),ip,el), [9_pInt])
-       avgP = avgP + crystallite_P(1:3,1:3,grI,ip,el)
-     enddo
-     avgP = avgP/real(homogenization_Ngrains(homog),pReal)
-     stressTol = max(norm2(avgP)*homogenization_multiphase_relTol(instance), &
-                                 homogenization_multiphase_absTol(instance))
+       xioffsetI = 6_pInt*(grI - 1_pInt)
+       residual(xioffsetI+1_pInt:xioffsetI+6_pInt) = &
+        sPK(1:6,grI) - sPK(1:6,homogenization_Ngrains(homog))
+     enddo     
+     stressTol = max(homogenization_multiphase_absTol(instance), &
+                     homogenization_multiphase_relTol(instance)* &
+                     norm2(sum(sPK,dim=2)/real(homogenization_Ngrains(homog),pReal)))
+     
      convergence: if (norm2(residual) < stressTol) then
        homogenization_multiphase_updateState = [.true., .true.]
        exit convergence
-     else convergence
+     elseif (     iter == 1_pInt &
+             .or. norm2(residual) < state(instance)%residual(offset)) then convergence              ! not converged, but improved norm of residuum (always proceed in first iteration)...
        homogenization_multiphase_updateState = [.false., .true.]
+       state(instance)%residual  (offset) = norm2(residual)                                         ! ...remember old values and...
+       state(instance)%stepLength(offset) = &
+        min(1.0_pReal,2.0_pReal*state(instance)%stepLength(offset))                                 ! ...proceed with normal step length (calculate new search direction)
+       state(instance)%oldIter(:,offset) = state(instance)%newIter(:,offset)
+
+       Finv = math_inv33(crystallite_partionedF(1:3,1:3,homogenization_Ngrains(homog),ip,el))
+       dSN_dEN(1:6,1:6) = &
+         math_Mandel3333to66(math_mul3333xx3333(math_tensorcomp3333(Finv,math_I3), &
+                                                crystallite_dPdF(1:3,1:3,1:3,1:3, &
+                                                                 homogenization_Ngrains(homog), &
+                                                                 ip,el)))  - &
+         math_Mandel3333to66(math_mul3333xx3333(math_tensorcomp3333(math_I3, &
+                                                                    crystallite_P(1:3,1:3, &
+                                                                    homogenization_Ngrains(homog), &
+                                                                    ip,el)), &
+                                                math_tensorcomp3333(Finv,Finv)))
        do grI = 1_pInt,  homogenization_Ngrains(homog)-1
-         jacobian(9_pInt*grI-8_pInt:9_pInt*grI,9_pInt*grI-8_pInt:9_pInt*grI) = &
-           reshape(crystallite_dPdF(1:3,1:3,1:3,1:3,grI,ip,el),[9,9])
+         xioffsetI = 6_pInt*(grI - 1_pInt)
+         Finv = math_inv33(crystallite_partionedF(1:3,1:3,grI,ip,el))
+         dSi_dEi(1:6,1:6) = &
+           math_Mandel3333to66(math_mul3333xx3333(math_tensorcomp3333(Finv,math_I3), &
+                                                  crystallite_dPdF(1:3,1:3,1:3,1:3, &
+                                                                   grI,ip,el)))  - &
+           math_Mandel3333to66(math_mul3333xx3333(math_tensorcomp3333(math_I3, &
+                                                                      crystallite_P(1:3,1:3, &
+                                                                      grI,ip,el)), &
+                                                  math_tensorcomp3333(Finv,Finv)))
+         jacobian(xioffsetI+1_pInt:xioffsetI+6_pInt,xioffsetI+1_pInt:xioffsetI+6_pInt) = &
+           dSi_dEi
          do grJ = 1_pInt,  homogenization_Ngrains(homog)-1
-           jacobian(9_pInt*grI-8_pInt:9_pInt*grI,9_pInt*grJ-8_pInt:9_pInt*grJ) = &
-             jacobian(9_pInt*grI-8_pInt:9_pInt*grI,9_pInt*grJ-8_pInt:9_pInt*grJ) - &
-             phasefrac(grJ,homog)%p(offset)* &
-             reshape(crystallite_dPdF(1:3,1:3,1:3,1:3,grI,ip,el),[9,9]) + &
-             phasefrac(grJ,homog)%p(offset)* &
-             reshape(crystallite_dPdF(1:3,1:3,1:3,1:3,homogenization_Ngrains(homog),ip,el),[9,9])
-         enddo
+           xioffsetJ = 6_pInt*(grJ - 1_pInt)
+           jacobian(xioffsetI+1_pInt:xioffsetI+6_pInt,xioffsetJ+1_pInt:xioffsetJ+6_pInt) = &
+             jacobian(xioffsetI+1_pInt:xioffsetI+6_pInt,xioffsetJ+1_pInt:xioffsetJ+6_pInt) - &
+             phasefrac(grJ,homog)%p(offset)*(dSi_dEi - dSN_dEN)
+         enddo    
        enddo    
-       call dgesv(homogState(homog)%sizeState,1, &
-                  jacobian, &
-                  homogState(homog)%sizeState,ipiv, &
-                  residual, &
-                  homogState(homog)%sizeState,ierr)                                                   !< solve Jacobian * delta state = -residual for delta state
+       allocate(ipiv(xisize))
+       call dgesv(xisize,1,jacobian,xisize,ipiv,residual,xisize,ierr)                               !< solve Jacobian * delta state = -residual for delta state
        if (ierr == 0_pInt) then
-         homogState(homog)%state(1:homogState(homog)%sizeState,offset) = &
-           homogState(homog)%state(1:homogState(homog)%sizeState,offset) - &
-           residual
+         state(instance)%searchDir(:,offset) = residual
+         state(instance)%newIter  (:,offset) = &
+           state(instance)%oldIter  (:,offset) - &
+           state(instance)%stepLength(offset)* &
+           state(instance)%searchDir(:,offset)
        else
         call IO_error(400_pInt,el=el,ip=ip,ext_msg='homogenization multiphase')
        endif        
-     endif convergence 
+     else convergence                                                                               ! not converged and residuum not improved...
+       homogenization_multiphase_updateState = [.false., .true.]
+       state(instance)%stepLength(offset) = &
+         state(instance)%stepLength(offset)/2.0_pReal                                      ! ...try with smaller step length in same direction
+         state(instance)%newIter  (:,offset) = &
+           state(instance)%oldIter  (:,offset) - &
+           state(instance)%stepLength(offset)* &
+           state(instance)%searchDir(:,offset)
+     endif convergence    
      
    case(rankone_ID) myMixRule
 
