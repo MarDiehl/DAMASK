@@ -384,13 +384,26 @@ function constitutive_homogenizedC(ipc,ip,el)
    plastic_dislotwin_homogenizedC
  use lattice, only: &
    lattice_C66
+ use material, only: &
+   material_phase, &
+   material_homog, &
+   phase_NstiffnessDegradations, &
+   phase_stiffnessDegradation, &
+   damage, &
+   damageMapping, &
+   porosity, &
+   porosityMapping, &
+   STIFFNESS_DEGRADATION_damage_ID, &
+   STIFFNESS_DEGRADATION_porosity_ID
 
  implicit none
  real(pReal), dimension(6,6) :: constitutive_homogenizedC
  integer(pInt), intent(in) :: &
    ipc, &                                                                                            !< component-ID of integration point
    ip, &                                                                                             !< integration point
-   el                                                                                                !< element
+   el 
+ integer(pInt) :: &
+   ho, d                                                                                                 !< element
 
  plasticityType: select case (phase_plasticity(material_phase(ipc,ip,el)))
    case (PLASTICITY_DISLOTWIN_ID) plasticityType
@@ -398,6 +411,18 @@ function constitutive_homogenizedC(ipc,ip,el)
    case default plasticityType
      constitutive_homogenizedC = lattice_C66(1:6,1:6,material_phase (ipc,ip,el))
  end select plasticityType
+
+ ho = material_homog(ip,el)
+ DegradationLoop: do d = 1_pInt, phase_NstiffnessDegradations(material_phase(ipc,ip,el))
+   degradationType: select case(phase_stiffnessDegradation(d,material_phase(ipc,ip,el)))
+     case (STIFFNESS_DEGRADATION_damage_ID) degradationType
+       constitutive_homogenizedC = constitutive_homogenizedC * &
+                                   damage(ho)%p(damageMapping(ho)%p(ip,el))**2_pInt
+     case (STIFFNESS_DEGRADATION_porosity_ID) degradationType
+       constitutive_homogenizedC = constitutive_homogenizedC * &
+                                   porosity(ho)%p(porosityMapping(ho)%p(ip,el))**2_pInt
+   end select degradationType
+ enddo DegradationLoop
 
 end function constitutive_homogenizedC
 
@@ -751,7 +776,6 @@ subroutine constitutive_hooke_TandItsTangent(T, dT_dFe, dT_dFi, Fe, Fi, ipc, ip,
  use prec, only: &
    pReal
  use math, only : &
-   math_mul3x3, &
    math_mul33x33, &
    math_transpose33, &
    math_mul3333xx33, &
@@ -759,19 +783,7 @@ subroutine constitutive_hooke_TandItsTangent(T, dT_dFe, dT_dFi, Fe, Fi, ipc, ip,
    math_tensorcomp3333, &
    math_tensorcomptransp3333, &
    math_Mandel66to3333, &
-   math_trace33, &
    math_I3
- use material, only: &
-   material_phase, &
-   material_homog, &
-   phase_NstiffnessDegradations, &
-   phase_stiffnessDegradation, &
-   damage, &
-   damageMapping, &
-   porosity, &
-   porosityMapping, &
-   STIFFNESS_DEGRADATION_damage_ID, &
-   STIFFNESS_DEGRADATION_porosity_ID
 
  implicit none
  integer(pInt), intent(in) :: &
@@ -788,23 +800,8 @@ subroutine constitutive_hooke_TandItsTangent(T, dT_dFe, dT_dFi, Fe, Fi, ipc, ip,
    dT_dFi
  real(pReal), dimension(3,3) :: E
  real(pReal), dimension(3,3,3,3) :: C, dEi_dFe, dEi_dFi
- integer(pInt) :: &
-   ho, &                                                                                            !< homogenization
-   d                                                                                                !< counter in degradation loop
-
- ho = material_homog(ip,el)
 
  C = math_Mandel66to3333(constitutive_homogenizedC(ipc,ip,el))
-
- DegradationLoop: do d = 1_pInt, phase_NstiffnessDegradations(material_phase(ipc,ip,el))
-   degradationType: select case(phase_stiffnessDegradation(d,material_phase(ipc,ip,el)))
-     case (STIFFNESS_DEGRADATION_damage_ID) degradationType
-       C = C * damage(ho)%p(damageMapping(ho)%p(ip,el))**2_pInt
-     case (STIFFNESS_DEGRADATION_porosity_ID) degradationType
-       C = C * porosity(ho)%p(porosityMapping(ho)%p(ip,el))**2_pInt
-   end select degradationType
- enddo DegradationLoop
-
  E = 0.5_pReal*(math_mul33x33(math_transpose33(Fe),Fe)-math_I3)                                            !< Green-Lagrange strain in unloaded configuration
  T = math_mul3333xx33(C,math_mul33x33(math_mul33x33(transpose(Fi),E),Fi))                           !< 2PK stress in lattice configuration in work conjugate with GL strain pulled back to lattice configuration
 
