@@ -474,11 +474,16 @@ function homogenization_multiphase_updateState(iter,ip,el)
  use math, only: &
    math_I3, &
    math_Mandel33to6, &
+   math_Mandel6to33, &
    math_Mandel3333to66, &
    math_tensorcomp3333, &
+   math_tensorcomptransp3333, &
+   math_tensorproduct3333, &
    math_mul3333xx3333, &
    math_mul33x33, &
-   math_inv33
+   math_inv33, &
+   math_det33, &
+   math_transpose33
  use mesh, only: &
    mesh_element
  use material, only: &
@@ -494,9 +499,10 @@ function homogenization_multiphase_updateState(iter,ip,el)
  implicit none
  logical,       dimension (2)               :: homogenization_multiphase_updateState                !< average stress at material point
  integer(pInt),                  intent(in) :: iter, ip, el                                         !< state loop iter, ip, element number
- real(pReal),   dimension(:),   allocatable :: residual  
+ real(pReal),   dimension(:),   allocatable :: residual, &
+                                               detFiInv   
  real(pReal),   dimension(:,:), allocatable :: jacobian, &
-                                               sPK 
+                                               sigma 
  integer(pInt), dimension(:),   allocatable :: ipiv  
  integer(pInt) :: &
    homog, & 
@@ -510,8 +516,7 @@ function homogenization_multiphase_updateState(iter,ip,el)
  real(pReal) :: &
    stressTol, &
    dSi_dEi(6,6), &
-   dSN_dEN(6,6), &
-   Finv(3,3)
+   dSN_dEN(6,6)
 
  external :: &
    dgesv
@@ -527,20 +532,23 @@ function homogenization_multiphase_updateState(iter,ip,el)
      xisize = (homogenization_Ngrains(homog) - 1_pInt)*6_pInt
      allocate(residual(xisize       ), source=0.0_pReal)
      allocate(jacobian(xisize,xisize), source=0.0_pReal)
-     allocate(sPK(6,homogenization_Ngrains(homog)), source=0.0_pReal)
+     allocate(sigma(6,homogenization_Ngrains(homog)), source=0.0_pReal)
+     allocate(detFiInv(homogenization_Ngrains(homog)), source=0.0_pReal)
      do grI = 1_pInt, homogenization_Ngrains(homog)
-       sPK(1:6,grI) = &
-         math_Mandel33to6(math_mul33x33(crystallite_partionedF(1:3,1:3,grI,ip,el), &
-                                        crystallite_P         (1:3,1:3,grI,ip,el)))
+       detFiInv(grI) = 1.0_pReal/math_det33(crystallite_partionedF(1:3,1:3,grI,ip,el))
+       sigma(1:6,grI) = &
+         math_Mandel33to6(math_mul33x33(crystallite_P(1:3,1:3,grI,ip,el), &
+                                        math_transpose33(crystallite_partionedF(1:3,1:3,grI,ip,el))) &
+                         )*detFiInv(grI)
      enddo     
      do grI = 1_pInt, homogenization_Ngrains(homog)-1
        xioffsetI = 6_pInt*(grI - 1_pInt)
        residual(xioffsetI+1_pInt:xioffsetI+6_pInt) = &
-        sPK(1:6,grI) - sPK(1:6,homogenization_Ngrains(homog))
+        sigma(1:6,grI) - sigma(1:6,homogenization_Ngrains(homog))
      enddo     
      stressTol = max(homogenization_multiphase_absTol(instance), &
                      homogenization_multiphase_relTol(instance)* &
-                     norm2(sum(sPK,dim=2)/real(homogenization_Ngrains(homog),pReal)))
+                     norm2(sum(sigma,dim=2)/real(homogenization_Ngrains(homog),pReal)))
      
      convergence: if (norm2(residual) < stressTol) then
        homogenization_multiphase_updateState = [.true., .true.]
@@ -553,28 +561,66 @@ function homogenization_multiphase_updateState(iter,ip,el)
         min(1.0_pReal,2.0_pReal*state(instance)%stepLength(offset))                                 ! ...proceed with normal step length (calculate new search direction)
        state(instance)%oldIter(:,offset) = state(instance)%newIter(:,offset)
 
-       Finv = math_inv33(crystallite_partionedF(1:3,1:3,homogenization_Ngrains(homog),ip,el))
        dSN_dEN(1:6,1:6) = &
-         math_Mandel3333to66(math_mul3333xx3333(math_tensorcomp3333(Finv,math_I3), &
-                                                crystallite_dPdF(1:3,1:3,1:3,1:3, &
-                                                                 homogenization_Ngrains(homog), &
-                                                                 ip,el)))  - &
-         math_Mandel3333to66(math_mul3333xx3333(math_tensorcomp3333(math_I3, &
-                                                                    crystallite_P(1:3,1:3, &
-                                                                    homogenization_Ngrains(homog), &
-                                                                    ip,el)), &
-                                                math_tensorcomp3333(Finv,Finv)))
+         math_Mandel3333to66( &
+           math_mul3333xx3333( &
+             math_tensorcomp3333( &
+                                 math_I3, &
+                                 detFiInv(homogenization_Ngrains(homog))* &
+                                 math_transpose33(crystallite_partionedF(1:3,1:3,homogenization_Ngrains(homog),ip,el)) &
+                                ), &
+                              crystallite_dPdF(1:3,1:3,1:3,1:3,homogenization_Ngrains(homog),ip,el) &
+                             ) &
+                            )  + &
+         math_Mandel3333to66( &
+           math_tensorcomptransp3333( &
+                                     crystallite_P(1:3,1:3,homogenization_Ngrains(homog),ip,el), &
+                                     detFiInv(homogenization_Ngrains(homog))*math_I3 &
+                                    ) &
+                            ) - &  
+         math_Mandel3333to66( &
+           math_mul3333xx3333( &
+             math_tensorproduct3333( &
+                                    math_Mandel6to33(sigma(1:6,homogenization_Ngrains(homog))), &
+                                    math_transpose33(crystallite_partionedF(1:3,1:3,homogenization_Ngrains(homog),ip,el)) &
+                                   ), &
+             math_tensorcomp3333( &
+                                 math_inv33(crystallite_partionedF(1:3,1:3,homogenization_Ngrains(homog),ip,el)), &
+                                 math_inv33(crystallite_partionedF(1:3,1:3,homogenization_Ngrains(homog),ip,el)) &
+                                ) & 
+                             ) &
+                            )
        do grI = 1_pInt,  homogenization_Ngrains(homog)-1
          xioffsetI = 6_pInt*(grI - 1_pInt)
-         Finv = math_inv33(crystallite_partionedF(1:3,1:3,grI,ip,el))
          dSi_dEi(1:6,1:6) = &
-           math_Mandel3333to66(math_mul3333xx3333(math_tensorcomp3333(Finv,math_I3), &
-                                                  crystallite_dPdF(1:3,1:3,1:3,1:3, &
-                                                                   grI,ip,el)))  - &
-           math_Mandel3333to66(math_mul3333xx3333(math_tensorcomp3333(math_I3, &
-                                                                      crystallite_P(1:3,1:3, &
-                                                                      grI,ip,el)), &
-                                                  math_tensorcomp3333(Finv,Finv)))
+           math_Mandel3333to66( &
+             math_mul3333xx3333( &
+               math_tensorcomp3333( &
+                                   math_I3, &
+                                   detFiInv(grI)* &
+                                   math_transpose33(crystallite_partionedF(1:3,1:3,grI,ip,el)) &
+                                  ), &
+                                crystallite_dPdF(1:3,1:3,1:3,1:3,grI,ip,el) &
+                               ) &
+                              )  + &
+           math_Mandel3333to66( &
+             math_tensorcomptransp3333( &
+                                       crystallite_P(1:3,1:3,grI,ip,el), &
+                                       detFiInv(grI)*math_I3 &
+                                      ) &
+                              ) - &  
+           math_Mandel3333to66( &
+             math_mul3333xx3333( &
+               math_tensorproduct3333( &
+                                      math_Mandel6to33(sigma(1:6,grI)), &
+                                      math_transpose33(crystallite_partionedF(1:3,1:3,grI,ip,el)) &
+                                     ), &
+               math_tensorcomp3333( &
+                                   math_inv33(crystallite_partionedF(1:3,1:3,grI,ip,el)), &
+                                   math_inv33(crystallite_partionedF(1:3,1:3,grI,ip,el)) &
+                                  ) & 
+                               ) &
+                              )
          jacobian(xioffsetI+1_pInt:xioffsetI+6_pInt,xioffsetI+1_pInt:xioffsetI+6_pInt) = &
            dSi_dEi
          do grJ = 1_pInt,  homogenization_Ngrains(homog)-1
