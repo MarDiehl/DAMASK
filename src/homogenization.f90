@@ -853,7 +853,6 @@ subroutine materialpoint_stressAndItsTangent(updateJaco,dt)
 ! crystallite integration
 ! based on crystallite_partionedF0,.._partionedF
 ! incrementing by crystallite_dt
-     write(*,*) 'iter',NiterationMPstate
      call crystallite_stressAndItsTangent(updateJaco)                                                ! request stress and tangent calculation for constituent grains
 
 !--------------------------------------------------------------------------------------------------
@@ -1061,7 +1060,8 @@ subroutine homogenization_partitionDeformation(ip,el)
    HOMOGENIZATION_MULTIPHASE_ID, &
    HOMOGENIZATION_RGC_ID
  use crystallite, only: &
-   crystallite_partionedF
+   crystallite_partionedF, &
+   crystallite_partionedF0
  use homogenization_isostrain, only: &
    homogenization_isostrain_partitionDeformation
  use homogenization_multiphase, only: &
@@ -1089,8 +1089,10 @@ subroutine homogenization_partitionDeformation(ip,el)
 
    case (HOMOGENIZATION_MULTIPHASE_ID) chosenHomogenization
      call homogenization_multiphase_partitionDeformation(&
-                          crystallite_partionedF(1:3,1:3,1:homogenization_maxNgrains,ip,el), &
-                          materialpoint_subF(1:3,1:3,ip,el), &
+                          crystallite_partionedF (1:3,1:3,1:homogenization_maxNgrains,ip,el), &
+                          crystallite_partionedF0(1:3,1:3,1:homogenization_maxNgrains,ip,el), &
+                          materialpoint_subF (1:3,1:3,ip,el), &
+                          materialpoint_subF0(1:3,1:3,ip,el), &
                           ip, el)
 
    case (HOMOGENIZATION_RGC_ID) chosenHomogenization
@@ -1150,7 +1152,11 @@ function homogenization_updateState(iter,ip,el)
    case (HOMOGENIZATION_MULTIPHASE_ID) chosenHomogenization
      homogenization_updateState = &
        homogenization_updateState .and. &
-        homogenization_multiphase_updateState(iter,ip,el)
+        homogenization_multiphase_updateState(crystallite_P(1:3,1:3,1:homogenization_maxNgrains,ip,el), &
+                                              crystallite_dPdF(1:3,1:3,1:3,1:3,1:homogenization_maxNgrains,ip,el), &
+                                              crystallite_partionedF(1:3,1:3,1:homogenization_maxNgrains,ip,el), &
+                                              crystallite_partionedF0(1:3,1:3,1:homogenization_maxNgrains,ip,el),&
+                                              iter,ip,el)
 
    case (HOMOGENIZATION_RGC_ID) chosenHomogenization
      homogenization_updateState = &
@@ -1209,7 +1215,10 @@ subroutine homogenization_averageStressAndItsTangent(ip,el)
    HOMOGENIZATION_MULTIPHASE_ID, &
    HOMOGENIZATION_RGC_ID
  use crystallite, only: &
-   crystallite_P,crystallite_dPdF
+   crystallite_P, &
+   crystallite_dPdF, &
+   crystallite_partionedF,&
+   crystallite_partionedF0
  use homogenization_isostrain, only: &
    homogenization_isostrain_averageStressAndItsTangent
  use homogenization_multiphase, only: &
@@ -1240,8 +1249,12 @@ subroutine homogenization_averageStressAndItsTangent(ip,el)
      call homogenization_multiphase_averageStressAndItsTangent(&
        materialpoint_P(1:3,1:3,ip,el), &
        materialpoint_dPdF(1:3,1:3,1:3,1:3,ip,el),&
+       materialpoint_subF (1:3,1:3,ip,el), &
+       materialpoint_subF0(1:3,1:3,ip,el), &
        crystallite_P(1:3,1:3,1:homogenization_maxNgrains,ip,el), &
        crystallite_dPdF(1:3,1:3,1:3,1:3,1:homogenization_maxNgrains,ip,el), &
+       crystallite_partionedF (1:3,1:3,1:homogenization_maxNgrains,ip,el), &
+       crystallite_partionedF0(1:3,1:3,1:homogenization_maxNgrains,ip,el), &
        ip, el)
 
    case (HOMOGENIZATION_RGC_ID) chosenHomogenization
