@@ -539,8 +539,9 @@ subroutine material_init()
    allocate(vacancyConcRate (myHomog)%p(1), source=0.0_pReal)
    allocate(hydrogenConcRate(myHomog)%p(1), source=0.0_pReal)
    do g = 1_pInt,homogenization_Ngrains(myHomog)
-     allocate(phasefrac(g,myHomog)%p(1), &
-              source=1.0_pReal/real(homogenization_Ngrains(myHomog),pReal))
+     if (homogenization_active(myHomog)) &
+       allocate(phasefrac(g,myHomog)%p(1), &
+                source=1.0_pReal/real(homogenization_Ngrains(myHomog),pReal))
    enddo
  enddo
 
