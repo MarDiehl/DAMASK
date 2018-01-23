@@ -1322,7 +1322,6 @@ subroutine material_populateGrains
 
 !--------------------------------------------------------------------------------------------------
 ! precounting of elements for each homog/micro pair
- write(*,*) 'nelems',mesh_NcpElems
  do e = 1_pInt, mesh_NcpElems
    homog = mesh_element(3,e)
    micro = mesh_element(4,e)
