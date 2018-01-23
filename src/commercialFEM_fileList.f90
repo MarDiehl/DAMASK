@@ -36,6 +36,7 @@
 #include "homogenization_none.f90"
 #include "homogenization_isostrain.f90"
 #include "homogenization_RGC.f90"
+#include "homogenization_multiphase.f90"
 #include "thermal_isothermal.f90"
 #include "thermal_adiabatic.f90"
 #include "thermal_conduction.f90"
