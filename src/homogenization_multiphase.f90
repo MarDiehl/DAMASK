@@ -812,7 +812,6 @@ function homogenization_multiphase_updateState(P,dPdF,F,F0,iter,ip,el)
      
      convergencefPK: if (norm2(residual) < stressTol) then
        homogenization_multiphase_updateState = [.true., .true.]
-       exit convergencefPK
      elseif (     iter == 1_pInt &
              .or. norm2(residual) < state(instance)%residual(offset)) then convergencefPK              ! not converged, but improved norm of residuum (always proceed in first iteration)...
        homogenization_multiphase_updateState = [.false., .true.]
@@ -878,7 +877,6 @@ function homogenization_multiphase_updateState(P,dPdF,F,F0,iter,ip,el)
      
      convergenceCauchy: if (norm2(residual) < stressTol) then
        homogenization_multiphase_updateState = [.true., .true.]
-       exit convergenceCauchy
      elseif (     iter == 1_pInt &
              .or. norm2(residual) < state(instance)%residual(offset)) then convergenceCauchy              ! not converged, but improved norm of residuum (always proceed in first iteration)...
        homogenization_multiphase_updateState = [.false., .true.]
