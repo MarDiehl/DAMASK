@@ -76,6 +76,7 @@ module numerics
    err_struct_tolRel          =  1.0e-4_pReal, &                                                    !< relative tolerance for mechanical equilibrium
    err_thermal_tolAbs         =  1.0e-2_pReal, &                                                    !< absolute tolerance for thermal equilibrium
    err_thermal_tolRel         =  1.0e-6_pReal, &                                                    !< relative tolerance for thermal equilibrium
+   err_phasefr_tolAbs         =  1.0e-6_pReal, &                                                    !< absolute tolerance for damage evolution
    err_damage_tolAbs          =  1.0e-2_pReal, &                                                    !< absolute tolerance for damage evolution
    err_damage_tolRel          =  1.0e-6_pReal, &                                                    !< relative tolerance for damage evolution
    err_vacancyflux_tolAbs     =  1.0e-8_pReal, &                                                    !< absolute tolerance for vacancy transport
@@ -379,6 +380,8 @@ subroutine numerics_init
          err_thermal_tolabs = IO_floatValue(line,chunkPos,2_pInt)
        case ('err_thermal_tolrel')
          err_thermal_tolrel = IO_floatValue(line,chunkPos,2_pInt)
+       case ('err_phasefr_tolabs')
+         err_phasefr_tolabs = IO_floatValue(line,chunkPos,2_pInt)
        case ('err_damage_tolabs')
          err_damage_tolabs = IO_floatValue(line,chunkPos,2_pInt)
        case ('err_damage_tolrel')
@@ -585,6 +588,7 @@ subroutine numerics_init
  write(6,'(a24,1x,es8.1)')   ' err_struct_tolRel:      ',err_struct_tolRel
  write(6,'(a24,1x,es8.1)')   ' err_thermal_tolabs:     ',err_thermal_tolabs
  write(6,'(a24,1x,es8.1)')   ' err_thermal_tolrel:     ',err_thermal_tolrel
+ write(6,'(a24,1x,es8.1)')   ' err_phasefr_tolabs:     ',err_phasefr_tolabs
  write(6,'(a24,1x,es8.1)')   ' err_damage_tolabs:      ',err_damage_tolabs
  write(6,'(a24,1x,es8.1)')   ' err_damage_tolrel:      ',err_damage_tolrel
  write(6,'(a24,1x,es8.1)')   ' err_vacancyflux_tolabs: ',err_vacancyflux_tolabs
@@ -689,6 +693,7 @@ subroutine numerics_init
  if (err_struct_tolAbs <= 0.0_pReal)       call IO_error(301_pInt,ext_msg='err_struct_tolAbs')
  if (err_thermal_tolabs <= 0.0_pReal)      call IO_error(301_pInt,ext_msg='err_thermal_tolabs')
  if (err_thermal_tolrel <= 0.0_pReal)      call IO_error(301_pInt,ext_msg='err_thermal_tolrel')
+ if (err_phasefr_tolabs <= 0.0_pReal)      call IO_error(301_pInt,ext_msg='err_phasefr_tolabs')
  if (err_damage_tolabs <= 0.0_pReal)       call IO_error(301_pInt,ext_msg='err_damage_tolabs')
  if (err_damage_tolrel <= 0.0_pReal)       call IO_error(301_pInt,ext_msg='err_damage_tolrel')
  if (err_vacancyflux_tolabs <= 0.0_pReal)  call IO_error(301_pInt,ext_msg='err_vacancyflux_tolabs')
