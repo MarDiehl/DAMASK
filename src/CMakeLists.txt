@@ -79,6 +79,13 @@ add_library (PLASTIC OBJECT
 add_dependencies(PLASTIC DAMASK_HELPERS)
 list(APPEND OBJECTFILES $<TARGET_OBJECTS:PLASTIC>)
 
+add_library (CHEMICAL OBJECT
+  "chemicalFE_none.f90"
+  "chemicalFE_quadenergy.f90"
+  "chemicalFE_thermodynamic.f90")
+add_dependencies(CHEMICAL DAMASK_HELPERS)
+list(APPEND OBJECTFILES $<TARGET_OBJECTS:CHEMICAL>)
+
 add_library (KINEMATICS OBJECT
   "kinematics_cleavage_opening.f90"
   "kinematics_slipplane_opening.f90"
@@ -93,7 +100,7 @@ add_dependencies(SOURCE DAMASK_HELPERS)
 list(APPEND OBJECTFILES $<TARGET_OBJECTS:SOURCE>)
 
 add_library(CONSTITUTIVE OBJECT "constitutive.f90")
-add_dependencies(CONSTITUTIVE PLASTIC KINEMATICS SOURCE)
+add_dependencies(CONSTITUTIVE PLASTIC CHEMICAL KINEMATICS SOURCE)
 list(APPEND OBJECTFILES $<TARGET_OBJECTS:CONSTITUTIVE>)
 
 add_library(CRYSTALLITE OBJECT "crystallite.f90")

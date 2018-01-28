@@ -169,11 +169,8 @@ subroutine thermal_conduction_init(fileUnit)
      allocate(thermalState(section)%subState0(sizeState,NofMyHomog))
      allocate(thermalState(section)%state    (sizeState,NofMyHomog))
 
-     nullify(thermalMapping(section)%p)
      thermalMapping(section)%p => mappingHomogenization(1,:,:)
-     deallocate(temperature    (section)%p)
      allocate  (temperature    (section)%p(NofMyHomog), source=thermal_initialT(section))
-     deallocate(temperatureRate(section)%p)
      allocate  (temperatureRate(section)%p(NofMyHomog), source=0.0_pReal)
      
    endif

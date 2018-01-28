@@ -168,11 +168,8 @@ subroutine thermal_adiabatic_init(fileUnit)
      allocate(thermalState(section)%subState0(sizeState,NofMyHomog), source=thermal_initialT(section))
      allocate(thermalState(section)%state    (sizeState,NofMyHomog), source=thermal_initialT(section))
 
-     nullify(thermalMapping(section)%p)
      thermalMapping(section)%p => mappingHomogenization(1,:,:)
-     deallocate(temperature(section)%p)
      temperature(section)%p => thermalState(section)%state(1,:)
-     deallocate(temperatureRate(section)%p)
      allocate  (temperatureRate(section)%p(NofMyHomog), source=0.0_pReal)
      
    endif

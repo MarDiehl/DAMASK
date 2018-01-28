@@ -12,6 +12,8 @@ module constitutive
  integer(pInt), public, protected :: &
    constitutive_plasticity_maxSizePostResults, &
    constitutive_plasticity_maxSizeDotState, &
+   constitutive_chemicalFE_maxSizePostResults, &
+   constitutive_chemicalFE_maxSizeDotState, &
    constitutive_source_maxSizePostResults, &
    constitutive_source_maxSizeDotState
 
@@ -67,6 +69,8 @@ subroutine constitutive_init()
    phase_name, &
    phase_plasticity, &
    phase_plasticityInstance, &
+   phase_chemicalFE, &
+   phase_chemicalFEInstance, &
    phase_Nsources, &
    phase_source, &
    phase_kinematics, &
@@ -77,6 +81,9 @@ subroutine constitutive_init()
    PLASTICITY_dislotwin_ID, &
    PLASTICITY_disloucla_ID, &
    PLASTICITY_nonlocal_ID ,&
+   CHEMICALFE_none_ID, &
+   CHEMICALFE_quadenergy_ID, &
+   CHEMICALFE_thermodynamic_ID, &
    SOURCE_thermal_dissipation_ID, &
    SOURCE_thermal_externalheat_ID, &
    KINEMATICS_cleavage_opening_ID, &
@@ -89,9 +96,13 @@ subroutine constitutive_init()
    PLASTICITY_DISLOTWIN_label, &
    PLASTICITY_DISLOUCLA_label, &
    PLASTICITY_NONLOCAL_label, &
+   CHEMICALFE_none_label, &
+   CHEMICALFE_quadenergy_label, &
+   CHEMICALFE_thermodynamic_label, &
    SOURCE_thermal_dissipation_label, &
    SOURCE_thermal_externalheat_label, &
    plasticState, &
+   chemicalState, &
    sourceState
 
  use plastic_none
@@ -100,6 +111,9 @@ subroutine constitutive_init()
  use plastic_dislotwin
  use plastic_disloucla
  use plastic_nonlocal
+ use chemicalFE_none
+ use chemicalFE_quadenergy
+ use chemicalFE_thermodynamic
  use source_thermal_dissipation
  use source_thermal_externalheat
  use kinematics_cleavage_opening
@@ -118,7 +132,7 @@ subroutine constitutive_init()
  integer(pInt), dimension(:)  , pointer :: thisNoutput
  character(len=64), dimension(:,:), pointer :: thisOutput
  character(len=32) :: outputName                                                                    !< name of output, intermediate fix until HDF5 output is ready
- logical :: knownPlasticity, knownSource, nonlocalConstitutionPresent
+ logical :: knownPlasticity, knownchemicalFE, knownSource, nonlocalConstitutionPresent
  nonlocalConstitutionPresent = .false.
 
 !--------------------------------------------------------------------------------------------------
@@ -137,6 +151,12 @@ subroutine constitutive_init()
   call plastic_nonlocal_init(FILEUNIT)
   call plastic_nonlocal_stateInit()
  endif
+
+!--------------------------------------------------------------------------------------------------
+! parse chemical FE models from config file
+ if (any(phase_chemicalFE == CHEMICALFE_none_ID))          call chemicalFE_none_init
+ if (any(phase_chemicalFE == CHEMICALFE_quadenergy_ID))    call chemicalFE_quadenergy_init(FILEUNIT)
+ if (any(phase_chemicalFE == CHEMICALFE_thermodynamic_ID)) call chemicalFE_thermodynamic_init(FILEUNIT)
 
 !--------------------------------------------------------------------------------------------------
 ! parse source mechanisms from config file
@@ -200,12 +220,40 @@ subroutine constitutive_init()
        end select plasticityType
        write(FILEUNIT,'(/,a,/)') '['//trim(phase_name(p))//']'
        if (knownPlasticity) then
-
          write(FILEUNIT,'(a)') '(plasticity)'//char(9)//trim(outputName)
          if (phase_plasticity(p) /= PLASTICITY_NONE_ID) then
            OutputPlasticityLoop: do o = 1_pInt,thisNoutput(ins)
              write(FILEUNIT,'(a,i4)') trim(thisOutput(o,ins))//char(9),thisSize(o,ins)
            enddo OutputPlasticityLoop
+         endif
+       endif
+       ins = phase_chemicalFEInstance(p)
+       knownchemicalFE = .true.                                                                     ! assume valid
+       chemicalFEType: select case(phase_chemicalFE(p))
+         case (CHEMICALFE_none_ID) chemicalFEType
+           outputName = CHEMICALFE_none_label
+           thisNoutput => null()
+           thisOutput => null()
+           thisSize   => null()
+         case (CHEMICALFE_quadenergy_ID) chemicalFEType
+           outputName = CHEMICALFE_quadenergy_label
+           thisNoutput => chemicalFE_quadenergy_Noutput
+           thisOutput => chemicalFE_quadenergy_output
+           thisSize   => chemicalFE_quadenergy_sizePostResult
+         case (CHEMICALFE_thermodynamic_ID) chemicalFEType
+           outputName = CHEMICALFE_thermodynamic_label
+           thisNoutput => chemicalFE_thermodynamic_Noutput
+           thisOutput => chemicalFE_thermodynamic_output
+           thisSize   => chemicalFE_thermodynamic_sizePostResult
+         case default chemicalFEType
+           knownchemicalFE = .false.
+       end select chemicalFEType
+       if (knownchemicalFE) then
+         write(FILEUNIT,'(a)') '(chemicalfe)'//char(9)//trim(outputName)
+         if (phase_chemicalFE(p) /= CHEMICALFE_none_ID) then
+           OutputChemicalFELoop: do o = 1_pInt,thisNoutput(ins)
+             write(FILEUNIT,'(a,i4)') trim(thisOutput(o,ins))//char(9),thisSize(o,ins)
+           enddo OutputChemicalFELoop
          endif
        endif
        SourceLoop: do s = 1_pInt, phase_Nsources(p)
@@ -240,6 +288,8 @@ subroutine constitutive_init()
 
  constitutive_plasticity_maxSizeDotState = 0_pInt
  constitutive_plasticity_maxSizePostResults = 0_pInt
+ constitutive_chemicalFE_maxSizeDotState = 0_pInt
+ constitutive_chemicalFE_maxSizePostResults = 0_pInt
  constitutive_source_maxSizeDotState = 0_pInt
  constitutive_source_maxSizePostResults = 0_pInt
 
@@ -248,6 +298,8 @@ subroutine constitutive_init()
 ! partition and inititalize state
    plasticState(p)%partionedState0 = plasticState(p)%State0
    plasticState(p)%State           = plasticState(p)%State0
+   chemicalState(p)%partionedState0= chemicalState(p)%State0
+   chemicalState(p)%State          = chemicalState(p)%State0
    forall(s = 1_pInt:phase_Nsources(p))
      sourceState(p)%p(s)%partionedState0 = sourceState(p)%p(s)%State0
      sourceState(p)%p(s)%State           = sourceState(p)%p(s)%State0
@@ -257,6 +309,10 @@ subroutine constitutive_init()
    constitutive_plasticity_maxSizeDotState    = max(constitutive_plasticity_maxSizeDotState,    &
                                                     plasticState(p)%sizeDotState)
    constitutive_plasticity_maxSizePostResults = max(constitutive_plasticity_maxSizePostResults, &
+                                                    plasticState(p)%sizePostResults)
+   constitutive_chemicalFE_maxSizeDotState    = max(constitutive_chemicalFE_maxSizeDotState,    &
+                                                    plasticState(p)%sizeDotState)
+   constitutive_chemicalFE_maxSizePostResults = max(constitutive_chemicalFE_maxSizePostResults, &
                                                     plasticState(p)%sizePostResults)
    constitutive_source_maxSizeDotState        = max(constitutive_source_maxSizeDotState, &
                                                     maxval(sourceState(p)%p(:)%sizeDotState))

@@ -49,9 +49,8 @@ subroutine thermal_isothermal_init()
      allocate(thermalState(homog)%subState0(sizeState,NofMyHomog), source=0.0_pReal)
      allocate(thermalState(homog)%state    (sizeState,NofMyHomog), source=0.0_pReal)
      
-     deallocate(temperature    (homog)%p)
+     thermalMapping(homog)%p => mappingHomogenizationConst
      allocate  (temperature    (homog)%p(1), source=thermal_initialT(homog))
-     deallocate(temperatureRate(homog)%p)
      allocate  (temperatureRate(homog)%p(1), source=0.0_pReal)
 
    endif myhomog

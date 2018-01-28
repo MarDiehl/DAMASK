@@ -360,10 +360,8 @@ subroutine homogenization_multiphase_init(fileUnit)
 
      end select
 
-     nullify(phasefracMapping(homog)%p)
      phasefracMapping(homog)%p => mappingHomogenization(1,:,:)
      do grI = 1_pInt, homogenization_Ngrains(homog)
-       deallocate(phasefrac(grI,homog)%p)
        allocate  (phasefrac(grI,homog)%p(NofMyHomog))
      enddo  
 

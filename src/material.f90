@@ -28,6 +28,9 @@ module material
    PLASTICITY_dislotwin_label           = 'dislotwin', &
    PLASTICITY_disloucla_label           = 'disloucla', &
    PLASTICITY_nonlocal_label            = 'nonlocal', &
+   CHEMICALFE_none_label                = 'none', &
+   CHEMICALFE_quadenergy_label          = 'quadratic', &
+   CHEMICALFE_thermodynamic_label       = 'thermodynamic', &
    SOURCE_thermal_dissipation_label     = 'thermal_dissipation', &
    SOURCE_thermal_externalheat_label    = 'thermal_externalheat', &
    KINEMATICS_thermal_expansion_label   = 'thermal_expansion', &
@@ -54,6 +57,11 @@ module material
                  PLASTICITY_dislotwin_ID, &
                  PLASTICITY_disloucla_ID, &
                  PLASTICITY_nonlocal_ID
+ end enum
+ enum, bind(c)
+   enumerator :: CHEMICALFE_none_ID, &
+                 CHEMICALFE_quadenergy_ID, &
+                 CHEMICALFE_thermodynamic_ID
  end enum
 
  enum, bind(c)
@@ -87,6 +95,9 @@ module material
                  HOMOGENIZATION_rgc_ID
  end enum
 
+ integer(pInt), parameter, public  :: &
+   material_maxNcomponents = 10_pInt
+
  character(len=*), parameter, public  :: &
    MATERIAL_configFile         = 'material.config', &                                               !< generic name for material configuration file
    MATERIAL_localFileExt       = 'materialConfig'                                                   !< extension of solver job name depending material configuration file
@@ -100,6 +111,8 @@ module material
    phase_elasticity                                                                                 !< elasticity of each phase
  integer(kind(PLASTICITY_undefined_ID)),     dimension(:),   allocatable, public, protected :: &
    phase_plasticity                                                                                 !< plasticity of each phase
+ integer(kind(CHEMICALFE_none_ID)),          dimension(:),   allocatable, public, protected :: &
+   phase_chemicalFE                                                                                 !< plasticity of each phase
  integer(kind(THERMAL_isothermal_ID)),       dimension(:),   allocatable, public, protected :: &
    thermal_type                                                                                     !< thermal transport model
 
@@ -111,117 +124,129 @@ module material
  integer(kind(HOMOGENIZATION_undefined_ID)), dimension(:),   allocatable, public, protected :: &
    homogenization_type                                                                              !< type of each homogenization
 
- character(len=64), dimension(:), allocatable, public, protected :: &
+ character(len=64),                          dimension(:),   allocatable, public, protected :: &
    phase_name, &                                                                                    !< name of each phase
    homogenization_name, &                                                                           !< name of each homogenization
    crystallite_name                                                                                 !< name of each crystallite setting
 
- integer(pInt), public, protected :: &
+ integer(pInt),                                                           public, protected :: &
    homogenization_maxNgrains, &                                                                     !< max number of grains in any USED homogenization
    material_Nphase, &                                                                               !< number of phases
    material_Nhomogenization, &                                                                      !< number of homogenizations
    material_Nmicrostructure, &                                                                      !< number of microstructures
    material_Ncrystallite                                                                            !< number of crystallite settings
 
- integer(pInt), dimension(:), allocatable, public, protected :: &
+ integer(pInt),                              dimension(:),   allocatable, public, protected :: &
    phase_Nsources, &                                                                                !< number of source mechanisms active in each phase
    phase_Nkinematics, &                                                                             !< number of kinematic mechanisms active in each phase
    phase_NstiffnessModifiers, &                                                                  !< number of stiffness degradation mechanisms active in each phase
    phase_Noutput, &                                                                                 !< number of '(output)' items per phase
    phase_elasticityInstance, &                                                                      !< instance of particular elasticity of each phase
-   phase_plasticityInstance                                                                         !< instance of particular plasticity of each phase
+   phase_plasticityInstance, &
+   phase_chemicalFEInstance                                                                         !< instance of particular plasticity of each phase
 
- integer(pInt), dimension(:), allocatable, public, protected :: &
+ integer(pInt),                              dimension(:),  allocatable, public, protected :: &
    crystallite_Noutput                                                                              !< number of '(output)' items per crystallite setting
 
- integer(pInt), dimension(:), allocatable, public, protected :: &
+ integer(pInt),                              dimension(:),  allocatable, public, protected :: &
    homogenization_Ngrains, &                                                                        !< number of grains in each homogenization
    homogenization_Noutput, &                                                                        !< number of '(output)' items per homogenization
    homogenization_typeInstance, &                                                                   !< instance of particular type of each homogenization
    thermal_typeInstance, &                                                                          !< instance of particular type of each thermal transport
    microstructure_crystallite                                                                       !< crystallite setting ID of each microstructure
 
- real(pReal), dimension(:), allocatable, public, protected :: &
+ real(pReal),                                dimension(:),  allocatable, public, protected :: &
    thermal_initialT                                                                                 !< initial temperature per each homogenization
 
- integer(pInt), dimension(:,:,:), allocatable, public :: &
+ integer(pInt),                          dimension(:,:,:),  allocatable, public            :: &
    material_phase                                                                                   !< phase (index) of each grain,IP,element
- integer(pInt), dimension(:,:), allocatable, public :: &
+ integer(pInt),                            dimension(:,:),  allocatable, public            :: &
    material_homog                                                                                   !< homogenization (index) of each IP,element
- type(tPlasticState), allocatable, dimension(:), public :: &
+ type(tPlasticState),                        dimension(:),  allocatable, public            :: &
    plasticState
- type(tSourceState),  allocatable, dimension(:), public :: &
+ type(tState),                               dimension(:),  allocatable, public            :: &
+   chemicalState
+ type(tSourceState),                         dimension(:),  allocatable, public            :: &
    sourceState
- type(tState),        allocatable, dimension(:), public :: &
+ type(tState),                               dimension(:),  allocatable, public            :: &
    homogState, &
    thermalState
 
- integer(pInt), dimension(:,:,:), allocatable, public, protected :: &
+ integer(pInt),                          dimension(:,:,:),  allocatable, public, protected :: &
    material_texture                                                                                 !< texture (index) of each grain,IP,element
 
- real(pReal), dimension(:,:,:,:), allocatable, public, protected :: &
+ real(pReal),                          dimension(:,:,:,:),  allocatable, public, protected :: &
    material_EulerAngles                                                                             !< initial orientation of each grain,IP,element
 
- logical, dimension(:), allocatable, public, protected :: &
+ logical,                                    dimension(:),  allocatable, public, protected :: &
    microstructure_active, &
    microstructure_elemhomo, &                                                                       !< flag to indicate homogeneous microstructure distribution over element's IPs
    phase_localPlasticity                                                                            !< flags phases with local constitutive law
 
 
- character(len=*), parameter, private :: &
+ character(len=*), parameter,                                           private            :: &
    MATERIAL_partMicrostructure = 'microstructure', &                                                !< keyword for microstructure part
    MATERIAL_partTexture        = 'texture'                                                          !< keyword for texture part
 
- character(len=64), dimension(:), allocatable, private :: &
+ character(len=64),                         dimension(:),  allocatable, private            :: &
    microstructure_name, &                                                                           !< name of each microstructure
    texture_name                                                                                     !< name of each texture
 
- character(len=256), dimension(:), allocatable, private :: &
+ character(len=256),                        dimension(:),  allocatable, private            :: &
    texture_ODFfile                                                                                  !< name of each ODF file
 
- integer(pInt), private :: &
+ integer(pInt),                                                         private            :: &
    material_Ntexture, &                                                                             !< number of textures
    microstructure_maxNconstituents, &                                                               !< max number of constituents in any phase
    texture_maxNgauss, &                                                                             !< max number of Gauss components in any texture
    texture_maxNfiber                                                                                !< max number of Fiber components in any texture
 
- integer(pInt), dimension(:), allocatable, private :: &
+ integer(pInt),                             dimension(:),  allocatable, private            :: &
    microstructure_Nconstituents, &                                                                  !< number of constituents in each microstructure
    texture_symmetry, &                                                                              !< number of symmetric orientations per texture
    texture_Ngauss, &                                                                                !< number of Gauss components per texture
    texture_Nfiber                                                                                   !< number of Fiber components per texture
 
- integer(pInt), dimension(:,:), allocatable, private :: &
+ integer(pInt),                           dimension(:,:),  allocatable, private            :: &
    microstructure_phase, &                                                                          !< phase IDs of each microstructure
    microstructure_texture                                                                           !< texture IDs of each microstructure
 
- real(pReal), dimension(:,:),   allocatable, public :: &
+ real(pReal),                             dimension(:,:),  allocatable,  public            :: &
    microstructure_fraction                                                                          !< vol fraction of each constituent in microstructure
 
- real(pReal), dimension(:,:,:), allocatable, private :: &
+ real(pReal),                           dimension(:,:,:),  allocatable, private            :: &
    material_volume, &                                                                               !< volume of each grain,IP,element
    texture_Gauss, &                                                                                 !< data of each Gauss component
    texture_Fiber, &                                                                                 !< data of each Fiber component
    texture_transformation                                                                           !< transformation for each texture
 
- logical, dimension(:), allocatable, private :: &
+ logical,                                   dimension(:),  allocatable, private            :: &
    homogenization_active
 
- integer(pInt), dimension(:,:,:), allocatable, public :: phaseAt                                    !< phase ID of every material point (ipc,ip,el)
- integer(pInt), dimension(:,:,:), allocatable, public :: phasememberAt                              !< memberID of given phase at every material point (ipc,ip,el)
- integer(pInt), dimension(:,:,:), allocatable, public, target :: mappingCrystallite
- integer(pInt), dimension(:,:,:), allocatable, public, target :: mappingHomogenization              !< mapping from material points to offset in heterogenous state/field
- integer(pInt), dimension(:,:),   allocatable, public, target :: mappingHomogenizationConst         !< mapping from material points to offset in constant state/field
+ integer(pInt),                         dimension(:,:,:),  allocatable,  public,    target :: &
+   phaseAt                                                                                          !< phase ID of every material point (ipc,ip,el)
+ integer(pInt),                         dimension(:,:,:),  allocatable,  public,    target :: &
+   phasememberAt, &
+   phaseconstmemberAt                                                                               !< memberID of given phase at every material point (ipc,ip,el)
+ integer(pInt),                         dimension(:,:,:),  allocatable,  public,    target :: &
+   mappingCrystallite
+ integer(pInt),                         dimension(:,:,:),  allocatable,  public,    target :: &
+   mappingHomogenization                                                                            !< mapping from material points to offset in heterogenous state/field
+ integer(pInt),                           dimension(:,:),  allocatable,  public,    target :: &
+   mappingHomogenizationConst                                                                       !< mapping from material points to offset in constant state/field
 
- type(tHomogMapping), allocatable, dimension(:), public :: &
+ type(tHomogMapping),                       dimension(:),  allocatable,  public            :: &
    thermalMapping, &                                                                                !< mapping for thermal state/fields
    phasefracMapping                                                                                 !< mapping for phase fraction state/fields
 
- type(p_vec),         allocatable, dimension(:), public :: &
+ type(tPhaseMapping),                       dimension(:),  allocatable,  public            :: &
+   chemicalMapping                                                                                 !< mapping for phase fraction state/fields
+
+ type(p_vec),                               dimension(:),  allocatable,  public            :: &
    temperature, &                                                                                   !< temperature field
    temperatureRate                                                                                  !< temperature change rate field
 
- type(p_vec),         allocatable, dimension(:,:), public :: &
+ type(p_vec),                             dimension(:,:),  allocatable,  public            :: &
    phasefrac                                                                                        !< phase fraction field
 
  public :: &
@@ -233,6 +258,9 @@ module material
    PLASTICITY_dislotwin_ID, &
    PLASTICITY_disloucla_ID, &
    PLASTICITY_nonlocal_ID, &
+   CHEMICALFE_none_ID, &
+   CHEMICALFE_quadenergy_ID, &
+   CHEMICALFE_thermodynamic_ID, &
    SOURCE_thermal_dissipation_ID, &
    SOURCE_thermal_externalheat_ID, &
    KINEMATICS_cleavage_opening_ID, &
@@ -322,6 +350,7 @@ subroutine material_init()
  close(FILEUNIT)
 
  allocate(plasticState       (material_Nphase))
+ allocate(chemicalState      (material_Nphase))
  allocate(sourceState        (material_Nphase))
  do myPhase = 1,material_Nphase
    allocate(sourceState(myPhase)%p(phase_Nsources(myPhase)))
@@ -377,6 +406,7 @@ subroutine material_init()
 
  allocate(phaseAt                   (  homogenization_maxNgrains,mesh_maxNips,mesh_NcpElems),source=0_pInt)
  allocate(phasememberAt             (  homogenization_maxNgrains,mesh_maxNips,mesh_NcpElems),source=0_pInt)
+ allocate(phaseconstmemberAt        (  homogenization_maxNgrains,mesh_maxNips,mesh_NcpElems),source=1_pInt)
  allocate(mappingHomogenization     (2,                          mesh_maxNips,mesh_NcpElems),source=0_pInt)
  allocate(mappingCrystallite        (2,homogenization_maxNgrains,             mesh_NcpElems),source=0_pInt)
  allocate(mappingHomogenizationConst(                            mesh_maxNips,mesh_NcpElems),source=1_pInt)
@@ -398,18 +428,6 @@ subroutine material_init()
      enddo GrainLoop
    enddo IPloop
  enddo ElemLoop
-
-! hack needed to initialize field values used during constitutive and crystallite initializations
- do myHomog = 1,material_Nhomogenization
-   thermalMapping     (myHomog)%p => mappingHomogenizationConst
-   phasefracMapping   (myHomog)%p => mappingHomogenizationConst
-   allocate(temperature     (myHomog)%p(1), source=thermal_initialT(myHomog))
-   allocate(temperatureRate (myHomog)%p(1), source=0.0_pReal)
-   do g = 1_pInt,homogenization_Ngrains(myHomog)
-     allocate(phasefrac(g,myHomog)%p(1), &
-              source=1.0_pReal/real(homogenization_Ngrains(myHomog),pReal))
-   enddo
- enddo
 
 end subroutine material_init
 
@@ -737,6 +755,8 @@ subroutine material_parsePhase(fileUnit,myPart)
  allocate(phase_elasticityInstance(Nsections),   source=0_pInt)
  allocate(phase_plasticity(Nsections) ,          source=PLASTICITY_undefined_ID)
  allocate(phase_plasticityInstance(Nsections),   source=0_pInt)
+ allocate(phase_chemicalFE(Nsections) ,          source=CHEMICALFE_none_ID)
+ allocate(phase_chemicalFEInstance(Nsections),   source=0_pInt)
  allocate(phase_Nsources(Nsections),             source=0_pInt)
  allocate(phase_Nkinematics(Nsections),          source=0_pInt)
  allocate(phase_NstiffnessModifiers(Nsections),  source=0_pInt)
@@ -805,6 +825,17 @@ subroutine material_parsePhase(fileUnit,myPart)
            case default
              call IO_error(201_pInt,ext_msg=trim(IO_stringValue(line,chunkPos,2_pInt)))
          end select
+       case ('chemicalfe')
+         select case (IO_lc(IO_stringValue(line,chunkPos,2_pInt)))
+           case (CHEMICALFE_NONE_label)
+             phase_chemicalFE(section) = CHEMICALFE_NONE_ID
+           case (CHEMICALFE_QUADENERGY_label)
+             phase_chemicalFE(section) = CHEMICALFE_QUADENERGY_ID
+           case (CHEMICALFE_THERMODYNAMIC_label)
+             phase_chemicalFE(section) = CHEMICALFE_THERMODYNAMIC_ID
+           case default
+             call IO_error(201_pInt,ext_msg=trim(IO_stringValue(line,chunkPos,2_pInt)))
+         end select
        case ('(source)')
          sourceCtr = sourceCtr + 1_pInt
          select case (IO_lc(IO_stringValue(line,chunkPos,2_pInt)))
@@ -836,6 +867,7 @@ subroutine material_parsePhase(fileUnit,myPart)
  do p=1_pInt, Nsections
    phase_elasticityInstance(p)  = count(phase_elasticity(1:p)  == phase_elasticity(p))
    phase_plasticityInstance(p)  = count(phase_plasticity(1:p)  == phase_plasticity(p))
+   phase_chemicalFEInstance(p)  = count(phase_chemicalFE(1:p)  == phase_chemicalFE(p))
  enddo
 
 end subroutine material_parsePhase
