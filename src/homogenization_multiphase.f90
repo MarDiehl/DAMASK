@@ -10,16 +10,20 @@ module homogenization_multiphase
  
  implicit none
  private
- integer(pInt),               dimension(:),   allocatable,         public, protected :: &
+ integer(pInt),             dimension(:),     allocatable,         public, protected :: &
    homogenization_multiphase_sizePostResults
- integer(pInt),               dimension(:,:), allocatable, target, public :: &
+ integer(pInt),             dimension(:,:),   allocatable, target, public :: &
    homogenization_multiphase_sizePostResult
  
- character(len=64),           dimension(:,:), allocatable, target, public :: &
+ character(len=64),         dimension(:,:),   allocatable, target, public :: &
   homogenization_multiphase_output                                                                   !< name of each post result output
- integer(pInt),               dimension(:),   allocatable, target, public :: &
+ integer(pInt),             dimension(:),     allocatable, target, public :: &
    homogenization_multiphase_Noutput                                                                 !< number of outputs per homog instance
- real(pReal),                 dimension(:),   allocatable,        private :: &
+ real(pReal),               dimension(:,:,:), allocatable,        private :: &
+   homogenization_multiphase_intfMob, &
+   homogenization_multiphase_intfEng
+ real(pReal),               dimension(:),     allocatable,        private :: &
+   homogenization_multiphase_intfWidth, &
    homogenization_multiphase_absTol, &
    homogenization_multiphase_relTol
 
@@ -63,6 +67,10 @@ module homogenization_multiphase
    homogenization_multiphase_partitionDeformation, &
    homogenization_multiphase_averageStressAndItsTangent, &
    homogenization_multiphase_updateState, &
+   homogenization_multiphase_getPhaseFlux, &
+   homogenization_multiphase_getPhaseFluxTangent, &
+   homogenization_multiphase_getPhaseSource, &
+   homogenization_multiphase_getPhaseSourceTangent, &
    homogenization_multiphase_putPhaseFrac, &
    homogenization_multiphase_postResults
 
@@ -106,8 +114,9 @@ subroutine homogenization_multiphase_init(fileUnit)
  integer(pInt),                intent(in) :: fileUnit
  integer(pInt), allocatable, dimension(:) :: chunkPos
  integer(pInt) :: &
-   section = 0_pInt, i, mySize = 0_pInt, o, el, ip, gr
+   section = 0_pInt, i, mySize = 0_pInt, o, el, ip, grI, grJ
  integer :: &
+   Ninterface, &
    maxNinstance, &
    homog, &
    micro, &
@@ -138,8 +147,15 @@ subroutine homogenization_multiphase_init(fileUnit)
  allocate(homogenization_multiphase_outputID(maxval(homogenization_Noutput),maxNinstance), &
                                                                            source=undefined_ID)
  allocate(homogenization_multiphase_mixtureID(maxNinstance),               source=isostrain_ID)
- allocate(homogenization_multiphase_absTol(maxNinstance),                  source=0.0_pReal)
- allocate(homogenization_multiphase_relTol(maxNinstance),                  source=0.0_pReal)
+ allocate(homogenization_multiphase_intfMob(homogenization_maxNgrains, &
+                                            homogenization_maxNgrains, &
+                                            maxNinstance),                 source=0.0_pReal)
+ allocate(homogenization_multiphase_intfEng(homogenization_maxNgrains, &
+                                            homogenization_maxNgrains, &
+                                            maxNinstance),                 source=0.0_pReal)
+ allocate(homogenization_multiphase_intfWidth(maxNinstance),               source=0.0_pReal)
+ allocate(homogenization_multiphase_absTol   (maxNinstance),               source=0.0_pReal)
+ allocate(homogenization_multiphase_relTol   (maxNinstance),               source=0.0_pReal)
 
  rewind(fileUnit)
  do while (trim(line) /= IO_EOF .and. IO_lc(IO_getTag(line,'<','>')) /= material_partHomogenization)! wind forward to <homogenization>
@@ -202,6 +218,39 @@ subroutine homogenization_multiphase_init(fileUnit)
                homogenization_multiphase_mixtureID(i) = laminate_ID
            end select
 
+         case ('interface_mobility')
+           Ninterface = homogenization_Ngrains(section)*(homogenization_Ngrains(section) - 1_pInt)/2_pInt
+           if (chunkPos(1) /= Ninterface + 1_pInt) &
+             call IO_error(150_pInt,ext_msg=trim(tag)//' ('//HOMOGENIZATION_multiphase_label//')')
+           o = 0_pInt
+           do grI = 1_pInt, homogenization_Ngrains(section)
+             do grJ = grI+1_pInt, homogenization_Ngrains(section)
+               o = o + 1_pInt
+               homogenization_multiphase_intfMob(grI,grJ,section) = &
+                 IO_floatValue(line,chunkPos,1_pInt+o)
+               homogenization_multiphase_intfMob(grJ,grI,section) = &
+                 IO_floatValue(line,chunkPos,1_pInt+o)
+             enddo
+           enddo
+
+         case ('interface_energy')
+           Ninterface = homogenization_Ngrains(section)*(homogenization_Ngrains(section) - 1_pInt)/2_pInt
+           if (chunkPos(1) /= Ninterface + 1_pInt) &
+             call IO_error(150_pInt,ext_msg=trim(tag)//' ('//HOMOGENIZATION_multiphase_label//')')
+           o = 0_pInt
+           do grI = 1_pInt, homogenization_Ngrains(section)
+             do grJ = grI+1_pInt, homogenization_Ngrains(section)
+               o = o + 1_pInt
+               homogenization_multiphase_intfEng(grI,grJ,section) = &
+                 IO_floatValue(line,chunkPos,1_pInt+o)
+               homogenization_multiphase_intfEng(grJ,grI,section) = &
+                 IO_floatValue(line,chunkPos,1_pInt+o)
+             enddo
+           enddo
+
+         case ('interface_width')
+           homogenization_multiphase_intfWidth(i) = IO_floatValue(line,chunkPos,2_pInt)
+
          case ('abs_tol')
            homogenization_multiphase_absTol(i) = IO_floatValue(line,chunkPos,2_pInt)
 
@@ -213,9 +262,24 @@ subroutine homogenization_multiphase_init(fileUnit)
    endif
  enddo parsingFile
 
+ sanityChecks: do homog = 1_pInt, material_Nhomogenization
+   myHomog1: if (homogenization_type(homog) == HOMOGENIZATION_MULTIPHASE_ID) then
+     instance = homogenization_typeInstance(homog)
+     if (any(homogenization_multiphase_intfMob(:,:,instance) < 0.0_pReal)) &
+       call IO_error(211_pInt,el=instance, &
+                     ext_msg='interface_mobility ('//HOMOGENIZATION_multiphase_label//')')
+     if (any(homogenization_multiphase_intfEng(:,:,instance) < 0.0_pReal)) &
+       call IO_error(211_pInt,el=instance, &
+                     ext_msg='interface_energy ('//HOMOGENIZATION_multiphase_label//')')
+     if (homogenization_multiphase_intfWidth(instance) <= 0.0_pReal) &
+       call IO_error(211_pInt,el=instance, &
+                     ext_msg='interface_width ('//HOMOGENIZATION_multiphase_label//')')
+   endif myHomog1
+ enddo sanityChecks
+
  allocate(state(maxNinstance))                                                                      ! internal state aliases
  initializeInstances: do homog = 1_pInt, material_Nhomogenization
-   myHomog1: if (homogenization_type(homog) == HOMOGENIZATION_MULTIPHASE_ID) then
+   myHomog2: if (homogenization_type(homog) == HOMOGENIZATION_MULTIPHASE_ID) then
      NofMyHomog = count(material_homog == homog)
      instance = homogenization_typeInstance(homog)
 
@@ -298,23 +362,23 @@ subroutine homogenization_multiphase_init(fileUnit)
 
      nullify(phasefracMapping(homog)%p)
      phasefracMapping(homog)%p => mappingHomogenization(1,:,:)
-     do gr = 1_pInt, homogenization_Ngrains(homog)
-       deallocate(phasefrac(gr,homog)%p)
-       allocate  (phasefrac(gr,homog)%p(NofMyHomog))
+     do grI = 1_pInt, homogenization_Ngrains(homog)
+       deallocate(phasefrac(grI,homog)%p)
+       allocate  (phasefrac(grI,homog)%p(NofMyHomog))
      enddo  
 
-   endif myHomog1
+   endif myHomog2
  enddo initializeInstances
  
 ! state init
  elementLoop: do el = 1_pInt, mesh_NcpElems
    IpLoop: do ip = 1_pInt, FE_Nips(FE_geomtype(mesh_element(2,el)))
-     homog = mesh_element(3,el)
+     homog = material_homog(ip,el)
      micro = mesh_element(4,el)
      instance = homogenization_typeInstance(homog)
-     myHomog2: if (homogenization_type(homog) == HOMOGENIZATION_MULTIPHASE_ID) then
-       do gr = 1_pInt, homogenization_Ngrains(homog)
-         phasefrac(gr,homog)%p(phasefracMapping(homog)%p(ip,el)) = microstructure_fraction(gr,micro)
+     myHomog3: if (homogenization_type(homog) == HOMOGENIZATION_MULTIPHASE_ID) then
+       do grI = 1_pInt, homogenization_Ngrains(homog)
+         phasefrac(grI,homog)%p(phasefracMapping(homog)%p(ip,el)) = microstructure_fraction(grI,micro)
        enddo    
        instance = homogenization_typeInstance(homog)
        select case(homogenization_multiphase_mixtureID(instance))
@@ -330,26 +394,26 @@ subroutine homogenization_multiphase_init(fileUnit)
            homogState(homog)%subState0(1:homogState(homog)%sizeState,offset) = &
              homogState(homog)%state(1:homogState(homog)%sizeState,offset)
          
-           do gr = 1_pInt, homogenization_Ngrains(homog)
-             crystallite_F0(1:3,1:3,gr,ip,el) = &
+           do grI = 1_pInt, homogenization_Ngrains(homog)
+             crystallite_F0(1:3,1:3,grI,ip,el) = &
                math_I3 + &
-               math_mul33x33(math_transpose33(math_EulerToR(material_EulerAngles(1:3,gr,ip,el))), &
-                             math_mul33x33(lattice_initialPlasticStrain(1:3,1:3,material_phase(gr,ip,el)), &
-                                           math_EulerToR(material_EulerAngles(1:3,gr,ip,el))))
-             crystallite_Fe(1:3,1:3,gr,ip,el)  = &
-               math_mul33x33(crystallite_F0(1:3,1:3,gr,ip,el), &
-                             math_inv33(math_mul33x33(crystallite_Fi0(1:3,1:3,gr,ip,el), & 
-                                                      crystallite_Fp0(1:3,1:3,gr,ip,el))))
+               math_mul33x33(math_transpose33(math_EulerToR(material_EulerAngles(1:3,grI,ip,el))), &
+                             math_mul33x33(lattice_initialPlasticStrain(1:3,1:3,material_phase(grI,ip,el)), &
+                                           math_EulerToR(material_EulerAngles(1:3,grI,ip,el))))
+             crystallite_Fe(1:3,1:3,grI,ip,el)  = &
+               math_mul33x33(crystallite_F0(1:3,1:3,grI,ip,el), &
+                             math_inv33(math_mul33x33(crystallite_Fi0(1:3,1:3,grI,ip,el), & 
+                                                      crystallite_Fp0(1:3,1:3,grI,ip,el))))
            enddo                                           
-           do gr = 1_pInt, homogenization_Ngrains(homog)-1
-             do o = gr+1_pInt, homogenization_Ngrains(homog)
-               xioffset = 9_pInt*((gr-1_pInt)*(2_pInt*homogenization_Ngrains(homog)-gr)/2_pInt + o - gr - 1_pInt)
+           do grI = 1_pInt, homogenization_Ngrains(homog)-1
+             do grJ = grI+1_pInt, homogenization_Ngrains(homog)
+               xioffset = 9_pInt*((grI-1_pInt)*(2_pInt*homogenization_Ngrains(homog)-grI)/2_pInt + grJ - grI - 1_pInt)
                state(instance)%newIter(xioffset+1:xioffset+9,offset) = &
-                 reshape(crystallite_F0(1:3,1:3,gr,ip,el) - &
-                         crystallite_F0(1:3,1:3,o ,ip,el), shape = [9])
+                 reshape(crystallite_F0(1:3,1:3,grI,ip,el) - &
+                         crystallite_F0(1:3,1:3,grJ,ip,el), shape = [9])
                state(instance)%oldIter(xioffset+1:xioffset+9,offset) = &
-                 reshape(crystallite_F0(1:3,1:3,gr,ip,el) - &
-                         crystallite_F0(1:3,1:3,o ,ip,el), shape = [9])
+                 reshape(crystallite_F0(1:3,1:3,grI,ip,el) - &
+                         crystallite_F0(1:3,1:3,grJ,ip,el), shape = [9])
              enddo
            enddo
                                            
@@ -363,16 +427,16 @@ subroutine homogenization_multiphase_init(fileUnit)
            homogState(homog)%subState0(1:homogState(homog)%sizeState,offset) = &
              homogState(homog)%state(1:homogState(homog)%sizeState,offset)
            
-           do gr = 1_pInt, homogenization_Ngrains(homog)
-             crystallite_F0(1:3,1:3,gr,ip,el) = &
+           do grI = 1_pInt, homogenization_Ngrains(homog)
+             crystallite_F0(1:3,1:3,grI,ip,el) = &
                math_I3 + &
-               math_mul33x33(math_transpose33(math_EulerToR(material_EulerAngles(1:3,gr,ip,el))), &
-                             math_mul33x33(lattice_initialPlasticStrain(1:3,1:3,material_phase(gr,ip,el)), &
-                                           math_EulerToR(material_EulerAngles(1:3,gr,ip,el))))
-             crystallite_Fe(1:3,1:3,gr,ip,el)  = &
-               math_mul33x33(crystallite_F0(1:3,1:3,gr,ip,el), &
-                             math_inv33(math_mul33x33(crystallite_Fi0(1:3,1:3,gr,ip,el), & 
-                                                      crystallite_Fp0(1:3,1:3,gr,ip,el))))
+               math_mul33x33(math_transpose33(math_EulerToR(material_EulerAngles(1:3,grI,ip,el))), &
+                             math_mul33x33(lattice_initialPlasticStrain(1:3,1:3,material_phase(grI,ip,el)), &
+                                           math_EulerToR(material_EulerAngles(1:3,grI,ip,el))))
+             crystallite_Fe(1:3,1:3,grI,ip,el)  = &
+               math_mul33x33(crystallite_F0(1:3,1:3,grI,ip,el), &
+                             math_inv33(math_mul33x33(crystallite_Fi0(1:3,1:3,grI,ip,el), & 
+                                                      crystallite_Fp0(1:3,1:3,grI,ip,el))))
            enddo                                           
 
          case(rankone_ID)
@@ -380,7 +444,7 @@ subroutine homogenization_multiphase_init(fileUnit)
          case(laminate_ID)
 
        end select
-     endif myHomog2
+     endif myHomog3
    enddo IPLoop
  enddo elementLoop    
 
@@ -398,9 +462,8 @@ subroutine homogenization_multiphase_partitionDeformation(F,F0,avgF,avgF0,ip,el)
    math_inv33, &
    math_mul33x33, &
    math_Mandel6to33
- use mesh, only: &
-   mesh_element
  use material, only: &
+   material_homog, &
    phasefrac, &
    phasefracMapping, &
    homogenization_maxNgrains, &
@@ -418,7 +481,7 @@ subroutine homogenization_multiphase_partitionDeformation(F,F0,avgF,avgF0,ip,el)
  real(pReal),   dimension (3,3,homogenization_maxNgrains) :: Ldt
  real(pReal),   dimension (3,3)                           :: avgLdt  
  
- homog = mesh_element(3,el)
+ homog = material_homog(ip,el)
  instance = homogenization_typeInstance(homog)
  offset = phasefracMapping(homog)%p(ip,el)
  select case(homogenization_multiphase_mixtureID(instance))
@@ -509,9 +572,8 @@ subroutine homogenization_multiphase_averageStressAndItsTangent(avgP,dAvgPdAvgF,
    math_det33, &
    math_transpose33, &
    math_invSym3333
- use mesh, only: &
-   mesh_element
  use material, only: &
+   material_homog, &
    homogenization_Ngrains, &
    homogenization_maxNgrains, &
    homogenization_typeInstance, &
@@ -539,7 +601,7 @@ subroutine homogenization_multiphase_averageStressAndItsTangent(avgP,dAvgPdAvgF,
  real(pReal),   dimension (3,3)     :: &
    cauchy
  
- homog = mesh_element(3,el)
+ homog = material_homog(ip,el)
  offset = phasefracMapping(homog)%p(ip,el)
  instance = homogenization_typeInstance(homog)
  select case(homogenization_multiphase_mixtureID(instance))
@@ -644,9 +706,8 @@ function homogenization_multiphase_updateState(P,dPdF,F,F0,iter,ip,el)
    math_inv33, &
    math_det33, &
    math_transpose33
- use mesh, only: &
-   mesh_element
  use material, only: &
+   material_homog, &
    phasefrac, &
    phasefracMapping, &
    homogenization_Ngrains, &
@@ -692,7 +753,7 @@ function homogenization_multiphase_updateState(P,dPdF,F,F0,iter,ip,el)
  external :: &
    dgesv
 
- homog = mesh_element(3,el)
+ homog = material_homog(ip,el)
  instance = homogenization_typeInstance(homog)
  offset = phasefracMapping(homog)%p(ip,el)
  myMixRule: select case(homogenization_multiphase_mixtureID(instance))
@@ -928,12 +989,215 @@ end function homogenization_multiphase_updateState
 
 
 !--------------------------------------------------------------------------------------------------
+!> @brief flux function for each phase 
+!--------------------------------------------------------------------------------------------------
+function homogenization_multiphase_getPhaseFlux(gradPhi,ip,el)
+ use material, only: &
+   material_homog, &
+   homogenization_Ngrains, &
+   homogenization_maxNgrains, &
+   homogenization_typeInstance
+ 
+ implicit none
+ real(pReal),   dimension(3,homogenization_maxNgrains)             :: homogenization_multiphase_getPhaseFlux
+ real(pReal),   dimension(3,homogenization_maxNgrains), intent(in) :: gradPhi
+ integer(pInt),                                         intent(in) :: ip, el                !< element number
+ integer(pInt) :: &
+   grI, grJ, grK, &
+   homog, & 
+   instance
+
+ homog = material_homog(ip,el)
+ instance = homogenization_typeInstance(homog)
+ homogenization_multiphase_getPhaseFlux = 0.0_pReal
+ do grI = 1_pInt, homogenization_Ngrains(homog)
+   do grJ = 1_pInt, homogenization_Ngrains(homog)
+     do grK = 1_pInt, homogenization_Ngrains(homog)
+       homogenization_multiphase_getPhaseFlux(1:3,grI) = &
+         homogenization_multiphase_getPhaseFlux(1:3,grI) + &
+         homogenization_multiphase_intfMob(grI,grJ,instance)* &
+         (homogenization_multiphase_intfEng(grJ,grK,instance) - &
+          homogenization_multiphase_intfEng(grI,grK,instance))* &
+         gradPhi(1:3,grK) 
+     enddo
+   enddo
+ enddo
+ homogenization_multiphase_getPhaseFlux = &
+   homogenization_multiphase_getPhaseFlux* &
+   homogenization_multiphase_intfWidth(instance)
+
+end function homogenization_multiphase_getPhaseFlux
+
+
+!--------------------------------------------------------------------------------------------------
+!> @brief flux tangent function for each phase 
+!--------------------------------------------------------------------------------------------------
+function homogenization_multiphase_getPhaseFluxTangent(ip,el)
+ use math, only: &
+   math_I3
+ use material, only: &
+   material_homog, &
+   homogenization_Ngrains, &
+   homogenization_maxNgrains, &
+   homogenization_typeInstance
+ 
+ implicit none
+ real(pReal),   dimension(3,3,homogenization_maxNgrains,homogenization_maxNgrains) :: &
+   homogenization_multiphase_getPhaseFluxTangent
+ integer(pInt), intent(in) :: ip, el                                                                !< element number
+ integer(pInt) :: &
+   grI, grJ, grK, &
+   homog, & 
+   instance
+
+ homog = material_homog(ip,el)
+ instance = homogenization_typeInstance(homog)
+ homogenization_multiphase_getPhaseFluxTangent = 0.0_pReal
+ do grI = 1_pInt, homogenization_Ngrains(homog)
+   do grJ = 1_pInt, homogenization_Ngrains(homog)
+     do grK = 1_pInt, homogenization_Ngrains(homog)
+       homogenization_multiphase_getPhaseFluxTangent(1:3,1:3,grI,grK) = &
+         homogenization_multiphase_getPhaseFluxTangent(1:3,1:3,grI,grK) + &
+         homogenization_multiphase_intfMob(grI,grJ,instance)* &
+         (homogenization_multiphase_intfEng(grJ,grK,instance) - &
+          homogenization_multiphase_intfEng(grI,grK,instance))* &
+         math_I3
+     enddo
+   enddo
+ enddo
+ homogenization_multiphase_getPhaseFluxTangent = &
+   homogenization_multiphase_getPhaseFluxTangent* &
+   homogenization_multiphase_intfWidth(instance)
+
+end function homogenization_multiphase_getPhaseFluxTangent
+
+
+!--------------------------------------------------------------------------------------------------
+!> @brief source function for each phase 
+!--------------------------------------------------------------------------------------------------
+function homogenization_multiphase_getPhaseSource(phi,ip,el)
+ use material, only: &
+   material_homog, &
+   phaseAt, &
+   phase_source, &
+   phase_Nsources, &
+   homogenization_Ngrains, &
+   homogenization_maxNgrains, &
+   homogenization_typeInstance
+ 
+ implicit none
+ real(pReal),   dimension(homogenization_maxNgrains)             :: homogenization_multiphase_getPhaseSource
+ real(pReal),   dimension(homogenization_maxNgrains), intent(in) :: phi
+ integer(pInt),                                       intent(in) :: ip, el                          !< element number
+ real(pReal),   dimension(homogenization_maxNgrains)  :: &
+   bulkSource, &
+   intfSource
+ integer(pInt) :: &
+   grI, grJ, grK, &
+   homog, & 
+   instance, &
+   source, &
+   phase
+
+ homog = material_homog(ip,el)
+ instance = homogenization_typeInstance(homog)
+ 
+ bulkSource = 0.0_pReal
+ do grI = 1_pInt, homogenization_Ngrains(homog)
+   phase = phaseAt(grI,ip,el)
+   do source = 1_pInt, phase_Nsources(phase)
+     select case(phase_source(source,phase))                                                   
+
+     end select
+   enddo  
+ enddo
+ 
+ intfSource = 0.0_pReal
+ do grI = 1_pInt, homogenization_Ngrains(homog)
+   do grJ = 1_pInt, homogenization_Ngrains(homog)
+     do grK = 1_pInt, homogenization_Ngrains(homog)
+       intfSource(grI) = intfSource(grI) + &
+         homogenization_multiphase_intfMob(grI,grJ,instance)* &
+         (homogenization_multiphase_intfEng(grJ,grK,instance) - &
+          homogenization_multiphase_intfEng(grI,grK,instance))* &
+         phi(grK) 
+     enddo
+   enddo
+ enddo
+ intfSource = 8.0_pReal*intfSource/homogenization_multiphase_intfWidth(instance)
+ 
+ homogenization_multiphase_getPhaseSource = bulkSource + intfSource
+
+end function homogenization_multiphase_getPhaseSource
+
+
+!--------------------------------------------------------------------------------------------------
+!> @brief source tangent function for each phase 
+!--------------------------------------------------------------------------------------------------
+function homogenization_multiphase_getPhaseSourceTangent(ip,el)
+ use material, only: &
+   material_homog, &
+   phaseAt, &
+   phase_source, &
+   phase_Nsources, &
+   homogenization_Ngrains, &
+   homogenization_maxNgrains, &
+   homogenization_typeInstance
+ 
+ implicit none
+ real(pReal),   dimension(homogenization_maxNgrains,homogenization_maxNgrains) :: &
+   homogenization_multiphase_getPhaseSourceTangent
+ integer(pInt), intent(in) :: ip, el                                                                !< element number
+ real(pReal),   dimension(homogenization_maxNgrains,homogenization_maxNgrains) :: &
+   bulkSourceTangent, &
+   intfSourceTangent
+ integer(pInt) :: &
+   grI, grJ, grK, &
+   homog, & 
+   instance, &
+   source, &
+   phase
+
+ homog = material_homog(ip,el)
+ instance = homogenization_typeInstance(homog)
+ 
+ bulkSourceTangent = 0.0_pReal
+ do grI = 1_pInt, homogenization_Ngrains(homog)
+   phase = phaseAt(grI,ip,el)
+   do source = 1_pInt, phase_Nsources(phase)
+     select case(phase_source(source,phase))                                                   
+
+     end select
+   enddo  
+ enddo
+ 
+ intfSourceTangent = 0.0_pReal
+ do grI = 1_pInt, homogenization_Ngrains(homog)
+   do grJ = 1_pInt, homogenization_Ngrains(homog)
+     do grK = 1_pInt, homogenization_Ngrains(homog)
+       intfSourceTangent(grI,grK) = &
+         intfSourceTangent(grI,grK) + &
+         homogenization_multiphase_intfMob(grI,grJ,instance)* &
+         (homogenization_multiphase_intfEng(grJ,grK,instance) - &
+          homogenization_multiphase_intfEng(grI,grK,instance)) 
+     enddo
+   enddo
+ enddo
+ intfSourceTangent = 8.0_pReal*intfSourceTangent/ &
+                     homogenization_multiphase_intfWidth(instance)
+ 
+ homogenization_multiphase_getPhaseSourceTangent = &
+   bulkSourceTangent + intfSourceTangent
+
+end function homogenization_multiphase_getPhaseSourceTangent
+
+
+!--------------------------------------------------------------------------------------------------
 !> @brief set module wide phase fractions 
 !--------------------------------------------------------------------------------------------------
 subroutine homogenization_multiphase_putPhaseFrac(frac,ip,el)
- use mesh, only: &
-   mesh_element
  use material, only: &
+   material_homog, &
    homogenization_Ngrains, &
    homogenization_typeInstance, &
    phasefracMapping, &
@@ -941,7 +1205,7 @@ subroutine homogenization_multiphase_putPhaseFrac(frac,ip,el)
  
  implicit none
  integer(pInt),                                                intent(in)  :: ip, el                !< element number
- real(pReal),   dimension (homogenization_Ngrains(mesh_element(3,el))),     &
+ real(pReal),   dimension (homogenization_Ngrains(material_homog(ip,el))),     &
                                                                intent(in)  :: frac             !< array of current phase fractions
  integer(pInt) :: &
    gr, &
@@ -949,7 +1213,7 @@ subroutine homogenization_multiphase_putPhaseFrac(frac,ip,el)
    instance, &
    offset
 
- homog = mesh_element(3,el)
+ homog = material_homog(ip,el)
  instance = homogenization_typeInstance(homog)
  offset = phasefracMapping(homog)%p(ip,el)
  do gr = 1_pInt, homogenization_Ngrains(homog)
@@ -964,9 +1228,9 @@ end subroutine homogenization_multiphase_putPhaseFrac
 !--------------------------------------------------------------------------------------------------
 pure function homogenization_multiphase_postResults(ip,el,avgP,avgF)
  use mesh, only: &
-   mesh_element, &
    mesh_ipCoordinates
  use material, only: &
+   material_homog, &
    homogenization_Ngrains, &
    homogenization_typeInstance, &
    homogenization_Noutput
@@ -979,7 +1243,7 @@ pure function homogenization_multiphase_postResults(ip,el,avgP,avgF)
    avgP, &                                                                                          !< average stress at material point
    avgF                                                                                             !< average deformation gradient at material point
  real(pReal),  dimension(homogenization_multiphase_sizePostResults &
-                         (homogenization_typeInstance(mesh_element(3,el)))) :: &
+                         (homogenization_typeInstance(material_homog(ip,el)))) :: &
    homogenization_multiphase_postResults
  
  integer(pInt) :: &
@@ -987,13 +1251,13 @@ pure function homogenization_multiphase_postResults(ip,el,avgP,avgF)
    o, c
    
  c = 0_pInt
- homID = homogenization_typeInstance(mesh_element(3,el))
+ homID = homogenization_typeInstance(material_homog(ip,el))
  homogenization_multiphase_postResults = 0.0_pReal
  
- do o = 1_pInt,homogenization_Noutput(mesh_element(3,el))
+ do o = 1_pInt,homogenization_Noutput(material_homog(ip,el))
    select case(homogenization_multiphase_outputID(o,homID))
      case (nconstituents_ID)
-       homogenization_multiphase_postResults(c+1_pInt) = real(homogenization_Ngrains(mesh_element(3,el)),pReal)
+       homogenization_multiphase_postResults(c+1_pInt) = real(homogenization_Ngrains(material_homog(ip,el)),pReal)
        c = c + 1_pInt
      case (avgdefgrad_ID)
        homogenization_multiphase_postResults(c+1_pInt:c+9_pInt) = reshape(avgF,[9])
