@@ -493,6 +493,7 @@ end subroutine homogenization_init
 !--------------------------------------------------------------------------------------------------
 subroutine materialpoint_stressAndItsTangent(updateJaco,dt)
  use numerics, only: &
+   err_phasefr_tolabs, &
    subStepMinHomog, &
    subStepSizeHomog, &
    stepIncreaseHomog, &
@@ -516,6 +517,8 @@ subroutine materialpoint_stressAndItsTangent(updateJaco,dt)
    porosityState, &
    hydrogenfluxState, &
    phase_Nsources, &
+   phasefrac, &
+   phasefracMapping, &
    mappingHomogenization, &
    phaseAt, phasememberAt, &
    homogenization_Ngrains
@@ -841,7 +844,11 @@ subroutine materialpoint_stressAndItsTangent(updateJaco,dt)
              .not. materialpoint_doneAndHappy(1,i,e)) then                                          ! ...not yet done material points
            call homogenization_partitionDeformation(i,e)                                            ! partition deformation onto constituents
            crystallite_dt(1:myNgrains,i,e) = materialpoint_subdt(i,e)                               ! propagate materialpoint dt to grains
-           crystallite_requested(1:myNgrains,i,e) = .true.                                          ! request calculation for constituents
+           do g = 1, myNgrains
+             crystallite_requested(g,i,e) = &
+               phasefrac(g,mesh_element(3,e))% &
+                 p(phasefracMapping(mesh_element(3,e))%p(i,e)) > err_phasefr_tolabs                 ! request calculation for constituents
+           enddo
          else
            crystallite_requested(1:myNgrains,i,e) = .false.                                         ! calculation for constituents not required anymore
          endif
