@@ -210,9 +210,7 @@ subroutine kinematics_slipplane_opening_LiAndItsTangent(Ld, dLd_dTstar3333, Tsta
    lattice_sn
  use material, only: &
    phaseAt, phasememberAt, &
-   material_homog, &
-   damage, &
-   damageMapping
+   material_homog
  use math, only: &
    math_Plain3333to99, &
    math_I3, &
@@ -242,7 +240,7 @@ subroutine kinematics_slipplane_opening_LiAndItsTangent(Ld, dLd_dTstar3333, Tsta
    phase, &
    constituent, &
    instance, &
-   homog, damageOffset, &
+   homog, &
    f, i, index_myFamily, k, l, m, n
  real(pReal) :: &
    traction_d, traction_t, traction_n, traction_crit, &
@@ -252,7 +250,6 @@ subroutine kinematics_slipplane_opening_LiAndItsTangent(Ld, dLd_dTstar3333, Tsta
  constituent = phasememberAt(ipc,ip,el)
  instance = kinematics_slipplane_opening_instance(phase)
  homog = material_homog(ip,el)
- damageOffset = damageMapping(homog)%p(ip,el)
  
  Ld = 0.0_pReal
  dLd_dTstar3333 = 0.0_pReal
@@ -274,8 +271,7 @@ subroutine kinematics_slipplane_opening_LiAndItsTangent(Ld, dLd_dTstar3333, Tsta
      traction_t    = dot_product(Tstar_v,projection_t_v(1:6))
      traction_n    = dot_product(Tstar_v,projection_n_v(1:6))
      
-     traction_crit = kinematics_slipplane_opening_critLoad(f,instance)* &
-                     damage(homog)%p(damageOffset)                                                        ! degrading critical load carrying capacity by damage 
+     traction_crit = kinematics_slipplane_opening_critLoad(f,instance)
 
      udotd = &
        sign(1.0_pReal,traction_d)* &

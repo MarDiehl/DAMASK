@@ -79,18 +79,9 @@ subroutine constitutive_init()
    PLASTICITY_nonlocal_ID ,&
    SOURCE_thermal_dissipation_ID, &
    SOURCE_thermal_externalheat_ID, &
-   SOURCE_damage_isoBrittle_ID, &
-   SOURCE_damage_isoDuctile_ID, &
-   SOURCE_damage_anisoBrittle_ID, &
-   SOURCE_damage_anisoDuctile_ID, &
-   SOURCE_vacancy_phenoplasticity_ID, &
-   SOURCE_vacancy_irradiation_ID, &
-   SOURCE_vacancy_thermalfluc_ID, &
    KINEMATICS_cleavage_opening_ID, &
    KINEMATICS_slipplane_opening_ID, &
    KINEMATICS_thermal_expansion_ID, &
-   KINEMATICS_vacancy_strain_ID, &
-   KINEMATICS_hydrogen_strain_ID, &
    ELASTICITY_HOOKE_label, &
    PLASTICITY_NONE_label, &
    PLASTICITY_ISOTROPIC_label, &
@@ -100,13 +91,6 @@ subroutine constitutive_init()
    PLASTICITY_NONLOCAL_label, &
    SOURCE_thermal_dissipation_label, &
    SOURCE_thermal_externalheat_label, &
-   SOURCE_damage_isoBrittle_label, &
-   SOURCE_damage_isoDuctile_label, &
-   SOURCE_damage_anisoBrittle_label, &
-   SOURCE_damage_anisoDuctile_label, &
-   SOURCE_vacancy_phenoplasticity_label, &
-   SOURCE_vacancy_irradiation_label, &
-   SOURCE_vacancy_thermalfluc_label, &
    plasticState, &
    sourceState
 
@@ -118,18 +102,9 @@ subroutine constitutive_init()
  use plastic_nonlocal
  use source_thermal_dissipation
  use source_thermal_externalheat
- use source_damage_isoBrittle
- use source_damage_isoDuctile
- use source_damage_anisoBrittle
- use source_damage_anisoDuctile
- use source_vacancy_phenoplasticity
- use source_vacancy_irradiation
- use source_vacancy_thermalfluc
  use kinematics_cleavage_opening
  use kinematics_slipplane_opening
  use kinematics_thermal_expansion
- use kinematics_vacancy_strain
- use kinematics_hydrogen_strain
 
  implicit none
  integer(pInt), parameter :: FILEUNIT = 200_pInt
@@ -168,13 +143,6 @@ subroutine constitutive_init()
  call IO_checkAndRewind(FILEUNIT)
  if (any(phase_source == SOURCE_thermal_dissipation_ID))     call source_thermal_dissipation_init(FILEUNIT)
  if (any(phase_source == SOURCE_thermal_externalheat_ID))    call source_thermal_externalheat_init(FILEUNIT)
- if (any(phase_source == SOURCE_damage_isoBrittle_ID))       call source_damage_isoBrittle_init(FILEUNIT)
- if (any(phase_source == SOURCE_damage_isoDuctile_ID))       call source_damage_isoDuctile_init(FILEUNIT)
- if (any(phase_source == SOURCE_damage_anisoBrittle_ID))     call source_damage_anisoBrittle_init(FILEUNIT)
- if (any(phase_source == SOURCE_damage_anisoDuctile_ID))     call source_damage_anisoDuctile_init(FILEUNIT)
- if (any(phase_source == SOURCE_vacancy_phenoplasticity_ID)) call source_vacancy_phenoplasticity_init(FILEUNIT)
- if (any(phase_source == SOURCE_vacancy_irradiation_ID))     call source_vacancy_irradiation_init(FILEUNIT)
- if (any(phase_source == SOURCE_vacancy_thermalfluc_ID))     call source_vacancy_thermalfluc_init(FILEUNIT)
 
 !--------------------------------------------------------------------------------------------------
 ! parse kinematic mechanisms from config file
@@ -182,8 +150,6 @@ subroutine constitutive_init()
  if (any(phase_kinematics == KINEMATICS_cleavage_opening_ID))  call kinematics_cleavage_opening_init(FILEUNIT)
  if (any(phase_kinematics == KINEMATICS_slipplane_opening_ID)) call kinematics_slipplane_opening_init(FILEUNIT)
  if (any(phase_kinematics == KINEMATICS_thermal_expansion_ID)) call kinematics_thermal_expansion_init(FILEUNIT)
- if (any(phase_kinematics == KINEMATICS_vacancy_strain_ID))    call kinematics_vacancy_strain_init(FILEUNIT)
- if (any(phase_kinematics == KINEMATICS_hydrogen_strain_ID))   call kinematics_hydrogen_strain_init(FILEUNIT)
  close(FILEUNIT)
 
  write(6,'(/,a)')   ' <<<+-  constitutive init  -+>>>'
@@ -257,48 +223,6 @@ subroutine constitutive_init()
              thisNoutput => source_thermal_externalheat_Noutput
              thisOutput => source_thermal_externalheat_output
              thisSize   => source_thermal_externalheat_sizePostResult
-           case (SOURCE_damage_isoBrittle_ID) sourceType
-             ins = source_damage_isoBrittle_instance(p)
-             outputName = SOURCE_damage_isoBrittle_label
-             thisNoutput => source_damage_isoBrittle_Noutput
-             thisOutput => source_damage_isoBrittle_output
-             thisSize   => source_damage_isoBrittle_sizePostResult
-           case (SOURCE_damage_isoDuctile_ID) sourceType
-             ins = source_damage_isoDuctile_instance(p)
-             outputName = SOURCE_damage_isoDuctile_label
-             thisNoutput => source_damage_isoDuctile_Noutput
-             thisOutput => source_damage_isoDuctile_output
-             thisSize   => source_damage_isoDuctile_sizePostResult
-           case (SOURCE_damage_anisoBrittle_ID) sourceType
-             ins = source_damage_anisoBrittle_instance(p)
-             outputName = SOURCE_damage_anisoBrittle_label
-             thisNoutput => source_damage_anisoBrittle_Noutput
-             thisOutput => source_damage_anisoBrittle_output
-             thisSize   => source_damage_anisoBrittle_sizePostResult
-           case (SOURCE_damage_anisoDuctile_ID) sourceType
-             ins = source_damage_anisoDuctile_instance(p)
-             outputName = SOURCE_damage_anisoDuctile_label
-             thisNoutput => source_damage_anisoDuctile_Noutput
-             thisOutput => source_damage_anisoDuctile_output
-             thisSize   => source_damage_anisoDuctile_sizePostResult
-           case (SOURCE_vacancy_phenoplasticity_ID) sourceType
-             ins = source_vacancy_phenoplasticity_instance(p)
-             outputName = SOURCE_vacancy_phenoplasticity_label
-             thisNoutput => source_vacancy_phenoplasticity_Noutput
-             thisOutput => source_vacancy_phenoplasticity_output
-             thisSize   => source_vacancy_phenoplasticity_sizePostResult
-           case (SOURCE_vacancy_irradiation_ID) sourceType
-             ins = source_vacancy_irradiation_instance(p)
-             outputName = SOURCE_vacancy_irradiation_label
-             thisNoutput => source_vacancy_irradiation_Noutput
-             thisOutput => source_vacancy_irradiation_output
-             thisSize   => source_vacancy_irradiation_sizePostResult
-           case (SOURCE_vacancy_thermalfluc_ID) sourceType
-             ins = source_vacancy_thermalfluc_instance(p)
-             outputName = SOURCE_vacancy_thermalfluc_label
-             thisNoutput => source_vacancy_thermalfluc_Noutput
-             thisOutput => source_vacancy_thermalfluc_output
-             thisSize   => source_vacancy_thermalfluc_sizePostResult
            case default sourceType
              knownSource = .false.
          end select sourceType
@@ -387,14 +311,8 @@ function constitutive_homogenizedC(ipc,ip,el)
  use material, only: &
    material_phase, &
    material_homog, &
-   phase_NstiffnessDegradations, &
-   phase_stiffnessDegradation, &
-   damage, &
-   damageMapping, &
-   porosity, &
-   porosityMapping, &
-   STIFFNESS_DEGRADATION_damage_ID, &
-   STIFFNESS_DEGRADATION_porosity_ID
+   phase_NstiffnessModifiers, &
+   phase_stiffnessModifier
 
  implicit none
  real(pReal), dimension(6,6) :: constitutive_homogenizedC
@@ -413,16 +331,11 @@ function constitutive_homogenizedC(ipc,ip,el)
  end select plasticityType
 
  ho = material_homog(ip,el)
- DegradationLoop: do d = 1_pInt, phase_NstiffnessDegradations(material_phase(ipc,ip,el))
-   degradationType: select case(phase_stiffnessDegradation(d,material_phase(ipc,ip,el)))
-     case (STIFFNESS_DEGRADATION_damage_ID) degradationType
-       constitutive_homogenizedC = constitutive_homogenizedC * &
-                                   damage(ho)%p(damageMapping(ho)%p(ip,el))**2_pInt
-     case (STIFFNESS_DEGRADATION_porosity_ID) degradationType
-       constitutive_homogenizedC = constitutive_homogenizedC * &
-                                   porosity(ho)%p(porosityMapping(ho)%p(ip,el))**2_pInt
-   end select degradationType
- enddo DegradationLoop
+ ModifierLoop: do d = 1_pInt, phase_NstiffnessModifiers(material_phase(ipc,ip,el))
+   ModifierType: select case(phase_stiffnessModifier(d,material_phase(ipc,ip,el)))
+
+   end select ModifierType
+ enddo ModifierLoop
 
 end function constitutive_homogenizedC
 
@@ -594,9 +507,7 @@ subroutine constitutive_LiAndItsTangent(Li, dLi_dTstar3333, dLi_dFi3333, Tstar_v
    PLASTICITY_isotropic_ID, &
    KINEMATICS_cleavage_opening_ID, &
    KINEMATICS_slipplane_opening_ID, &
-   KINEMATICS_thermal_expansion_ID, &
-   KINEMATICS_vacancy_strain_ID, &
-   KINEMATICS_hydrogen_strain_ID
+   KINEMATICS_thermal_expansion_ID
  use plastic_isotropic, only: &
    plastic_isotropic_LiAndItsTangent
  use kinematics_cleavage_opening, only: &
@@ -605,10 +516,6 @@ subroutine constitutive_LiAndItsTangent(Li, dLi_dTstar3333, dLi_dFi3333, Tstar_v
    kinematics_slipplane_opening_LiAndItsTangent
  use kinematics_thermal_expansion, only: &
    kinematics_thermal_expansion_LiAndItsTangent
- use kinematics_vacancy_strain, only: &
-   kinematics_vacancy_strain_LiAndItsTangent
- use kinematics_hydrogen_strain, only: &
-   kinematics_hydrogen_strain_LiAndItsTangent
 
  implicit none
  integer(pInt), intent(in) :: &
@@ -661,10 +568,6 @@ subroutine constitutive_LiAndItsTangent(Li, dLi_dTstar3333, dLi_dFi3333, Tstar_v
        call kinematics_slipplane_opening_LiAndItsTangent(my_Li, my_dLi_dTstar, Tstar_v, ipc, ip, el)
      case (KINEMATICS_thermal_expansion_ID) kinematicsType
        call kinematics_thermal_expansion_LiAndItsTangent(my_Li, my_dLi_dTstar, ipc, ip, el)
-     case (KINEMATICS_vacancy_strain_ID) kinematicsType
-       call kinematics_vacancy_strain_LiAndItsTangent(my_Li, my_dLi_dTstar, ipc, ip, el)
-     case (KINEMATICS_hydrogen_strain_ID) kinematicsType
-       call kinematics_hydrogen_strain_LiAndItsTangent(my_Li, my_dLi_dTstar, ipc, ip, el)
      case default kinematicsType
        my_Li = 0.0_pReal
        my_dLi_dTstar = 0.0_pReal
@@ -700,15 +603,9 @@ pure function constitutive_initialFi(ipc, ip, el)
    phase_kinematics, &
    phase_Nkinematics, &
    material_phase, &
-   KINEMATICS_thermal_expansion_ID, &
-   KINEMATICS_vacancy_strain_ID, &
-   KINEMATICS_hydrogen_strain_ID
+   KINEMATICS_thermal_expansion_ID
  use kinematics_thermal_expansion, only: &
    kinematics_thermal_expansion_initialStrain
- use kinematics_vacancy_strain, only: &
-   kinematics_vacancy_strain_initialStrain
- use kinematics_hydrogen_strain, only: &
-   kinematics_hydrogen_strain_initialStrain
 
  implicit none
  integer(pInt), intent(in) :: &
@@ -727,12 +624,6 @@ pure function constitutive_initialFi(ipc, ip, el)
      case (KINEMATICS_thermal_expansion_ID) kinematicsType
        constitutive_initialFi = &
          constitutive_initialFi + kinematics_thermal_expansion_initialStrain(ipc, ip, el)
-     case (KINEMATICS_vacancy_strain_ID) kinematicsType
-       constitutive_initialFi = &
-         constitutive_initialFi + kinematics_vacancy_strain_initialStrain(ipc, ip, el)
-     case (KINEMATICS_hydrogen_strain_ID) kinematicsType
-       constitutive_initialFi = &
-         constitutive_initialFi + kinematics_hydrogen_strain_initialStrain(ipc, ip, el)
    end select kinematicsType
  enddo KinematicsLoop
 
@@ -845,9 +736,6 @@ subroutine constitutive_collectDotState(Tstar_v, FeArray, FpArray, subdt, subfra
    PLASTICITY_dislotwin_ID, &
    PLASTICITY_disloucla_ID, &
    PLASTICITY_nonlocal_ID, &
-   SOURCE_damage_isoDuctile_ID, &
-   SOURCE_damage_anisoBrittle_ID, &
-   SOURCE_damage_anisoDuctile_ID, &
    SOURCE_thermal_externalheat_ID
  use plastic_isotropic, only:  &
    plastic_isotropic_dotState
@@ -859,12 +747,6 @@ subroutine constitutive_collectDotState(Tstar_v, FeArray, FpArray, subdt, subfra
    plastic_disloucla_dotState
  use plastic_nonlocal, only: &
    plastic_nonlocal_dotState
- use source_damage_isoDuctile, only: &
-   source_damage_isoDuctile_dotState
- use source_damage_anisoBrittle, only: &
-   source_damage_anisoBrittle_dotState
- use source_damage_anisoDuctile, only: &
-   source_damage_anisoDuctile_dotState
  use source_thermal_externalheat, only: &
    source_thermal_externalheat_dotState
 
@@ -915,12 +797,6 @@ subroutine constitutive_collectDotState(Tstar_v, FeArray, FpArray, subdt, subfra
 
  SourceLoop: do s = 1_pInt, phase_Nsources(material_phase(ipc,ip,el))
     sourceType: select case (phase_source(s,material_phase(ipc,ip,el)))
-     case (SOURCE_damage_anisoBrittle_ID) sourceType
-       call source_damage_anisoBrittle_dotState (Tstar_v, ipc, ip, el)
-     case (SOURCE_damage_isoDuctile_ID) sourceType
-       call source_damage_isoDuctile_dotState   (         ipc, ip, el)
-     case (SOURCE_damage_anisoDuctile_ID) sourceType
-       call source_damage_anisoDuctile_dotState (         ipc, ip, el)
      case (SOURCE_thermal_externalheat_ID) sourceType
        call source_thermal_externalheat_dotState(         ipc, ip, el)
    end select sourceType
@@ -953,21 +829,10 @@ subroutine constitutive_collectDeltaState(Tstar_v, Fe, ipc, ip, el)
    debug_levelBasic
  use material, only: &
    phase_plasticity, &
-   phase_source, &
-   phase_Nsources, &
    material_phase, &
-   PLASTICITY_NONLOCAL_ID, &
-   SOURCE_damage_isoBrittle_ID, &
-   SOURCE_vacancy_irradiation_ID, &
-   SOURCE_vacancy_thermalfluc_ID
+   PLASTICITY_NONLOCAL_ID
  use plastic_nonlocal, only: &
    plastic_nonlocal_deltaState
- use source_damage_isoBrittle, only: &
-   source_damage_isoBrittle_deltaState
- use source_vacancy_irradiation, only: &
-   source_vacancy_irradiation_deltaState
- use source_vacancy_thermalfluc, only: &
-   source_vacancy_thermalfluc_deltaState
 
  implicit none
  integer(pInt), intent(in) :: &
@@ -978,8 +843,6 @@ subroutine constitutive_collectDeltaState(Tstar_v, Fe, ipc, ip, el)
    Tstar_v                                                                                          !< 2nd Piola-Kirchhoff stress
  real(pReal),   intent(in), dimension(3,3) :: &
    Fe                                                                                               !< elastic deformation gradient
- integer(pInt) :: &
-   s                                                                                                !< counter in source loop
  integer(pLongInt) :: &
    tick, tock, &
    tickrate, &
@@ -990,19 +853,6 @@ subroutine constitutive_collectDeltaState(Tstar_v, Fe, ipc, ip, el)
 
  if(phase_plasticity(material_phase(ipc,ip,el)) == PLASTICITY_NONLOCAL_ID) &
    call plastic_nonlocal_deltaState(Tstar_v,ip,el)
-
-
- SourceLoop: do s = 1_pInt, phase_Nsources(material_phase(ipc,ip,el))
-    sourceType: select case (phase_source(s,material_phase(ipc,ip,el)))
-     case (SOURCE_damage_isoBrittle_ID) sourceType
-       call source_damage_isoBrittle_deltaState  (constitutive_homogenizedC(ipc,ip,el), Fe, &
-                                                  ipc, ip, el)
-     case (SOURCE_vacancy_irradiation_ID) sourceType
-       call source_vacancy_irradiation_deltaState(ipc, ip, el)
-     case (SOURCE_vacancy_thermalfluc_ID) sourceType
-       call source_vacancy_thermalfluc_deltaState(ipc, ip, el)
-   end select sourceType
- enddo SourceLoop
 
  if (iand(debug_level(debug_constitutive), debug_levelBasic) /= 0_pInt) then
    call system_clock(count=tock,count_rate=tickrate,count_max=maxticks)
@@ -1042,11 +892,7 @@ function constitutive_postResults(Tstar_v, FeArray, ipc, ip, el)
    PLASTICITY_PHENOPOWERLAW_ID, &
    PLASTICITY_DISLOTWIN_ID, &
    PLASTICITY_DISLOUCLA_ID, &
-   PLASTICITY_NONLOCAL_ID, &
-   SOURCE_damage_isoBrittle_ID, &
-   SOURCE_damage_isoDuctile_ID, &
-   SOURCE_damage_anisoBrittle_ID, &
-   SOURCE_damage_anisoDuctile_ID
+   PLASTICITY_NONLOCAL_ID
  use plastic_isotropic, only: &
    plastic_isotropic_postResults
  use plastic_phenopowerlaw, only: &
@@ -1057,14 +903,6 @@ function constitutive_postResults(Tstar_v, FeArray, ipc, ip, el)
    plastic_disloucla_postResults
  use plastic_nonlocal, only: &
    plastic_nonlocal_postResults
- use source_damage_isoBrittle, only: &
-   source_damage_isoBrittle_postResults
- use source_damage_isoDuctile, only: &
-   source_damage_isoDuctile_postResults
- use source_damage_anisoBrittle, only: &
-   source_damage_anisoBrittle_postResults
- use source_damage_anisoDuctile, only: &
-   source_damage_anisoDuctile_postResults
 
  implicit none
  integer(pInt), intent(in) :: &
@@ -1114,14 +952,6 @@ function constitutive_postResults(Tstar_v, FeArray, ipc, ip, el)
    startPos = endPos + 1_pInt
    endPos = endPos + sourceState(material_phase(ipc,ip,el))%p(s)%sizePostResults
    sourceType: select case (phase_source(s,material_phase(ipc,ip,el)))
-     case (SOURCE_damage_isoBrittle_ID) sourceType
-       constitutive_postResults(startPos:endPos) = source_damage_isoBrittle_postResults(ipc, ip, el)
-     case (SOURCE_damage_isoDuctile_ID) sourceType
-       constitutive_postResults(startPos:endPos) = source_damage_isoDuctile_postResults(ipc, ip, el)
-     case (SOURCE_damage_anisoBrittle_ID) sourceType
-       constitutive_postResults(startPos:endPos) = source_damage_anisoBrittle_postResults(ipc, ip, el)
-     case (SOURCE_damage_anisoDuctile_ID) sourceType
-       constitutive_postResults(startPos:endPos) = source_damage_anisoDuctile_postResults(ipc, ip, el)
    end select sourceType
  enddo SourceLoop
 

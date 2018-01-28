@@ -232,9 +232,6 @@ subroutine CPFEM_general(age, dt)
    sourceState, &
    homogState, &
    thermalState, &
-   damageState, &
-   vacancyfluxState, &
-   hydrogenfluxState, &
    material_phase, &
    phase_plasticity, &
    phase_Nsources, &
@@ -290,9 +287,6 @@ subroutine CPFEM_general(age, dt)
    do homog = 1_pInt, material_Nhomogenization
      homogState       (homog)%state0 =  homogState       (homog)%state
      thermalState     (homog)%state0 =  thermalState     (homog)%state
-     damageState      (homog)%state0 =  damageState      (homog)%state
-     vacancyfluxState (homog)%state0 =  vacancyfluxState (homog)%state
-     hydrogenfluxState(homog)%state0 =  hydrogenfluxState(homog)%state
    enddo
 
 

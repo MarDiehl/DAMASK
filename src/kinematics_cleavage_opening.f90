@@ -205,9 +205,7 @@ subroutine kinematics_cleavage_opening_LiAndItsTangent(Ld, dLd_dTstar3333, Tstar
    tol_math_check
  use material, only: &
    phaseAt, phasememberAt, &
-   material_homog, &
-   damage, &
-   damageMapping
+   material_homog
  use lattice, only: &
    lattice_Scleavage, &
    lattice_Scleavage_v, &
@@ -229,7 +227,7 @@ subroutine kinematics_cleavage_opening_LiAndItsTangent(Ld, dLd_dTstar3333, Tstar
    phase, &
    constituent, &
    instance, &
-   homog, damageOffset, &
+   homog, &
    f, i, index_myFamily, k, l, m, n
  real(pReal) :: &
    traction_d, traction_t, traction_n, traction_crit, &
@@ -239,7 +237,6 @@ subroutine kinematics_cleavage_opening_LiAndItsTangent(Ld, dLd_dTstar3333, Tstar
  constituent = phasememberAt(ipc,ip,el)
  instance = kinematics_cleavage_opening_instance(phase)
  homog = material_homog(ip,el)
- damageOffset = damageMapping(homog)%p(ip,el)
  
  Ld = 0.0_pReal
  dLd_dTstar3333 = 0.0_pReal
@@ -249,8 +246,7 @@ subroutine kinematics_cleavage_opening_LiAndItsTangent(Ld, dLd_dTstar3333, Tstar
      traction_d    = dot_product(Tstar_v,lattice_Scleavage_v(1:6,1,index_myFamily+i,phase))
      traction_t    = dot_product(Tstar_v,lattice_Scleavage_v(1:6,2,index_myFamily+i,phase))
      traction_n    = dot_product(Tstar_v,lattice_Scleavage_v(1:6,3,index_myFamily+i,phase))
-     traction_crit = kinematics_cleavage_opening_critLoad(f,instance)* &
-                     damage(homog)%p(damageOffset)*damage(homog)%p(damageOffset)
+     traction_crit = kinematics_cleavage_opening_critLoad(f,instance)
      udotd = &
        sign(1.0_pReal,traction_d)* &
        kinematics_cleavage_opening_sdot_0(instance)* &

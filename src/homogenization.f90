@@ -35,11 +35,7 @@ module homogenization
  integer(pInt),                                      public, protected  :: &
    materialpoint_sizeResults, &
    homogenization_maxSizePostResults, &
-   thermal_maxSizePostResults, &
-   damage_maxSizePostResults, &
-   vacancyflux_maxSizePostResults, &
-   porosity_maxSizePostResults, &
-   hydrogenflux_maxSizePostResults
+   thermal_maxSizePostResults
 
  real(pReal),   dimension(:,:,:,:),     allocatable, private :: &
    materialpoint_subF0, &                                                                           !< def grad of IP at beginning of homogenization increment
@@ -108,16 +104,6 @@ subroutine homogenization_init
  use thermal_isothermal
  use thermal_adiabatic
  use thermal_conduction
- use damage_none
- use damage_local
- use damage_nonlocal
- use vacancyflux_isoconc
- use vacancyflux_isochempot
- use vacancyflux_cahnhilliard
- use porosity_none
- use porosity_phasefield
- use hydrogenflux_isoconc
- use hydrogenflux_cahnhilliard
  use IO
  use numerics, only: &
    worldrank
@@ -129,7 +115,7 @@ subroutine homogenization_init
  integer(pInt), dimension(:)  , pointer :: thisNoutput
  character(len=64), dimension(:,:), pointer :: thisOutput
  character(len=32) :: outputName                                                                    !< name of output, intermediate fix until HDF5 output is ready
- logical :: knownHomogenization, knownThermal, knownDamage, knownVacancyflux, knownPorosity, knownHydrogenflux
+ logical :: knownHomogenization, knownThermal
 
 
 !--------------------------------------------------------------------------------------------------
@@ -157,43 +143,6 @@ subroutine homogenization_init
    call thermal_adiabatic_init(FILEUNIT)
  if (any(thermal_type == THERMAL_conduction_ID)) &
    call thermal_conduction_init(FILEUNIT)
-
-!--------------------------------------------------------------------------------------------------
-! parse damage from config file
- call IO_checkAndRewind(FILEUNIT)
- if (any(damage_type == DAMAGE_none_ID)) &
-   call damage_none_init()
- if (any(damage_type == DAMAGE_local_ID)) &
-   call damage_local_init(FILEUNIT)
- if (any(damage_type == DAMAGE_nonlocal_ID)) &
-   call damage_nonlocal_init(FILEUNIT)
-
-!--------------------------------------------------------------------------------------------------
-! parse vacancy transport from config file
- call IO_checkAndRewind(FILEUNIT)
- if (any(vacancyflux_type == VACANCYFLUX_isoconc_ID)) &
-   call vacancyflux_isoconc_init()
- if (any(vacancyflux_type == VACANCYFLUX_isochempot_ID)) &
-   call vacancyflux_isochempot_init(FILEUNIT)
- if (any(vacancyflux_type == VACANCYFLUX_cahnhilliard_ID)) &
-   call vacancyflux_cahnhilliard_init(FILEUNIT)
-
-!--------------------------------------------------------------------------------------------------
-! parse porosity from config file
- call IO_checkAndRewind(FILEUNIT)
- if (any(porosity_type == POROSITY_none_ID)) &
-   call porosity_none_init()
- if (any(porosity_type == POROSITY_phasefield_ID)) &
-   call porosity_phasefield_init(FILEUNIT)
-
-!--------------------------------------------------------------------------------------------------
-! parse hydrogen transport from config file
- call IO_checkAndRewind(FILEUNIT)
- if (any(hydrogenflux_type == HYDROGENFLUX_isoconc_ID)) &
-   call hydrogenflux_isoconc_init()
- if (any(hydrogenflux_type == HYDROGENFLUX_cahnhilliard_ID)) &
-   call hydrogenflux_cahnhilliard_init(FILEUNIT)
- close(FILEUNIT)
 
 !--------------------------------------------------------------------------------------------------
 ! write description file for homogenization output
@@ -266,112 +215,6 @@ subroutine homogenization_init
            enddo
          endif
        endif
-       i = damage_typeInstance(p)                                                                       ! which instance of this damage type
-       knownDamage = .true.                                                                             ! assume valid
-       select case(damage_type(p))                                                                      ! split per damage type
-         case (DAMAGE_none_ID)
-           outputName = DAMAGE_none_label
-           thisNoutput => null()
-           thisOutput => null()
-           thisSize   => null()
-         case (DAMAGE_local_ID)
-           outputName = DAMAGE_local_label
-           thisNoutput => damage_local_Noutput
-           thisOutput => damage_local_output
-           thisSize   => damage_local_sizePostResult
-         case (DAMAGE_nonlocal_ID)
-           outputName = DAMAGE_nonlocal_label
-           thisNoutput => damage_nonlocal_Noutput
-           thisOutput => damage_nonlocal_output
-           thisSize   => damage_nonlocal_sizePostResult
-         case default
-           knownDamage = .false.
-       end select
-       if (knownDamage) then
-         write(FILEUNIT,'(a)') '(damage)'//char(9)//trim(outputName)
-         if (damage_type(p) /= DAMAGE_none_ID) then
-           do e = 1,thisNoutput(i)
-             write(FILEUNIT,'(a,i4)') trim(thisOutput(e,i))//char(9),thisSize(e,i)
-           enddo
-         endif
-       endif
-       i = vacancyflux_typeInstance(p)                                                                  ! which instance of this vacancy flux type
-       knownVacancyflux = .true.                                                                        ! assume valid
-       select case(vacancyflux_type(p))                                                                 ! split per vacancy flux type
-         case (VACANCYFLUX_isoconc_ID)
-           outputName = VACANCYFLUX_isoconc_label
-           thisNoutput => null()
-           thisOutput => null()
-           thisSize   => null()
-         case (VACANCYFLUX_isochempot_ID)
-           outputName = VACANCYFLUX_isochempot_label
-           thisNoutput => vacancyflux_isochempot_Noutput
-           thisOutput => vacancyflux_isochempot_output
-           thisSize   => vacancyflux_isochempot_sizePostResult
-         case (VACANCYFLUX_cahnhilliard_ID)
-           outputName = VACANCYFLUX_cahnhilliard_label
-           thisNoutput => vacancyflux_cahnhilliard_Noutput
-           thisOutput => vacancyflux_cahnhilliard_output
-           thisSize   => vacancyflux_cahnhilliard_sizePostResult
-         case default
-           knownVacancyflux = .false.
-       end select
-       if (knownVacancyflux) then
-         write(FILEUNIT,'(a)') '(vacancyflux)'//char(9)//trim(outputName)
-         if (vacancyflux_type(p) /= VACANCYFLUX_isoconc_ID) then
-           do e = 1,thisNoutput(i)
-             write(FILEUNIT,'(a,i4)') trim(thisOutput(e,i))//char(9),thisSize(e,i)
-           enddo
-         endif
-       endif
-       i = porosity_typeInstance(p)                                                                     ! which instance of this porosity type
-       knownPorosity = .true.                                                                           ! assume valid
-       select case(porosity_type(p))                                                                    ! split per porosity type
-         case (POROSITY_none_ID)
-           outputName = POROSITY_none_label
-           thisNoutput => null()
-           thisOutput => null()
-           thisSize   => null()
-         case (POROSITY_phasefield_ID)
-           outputName = POROSITY_phasefield_label
-           thisNoutput => porosity_phasefield_Noutput
-           thisOutput => porosity_phasefield_output
-           thisSize   => porosity_phasefield_sizePostResult
-         case default
-           knownPorosity = .false.
-       end select
-       if (knownPorosity) then
-         write(FILEUNIT,'(a)') '(porosity)'//char(9)//trim(outputName)
-         if (porosity_type(p) /= POROSITY_none_ID) then
-           do e = 1,thisNoutput(i)
-             write(FILEUNIT,'(a,i4)') trim(thisOutput(e,i))//char(9),thisSize(e,i)
-           enddo
-         endif
-       endif
-       i = hydrogenflux_typeInstance(p)                                                                 ! which instance of this hydrogen flux type
-       knownHydrogenflux = .true.                                                                       ! assume valid
-       select case(hydrogenflux_type(p))                                                                ! split per hydrogen flux type
-         case (HYDROGENFLUX_isoconc_ID)
-           outputName = HYDROGENFLUX_isoconc_label
-           thisNoutput => null()
-           thisOutput => null()
-           thisSize   => null()
-         case (HYDROGENFLUX_cahnhilliard_ID)
-           outputName = HYDROGENFLUX_cahnhilliard_label
-           thisNoutput => hydrogenflux_cahnhilliard_Noutput
-           thisOutput => hydrogenflux_cahnhilliard_output
-           thisSize   => hydrogenflux_cahnhilliard_sizePostResult
-         case default
-           knownHydrogenflux = .false.
-       end select
-       if (knownHydrogenflux) then
-         write(FILEUNIT,'(a)') '(hydrogenflux)'//char(9)//trim(outputName)
-         if (hydrogenflux_type(p) /= HYDROGENFLUX_isoconc_ID) then
-           do e = 1,thisNoutput(i)
-             write(FILEUNIT,'(a,i4)') trim(thisOutput(e,i))//char(9),thisSize(e,i)
-           enddo
-         endif
-       endif
      endif
    enddo
    close(FILEUNIT)
@@ -398,17 +241,9 @@ subroutine homogenization_init
 ! allocate and initialize global state and postresutls variables
  homogenization_maxSizePostResults = 0_pInt
  thermal_maxSizePostResults        = 0_pInt
- damage_maxSizePostResults         = 0_pInt
- vacancyflux_maxSizePostResults    = 0_pInt
- porosity_maxSizePostResults       = 0_pInt
- hydrogenflux_maxSizePostResults   = 0_pInt
  do p = 1,material_Nhomogenization
    homogenization_maxSizePostResults = max(homogenization_maxSizePostResults,homogState       (p)%sizePostResults)
    thermal_maxSizePostResults        = max(thermal_maxSizePostResults,       thermalState     (p)%sizePostResults)
-   damage_maxSizePostResults         = max(damage_maxSizePostResults        ,damageState      (p)%sizePostResults)
-   vacancyflux_maxSizePostResults    = max(vacancyflux_maxSizePostResults   ,vacancyfluxState (p)%sizePostResults)
-   porosity_maxSizePostResults       = max(porosity_maxSizePostResults      ,porosityState    (p)%sizePostResults)
-   hydrogenflux_maxSizePostResults   = max(hydrogenflux_maxSizePostResults  ,hydrogenfluxState(p)%sizePostResults)
  enddo
 
 #ifdef FEM
@@ -417,11 +252,7 @@ subroutine homogenization_init
  allocate(phaseOutput      (material_Nphase,        homogenization_maxNgrains))
  do p = 1, material_Nhomogenization
    homogOutput(p)%sizeResults = homogState       (p)%sizePostResults + &
-                                thermalState     (p)%sizePostResults + &
-                                damageState      (p)%sizePostResults + &
-                                vacancyfluxState (p)%sizePostResults + &
-                                porosityState    (p)%sizePostResults + &
-                                hydrogenfluxState(p)%sizePostResults
+                                thermalState     (p)%sizePostResults
    homogOutput(p)%sizeIpCells = count(material_homog==p)
    allocate(homogOutput(p)%output(homogOutput(p)%sizeResults,homogOutput(p)%sizeIpCells))
  enddo
@@ -441,10 +272,6 @@ subroutine homogenization_init
  materialpoint_sizeResults = 1 &                                                                    ! grain count
                            + 1 + homogenization_maxSizePostResults &                                ! homogSize & homogResult
                                + thermal_maxSizePostResults        &
-                               + damage_maxSizePostResults         &
-                               + vacancyflux_maxSizePostResults    &
-                               + porosity_maxSizePostResults       &
-                               + hydrogenflux_maxSizePostResults   &
                            + homogenization_maxNgrains * (1 + crystallite_maxSizePostResults &      ! crystallite size & crystallite results
                                                         + 1 + constitutive_plasticity_maxSizePostResults &     ! constitutive size & constitutive results
                                                             + constitutive_source_maxSizePostResults)
@@ -512,10 +339,6 @@ subroutine materialpoint_stressAndItsTangent(updateJaco,dt)
    sourceState, &
    homogState, &
    thermalState, &
-   damageState, &
-   vacancyfluxState, &
-   porosityState, &
-   hydrogenfluxState, &
    phase_Nsources, &
    phasefrac, &
    phasefracMapping, &
@@ -622,22 +445,6 @@ subroutine materialpoint_stressAndItsTangent(updateJaco,dt)
      thermalState(mappingHomogenization(2,i,e))%sizeState > 0_pInt) &
        thermalState(mappingHomogenization(2,i,e))%subState0(:,mappingHomogenization(1,i,e)) = &
        thermalState(mappingHomogenization(2,i,e))%State0(   :,mappingHomogenization(1,i,e))         ! ...internal thermal state
-   forall(i = FEsolving_execIP(1,e):FEsolving_execIP(2,e), &
-     damageState(mappingHomogenization(2,i,e))%sizeState > 0_pInt) &
-       damageState(mappingHomogenization(2,i,e))%subState0(:,mappingHomogenization(1,i,e)) = &
-       damageState(mappingHomogenization(2,i,e))%State0(   :,mappingHomogenization(1,i,e))          ! ...internal damage state
-   forall(i = FEsolving_execIP(1,e):FEsolving_execIP(2,e), &
-     vacancyfluxState(mappingHomogenization(2,i,e))%sizeState > 0_pInt) &
-       vacancyfluxState(mappingHomogenization(2,i,e))%subState0(:,mappingHomogenization(1,i,e)) = &
-       vacancyfluxState(mappingHomogenization(2,i,e))%State0(   :,mappingHomogenization(1,i,e))     ! ...internal vacancy transport state
-   forall(i = FEsolving_execIP(1,e):FEsolving_execIP(2,e), &
-     porosityState(mappingHomogenization(2,i,e))%sizeState > 0_pInt) &
-       porosityState(mappingHomogenization(2,i,e))%subState0(:,mappingHomogenization(1,i,e)) = &
-       porosityState(mappingHomogenization(2,i,e))%State0(   :,mappingHomogenization(1,i,e))        ! ...internal porosity state
-   forall(i = FEsolving_execIP(1,e):FEsolving_execIP(2,e), &
-     hydrogenfluxState(mappingHomogenization(2,i,e))%sizeState > 0_pInt) &
-       hydrogenfluxState(mappingHomogenization(2,i,e))%subState0(:,mappingHomogenization(1,i,e)) = &
-       hydrogenfluxState(mappingHomogenization(2,i,e))%State0(   :,mappingHomogenization(1,i,e))    ! ...internal hydrogen transport state
  enddo
  NiterationHomog = 0_pInt
 
@@ -709,22 +516,6 @@ subroutine materialpoint_stressAndItsTangent(updateJaco,dt)
              thermalState(mappingHomogenization(2,i,e))%sizeState > 0_pInt) &
                thermalState(mappingHomogenization(2,i,e))%subState0(:,mappingHomogenization(1,i,e)) = &
                thermalState(mappingHomogenization(2,i,e))%State(    :,mappingHomogenization(1,i,e)) ! ...internal thermal state
-           forall(i = FEsolving_execIP(1,e):FEsolving_execIP(2,e), &
-             damageState(mappingHomogenization(2,i,e))%sizeState > 0_pInt) &
-               damageState(mappingHomogenization(2,i,e))%subState0(:,mappingHomogenization(1,i,e)) = &
-               damageState(mappingHomogenization(2,i,e))%State(    :,mappingHomogenization(1,i,e))  ! ...internal damage state
-           forall(i = FEsolving_execIP(1,e):FEsolving_execIP(2,e), &
-             vacancyfluxState(mappingHomogenization(2,i,e))%sizeState > 0_pInt) &
-               vacancyfluxState(mappingHomogenization(2,i,e))%subState0(:,mappingHomogenization(1,i,e)) = &
-               vacancyfluxState(mappingHomogenization(2,i,e))%State(    :,mappingHomogenization(1,i,e))! ...internal vacancy transport state
-           forall(i = FEsolving_execIP(1,e):FEsolving_execIP(2,e), &
-             porosityState(mappingHomogenization(2,i,e))%sizeState > 0_pInt) &
-               porosityState(mappingHomogenization(2,i,e))%subState0(:,mappingHomogenization(1,i,e)) = &
-               porosityState(mappingHomogenization(2,i,e))%State(    :,mappingHomogenization(1,i,e))! ...internal porosity state
-           forall(i = FEsolving_execIP(1,e):FEsolving_execIP(2,e), &
-             hydrogenfluxState(mappingHomogenization(2,i,e))%sizeState > 0_pInt) &
-               hydrogenfluxState(mappingHomogenization(2,i,e))%subState0(:,mappingHomogenization(1,i,e)) = &
-               hydrogenfluxState(mappingHomogenization(2,i,e))%State(    :,mappingHomogenization(1,i,e))! ...internal hydrogen transport state
            materialpoint_subF0(1:3,1:3,i,e) = materialpoint_subF(1:3,1:3,i,e)                       ! ...def grad
            !$OMP FLUSH(materialpoint_subF0)
          elseif (materialpoint_requested(i,e)) then steppingNeeded                                  ! already at final time (??)
@@ -793,22 +584,6 @@ subroutine materialpoint_stressAndItsTangent(updateJaco,dt)
              thermalState(mappingHomogenization(2,i,e))%sizeState > 0_pInt) &
                thermalState(mappingHomogenization(2,i,e))%State(    :,mappingHomogenization(1,i,e)) = &
                thermalState(mappingHomogenization(2,i,e))%subState0(:,mappingHomogenization(1,i,e)) ! ...internal thermal state
-           forall(i = FEsolving_execIP(1,e):FEsolving_execIP(2,e), &
-             damageState(mappingHomogenization(2,i,e))%sizeState > 0_pInt) &
-               damageState(mappingHomogenization(2,i,e))%State(    :,mappingHomogenization(1,i,e)) = &
-               damageState(mappingHomogenization(2,i,e))%subState0(:,mappingHomogenization(1,i,e))  ! ...internal damage state
-           forall(i = FEsolving_execIP(1,e):FEsolving_execIP(2,e), &
-             vacancyfluxState(mappingHomogenization(2,i,e))%sizeState > 0_pInt) &
-               vacancyfluxState(mappingHomogenization(2,i,e))%State(    :,mappingHomogenization(1,i,e)) = &
-               vacancyfluxState(mappingHomogenization(2,i,e))%subState0(:,mappingHomogenization(1,i,e))! ...internal vacancy transport state
-           forall(i = FEsolving_execIP(1,e):FEsolving_execIP(2,e), &
-             porosityState(mappingHomogenization(2,i,e))%sizeState > 0_pInt) &
-               porosityState(mappingHomogenization(2,i,e))%State(    :,mappingHomogenization(1,i,e)) = &
-               porosityState(mappingHomogenization(2,i,e))%subState0(:,mappingHomogenization(1,i,e))! ...internal porosity state
-           forall(i = FEsolving_execIP(1,e):FEsolving_execIP(2,e), &
-             hydrogenfluxState(mappingHomogenization(2,i,e))%sizeState > 0_pInt) &
-               hydrogenfluxState(mappingHomogenization(2,i,e))%State(    :,mappingHomogenization(1,i,e)) = &
-               hydrogenfluxState(mappingHomogenization(2,i,e))%subState0(:,mappingHomogenization(1,i,e))! ...internal hydrogen transport state
          endif
        endif converged
 
@@ -933,10 +708,6 @@ subroutine materialpoint_postResults
 #else
    homogState, &
    thermalState, &
-   damageState, &
-   vacancyfluxState, &
-   porosityState, &
-   hydrogenfluxState, &
 #endif
    plasticState, &
    sourceState, &
@@ -1022,11 +793,7 @@ subroutine materialpoint_postResults
        thePos = 0_pInt
 
        theSize = homogState       (mappingHomogenization(2,i,e))%sizePostResults &
-               + thermalState     (mappingHomogenization(2,i,e))%sizePostResults &
-               + damageState      (mappingHomogenization(2,i,e))%sizePostResults &
-               + vacancyfluxState (mappingHomogenization(2,i,e))%sizePostResults &
-               + porosityState    (mappingHomogenization(2,i,e))%sizePostResults &
-               + hydrogenfluxState(mappingHomogenization(2,i,e))%sizePostResults
+               + thermalState     (mappingHomogenization(2,i,e))%sizePostResults 
        materialpoint_results(thePos+1,i,e) = real(theSize,pReal)                                    ! tell size of homogenization results
        thePos = thePos + 1_pInt
 
@@ -1123,14 +890,10 @@ function homogenization_updateState(iter,ip,el)
  use material, only: &
    homogenization_type, &
    thermal_type, &
-   damage_type, &
-   vacancyflux_type, &
    homogenization_maxNgrains, &
    HOMOGENIZATION_MULTIPHASE_ID, &
    HOMOGENIZATION_RGC_ID, &
-   THERMAL_adiabatic_ID, &
-   DAMAGE_local_ID, &
-   VACANCYFLUX_isochempot_ID
+   THERMAL_adiabatic_ID
  use crystallite, only: &
    crystallite_P, &
    crystallite_dPdF, &
@@ -1142,10 +905,6 @@ function homogenization_updateState(iter,ip,el)
    homogenization_RGC_updateState
  use thermal_adiabatic, only: &
    thermal_adiabatic_updateState
- use damage_local, only: &
-   damage_local_updateState
- use vacancyflux_isochempot, only: &
-   vacancyflux_isochempot_updateState
 
  implicit none
  integer(pInt), intent(in) :: &
@@ -1186,24 +945,6 @@ function homogenization_updateState(iter,ip,el)
                                      ip, &
                                      el)
  end select chosenThermal
-
- chosenDamage: select case (damage_type(mesh_element(3,el)))
-   case (DAMAGE_local_ID) chosenDamage
-     homogenization_updateState = &
-       homogenization_updateState .and. &
-       damage_local_updateState(materialpoint_subdt(ip,el), &
-                                ip, &
-                                el)
- end select chosenDamage
-
- chosenVacancyflux: select case (vacancyflux_type(mesh_element(3,el)))
-   case (VACANCYFLUX_isochempot_ID) chosenVacancyflux
-     homogenization_updateState = &
-       homogenization_updateState .and. &
-       vacancyflux_isochempot_updateState(materialpoint_subdt(ip,el), &
-                                          ip, &
-                                          el)
- end select chosenVacancyflux
 
 end function homogenization_updateState
 
@@ -1286,33 +1027,15 @@ function homogenization_postResults(ip,el)
    mappingHomogenization, &
    homogState, &
    thermalState, &
-   damageState, &
-   vacancyfluxState, &
-   porosityState, &
-   hydrogenfluxState, &
    homogenization_type, &
    thermal_type, &
-   damage_type, &
-   vacancyflux_type, &
-   porosity_type, &
-   hydrogenflux_type, &
    HOMOGENIZATION_NONE_ID, &
    HOMOGENIZATION_ISOSTRAIN_ID, &
    HOMOGENIZATION_MULTIPHASE_ID, &
    HOMOGENIZATION_RGC_ID, &
    THERMAL_isothermal_ID, &
    THERMAL_adiabatic_ID, &
-   THERMAL_conduction_ID, &
-   DAMAGE_none_ID, &
-   DAMAGE_local_ID, &
-   DAMAGE_nonlocal_ID, &
-   VACANCYFLUX_isoconc_ID, &
-   VACANCYFLUX_isochempot_ID, &
-   VACANCYFLUX_cahnhilliard_ID, &
-   POROSITY_none_ID, &
-   POROSITY_phasefield_ID, &
-   HYDROGENFLUX_isoconc_ID, &
-   HYDROGENFLUX_cahnhilliard_ID
+   THERMAL_conduction_ID
  use homogenization_isostrain, only: &
    homogenization_isostrain_postResults
  use homogenization_multiphase, only: &
@@ -1323,29 +1046,13 @@ function homogenization_postResults(ip,el)
    thermal_adiabatic_postResults
  use thermal_conduction, only: &
    thermal_conduction_postResults
- use damage_local, only: &
-   damage_local_postResults
- use damage_nonlocal, only: &
-   damage_nonlocal_postResults
- use vacancyflux_isochempot, only: &
-   vacancyflux_isochempot_postResults
- use vacancyflux_cahnhilliard, only: &
-   vacancyflux_cahnhilliard_postResults
- use porosity_phasefield, only: &
-   porosity_phasefield_postResults
- use hydrogenflux_cahnhilliard, only: &
-   hydrogenflux_cahnhilliard_postResults
 
  implicit none
  integer(pInt), intent(in) :: &
    ip, &                                                                                            !< integration point
    el                                                                                               !< element number
  real(pReal), dimension(  homogState       (mappingHomogenization(2,ip,el))%sizePostResults &
-                        + thermalState     (mappingHomogenization(2,ip,el))%sizePostResults &
-                        + damageState      (mappingHomogenization(2,ip,el))%sizePostResults &
-                        + vacancyfluxState (mappingHomogenization(2,ip,el))%sizePostResults &
-                        + porosityState    (mappingHomogenization(2,ip,el))%sizePostResults &
-                        + hydrogenfluxState(mappingHomogenization(2,ip,el))%sizePostResults) :: &
+                        + thermalState     (mappingHomogenization(2,ip,el))%sizePostResults) :: &
    homogenization_postResults
  integer(pInt) :: &
    startPos, endPos
@@ -1394,53 +1101,6 @@ function homogenization_postResults(ip,el)
      homogenization_postResults(startPos:endPos) = &
        thermal_conduction_postResults(ip, el)
  end select chosenThermal
-
- startPos = endPos + 1_pInt
- endPos   = endPos + damageState(mappingHomogenization(2,ip,el))%sizePostResults
- chosenDamage: select case (damage_type(mesh_element(3,el)))
-   case (DAMAGE_none_ID) chosenDamage
-
-   case (DAMAGE_local_ID) chosenDamage
-     homogenization_postResults(startPos:endPos) = &
-       damage_local_postResults(ip, el)
-
-   case (DAMAGE_nonlocal_ID) chosenDamage
-     homogenization_postResults(startPos:endPos) = &
-       damage_nonlocal_postResults(ip, el)
- end select chosenDamage
-
- startPos = endPos + 1_pInt
- endPos   = endPos + vacancyfluxState(mappingHomogenization(2,ip,el))%sizePostResults
- chosenVacancyflux: select case (vacancyflux_type(mesh_element(3,el)))
-   case (VACANCYFLUX_isoconc_ID) chosenVacancyflux
-
-   case (VACANCYFLUX_isochempot_ID) chosenVacancyflux
-     homogenization_postResults(startPos:endPos) = &
-       vacancyflux_isochempot_postResults(ip, el)
-   case (VACANCYFLUX_cahnhilliard_ID) chosenVacancyflux
-     homogenization_postResults(startPos:endPos) = &
-       vacancyflux_cahnhilliard_postResults(ip, el)
- end select chosenVacancyflux
-
- startPos = endPos + 1_pInt
- endPos   = endPos + porosityState(mappingHomogenization(2,ip,el))%sizePostResults
- chosenPorosity: select case (porosity_type(mesh_element(3,el)))
-   case (POROSITY_none_ID) chosenPorosity
-
-   case (POROSITY_phasefield_ID) chosenPorosity
-     homogenization_postResults(startPos:endPos) = &
-       porosity_phasefield_postResults(ip, el)
- end select chosenPorosity
-
- startPos = endPos + 1_pInt
- endPos   = endPos + hydrogenfluxState(mappingHomogenization(2,ip,el))%sizePostResults
- chosenHydrogenflux: select case (hydrogenflux_type(mesh_element(3,el)))
-   case (HYDROGENFLUX_isoconc_ID) chosenHydrogenflux
-
-   case (HYDROGENFLUX_cahnhilliard_ID) chosenHydrogenflux
-     homogenization_postResults(startPos:endPos) = &
-       hydrogenflux_cahnhilliard_postResults(ip, el)
- end select chosenHydrogenflux
 
 end function homogenization_postResults
 

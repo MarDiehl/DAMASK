@@ -82,22 +82,13 @@ list(APPEND OBJECTFILES $<TARGET_OBJECTS:PLASTIC>)
 add_library (KINEMATICS OBJECT
   "kinematics_cleavage_opening.f90"
   "kinematics_slipplane_opening.f90"
-  "kinematics_thermal_expansion.f90"
-  "kinematics_vacancy_strain.f90"
-  "kinematics_hydrogen_strain.f90")
+  "kinematics_thermal_expansion.f90")
 add_dependencies(KINEMATICS DAMASK_HELPERS)
 list(APPEND OBJECTFILES $<TARGET_OBJECTS:KINEMATICS>)
 
 add_library (SOURCE OBJECT
   "source_thermal_dissipation.f90"
-  "source_thermal_externalheat.f90"
-  "source_damage_isoBrittle.f90"
-  "source_damage_isoDuctile.f90"
-  "source_damage_anisoBrittle.f90"
-  "source_damage_anisoDuctile.f90"
-  "source_vacancy_phenoplasticity.f90"
-  "source_vacancy_irradiation.f90"
-  "source_vacancy_thermalfluc.f90")
+  "source_thermal_externalheat.f90")
 add_dependencies(SOURCE DAMASK_HELPERS)
 list(APPEND OBJECTFILES $<TARGET_OBJECTS:SOURCE>)
 
@@ -117,32 +108,6 @@ add_library(HOMOGENIZATION OBJECT
 add_dependencies(HOMOGENIZATION CRYSTALLITE)
 list(APPEND OBJECTFILES $<TARGET_OBJECTS:HOMOGENIZATION>)
 
-add_library(HYDROGENFLUX OBJECT
-  "hydrogenflux_isoconc.f90"
-  "hydrogenflux_cahnhilliard.f90")
-add_dependencies(HYDROGENFLUX CRYSTALLITE)
-list(APPEND OBJECTFILES $<TARGET_OBJECTS:HYDROGENFLUX>)
-
-add_library(POROSITY OBJECT
-  "porosity_none.f90"
-  "porosity_phasefield.f90")
-add_dependencies(POROSITY CRYSTALLITE)
-list(APPEND OBJECTFILES $<TARGET_OBJECTS:POROSITY>)
-
-add_library(VACANCYFLUX OBJECT
-  "vacancyflux_isoconc.f90"
-  "vacancyflux_isochempot.f90"
-  "vacancyflux_cahnhilliard.f90")
-add_dependencies(VACANCYFLUX CRYSTALLITE)
-list(APPEND OBJECTFILES $<TARGET_OBJECTS:VACANCYFLUX>)
-
-add_library(DAMAGE OBJECT
-  "damage_none.f90"
-  "damage_local.f90"
-  "damage_nonlocal.f90")
-add_dependencies(DAMAGE CRYSTALLITE)
-list(APPEND OBJECTFILES $<TARGET_OBJECTS:DAMAGE>)
-
 add_library(THERMAL OBJECT
   "thermal_isothermal.f90"
   "thermal_adiabatic.f90"
@@ -151,7 +116,7 @@ add_dependencies(THERMAL CRYSTALLITE)
 list(APPEND OBJECTFILES $<TARGET_OBJECTS:THERMAL>)
 
 add_library(DAMASK_ENGINE OBJECT "homogenization.f90")
-add_dependencies(DAMASK_ENGINE THERMAL DAMAGE VACANCYFLUX POROSITY HYDROGENFLUX HOMOGENIZATION)
+add_dependencies(DAMASK_ENGINE THERMAL HOMOGENIZATION)
 list(APPEND OBJECTFILES $<TARGET_OBJECTS:DAMASK_ENGINE>)
 
 add_library(DAMASK_CPFE OBJECT "CPFEM2.f90")
@@ -165,7 +130,6 @@ if ("${PROJECT_NAME}" STREQUAL "DAMASK_spectral")
 
       add_library(SPECTRAL_SOLVER OBJECT
       "spectral_thermal.f90"
-      "spectral_damage.f90"
       "spectral_mech_AL.f90"
       "spectral_mech_Polarisation.f90"
       "spectral_mech_Basic.f90")
@@ -182,10 +146,6 @@ elseif ("${PROJECT_NAME}" STREQUAL "DAMASK_FEM")
       add_dependencies(FEM_UTILITIES DAMASK_CPFE)
 
       add_library(FEM_SOLVER OBJECT
-      "FEM_hydrogenflux.f90"
-      "FEM_porosity.f90"
-      "FEM_vacancyflux.f90"
-      "FEM_damage.f90"
       "FEM_thermal.f90"
       "FEM_mech.f90")
       add_dependencies(FEM_SOLVER FEM_UTILITIES)

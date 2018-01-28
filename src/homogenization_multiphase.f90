@@ -1090,8 +1090,7 @@ function homogenization_multiphase_getPhaseSource(phi,ip,el)
  real(pReal),   dimension(homogenization_maxNgrains), intent(in) :: phi
  integer(pInt),                                       intent(in) :: ip, el                          !< element number
  real(pReal),   dimension(homogenization_maxNgrains)  :: &
-   bulkSource, &
-   intfSource
+   bulkSource
  integer(pInt) :: &
    grI, grJ, grK, &
    homog, & 
@@ -1112,22 +1111,27 @@ function homogenization_multiphase_getPhaseSource(phi,ip,el)
    enddo  
  enddo
  
- intfSource = 0.0_pReal
+ homogenization_multiphase_getPhaseSource = 0.0_pReal
  do grI = 1_pInt, homogenization_Ngrains(homog)
    do grJ = 1_pInt, homogenization_Ngrains(homog)
      do grK = 1_pInt, homogenization_Ngrains(homog)
-       intfSource(grI) = intfSource(grI) + &
+       homogenization_multiphase_getPhaseSource(grI) = &
+         homogenization_multiphase_getPhaseSource(grI) + &
          homogenization_multiphase_intfMob(grI,grJ,instance)* &
          (homogenization_multiphase_intfEng(grJ,grK,instance) - &
           homogenization_multiphase_intfEng(grI,grK,instance))* &
          phi(grK) 
      enddo
+     homogenization_multiphase_getPhaseSource(grI) = &
+       homogenization_multiphase_getPhaseSource(grI) + &
+       homogenization_multiphase_intfMob(grI,grJ,instance)* &
+       (bulkSource(grI) - bulkSource(grJ))
    enddo
  enddo
- intfSource = 8.0_pReal*intfSource/homogenization_multiphase_intfWidth(instance)
+ homogenization_multiphase_getPhaseSource = &
+   8.0_pReal*homogenization_multiphase_getPhaseSource/&
+   homogenization_multiphase_intfWidth(instance)
  
- homogenization_multiphase_getPhaseSource = bulkSource + intfSource
-
 end function homogenization_multiphase_getPhaseSource
 
 
@@ -1137,9 +1141,6 @@ end function homogenization_multiphase_getPhaseSource
 function homogenization_multiphase_getPhaseSourceTangent(ip,el)
  use material, only: &
    material_homog, &
-   phaseAt, &
-   phase_source, &
-   phase_Nsources, &
    homogenization_Ngrains, &
    homogenization_maxNgrains, &
    homogenization_typeInstance
@@ -1148,46 +1149,29 @@ function homogenization_multiphase_getPhaseSourceTangent(ip,el)
  real(pReal),   dimension(homogenization_maxNgrains,homogenization_maxNgrains) :: &
    homogenization_multiphase_getPhaseSourceTangent
  integer(pInt), intent(in) :: ip, el                                                                !< element number
- real(pReal),   dimension(homogenization_maxNgrains,homogenization_maxNgrains) :: &
-   bulkSourceTangent, &
-   intfSourceTangent
  integer(pInt) :: &
    grI, grJ, grK, &
    homog, & 
-   instance, &
-   source, &
-   phase
+   instance
 
  homog = material_homog(ip,el)
  instance = homogenization_typeInstance(homog)
  
- bulkSourceTangent = 0.0_pReal
- do grI = 1_pInt, homogenization_Ngrains(homog)
-   phase = phaseAt(grI,ip,el)
-   do source = 1_pInt, phase_Nsources(phase)
-     select case(phase_source(source,phase))                                                   
-
-     end select
-   enddo  
- enddo
- 
- intfSourceTangent = 0.0_pReal
+ homogenization_multiphase_getPhaseSourceTangent = 0.0_pReal
  do grI = 1_pInt, homogenization_Ngrains(homog)
    do grJ = 1_pInt, homogenization_Ngrains(homog)
      do grK = 1_pInt, homogenization_Ngrains(homog)
-       intfSourceTangent(grI,grK) = &
-         intfSourceTangent(grI,grK) + &
+       homogenization_multiphase_getPhaseSourceTangent(grI,grK) = &
+         homogenization_multiphase_getPhaseSourceTangent(grI,grK) + &
          homogenization_multiphase_intfMob(grI,grJ,instance)* &
          (homogenization_multiphase_intfEng(grJ,grK,instance) - &
           homogenization_multiphase_intfEng(grI,grK,instance)) 
      enddo
    enddo
  enddo
- intfSourceTangent = 8.0_pReal*intfSourceTangent/ &
-                     homogenization_multiphase_intfWidth(instance)
- 
  homogenization_multiphase_getPhaseSourceTangent = &
-   bulkSourceTangent + intfSourceTangent
+   8.0_pReal*homogenization_multiphase_getPhaseSourceTangent/ &
+   homogenization_multiphase_intfWidth(instance)
 
 end function homogenization_multiphase_getPhaseSourceTangent
 

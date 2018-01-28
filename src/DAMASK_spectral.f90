@@ -65,9 +65,7 @@ program DAMASK_spectral
    materialpoint_postResults
  use material, only: &
    thermal_type, &
-   damage_type, &
-   THERMAL_conduction_ID, &
-   DAMAGE_nonlocal_ID
+   THERMAL_conduction_ID
  use spectral_utilities, only: &
    utilities_init, &
    utilities_destroy, &
@@ -77,12 +75,10 @@ program DAMASK_spectral
    nActiveFields, &
    FIELD_UNDEFINED_ID, &
    FIELD_MECH_ID, &
-   FIELD_THERMAL_ID, &
-   FIELD_DAMAGE_ID
+   FIELD_THERMAL_ID
  use spectral_mech_Basic
  use spectral_mech_AL
  use spectral_mech_Polarisation
- use spectral_damage
  use spectral_thermal
 
 
@@ -168,7 +164,6 @@ program DAMASK_spectral
 ! initialize field solver information
  nActiveFields = 1
  if (any(thermal_type  == THERMAL_conduction_ID  )) nActiveFields = nActiveFields + 1
- if (any(damage_type   == DAMAGE_nonlocal_ID     )) nActiveFields = nActiveFields + 1
  allocate(solres(nActiveFields))
 
 !--------------------------------------------------------------------------------------------------
@@ -205,10 +200,6 @@ program DAMASK_spectral
      field = field + 1
      loadCases(i)%ID(field) = FIELD_THERMAL_ID
    endif thermalActive
-   damageActive: if (any(damage_type   == DAMAGE_nonlocal_ID)) then
-     field = field + 1
-     loadCases(i)%ID(field) = FIELD_DAMAGE_ID
-   endif damageActive
  enddo
 
 !--------------------------------------------------------------------------------------------------
@@ -384,9 +375,6 @@ program DAMASK_spectral
       case(FIELD_THERMAL_ID)
        call spectral_thermal_init
 
-     case(FIELD_DAMAGE_ID)
-       call spectral_damage_init()
-
    end select
  enddo
 
@@ -542,7 +530,6 @@ program DAMASK_spectral
                end select
 
            case(FIELD_THERMAL_ID); call spectral_thermal_forward()
-           case(FIELD_DAMAGE_ID); call spectral_damage_forward()
            end select
          enddo
 
@@ -577,9 +564,6 @@ program DAMASK_spectral
 
                case(FIELD_THERMAL_ID)
                  solres(field) = spectral_thermal_solution(timeinc,timeIncOld,remainingLoadCaseTime)
-
-               case(FIELD_DAMAGE_ID)
-                 solres(field) = spectral_damage_solution(timeinc,timeIncOld,remainingLoadCaseTime)
 
              end select
              if (.not. solres(field)%converged) exit                                                ! no solution found
@@ -699,8 +683,6 @@ subroutine quit(stop_id)
    AL_destroy
  use spectral_mech_Polarisation, only: &
    Polarisation_destroy
- use spectral_damage, only: &
-   spectral_damage_destroy
  use spectral_thermal, only: &
    spectral_thermal_destroy
  use spectral_utilities, only: &
@@ -722,7 +704,6 @@ subroutine quit(stop_id)
  call BasicPETSC_destroy()
  call AL_destroy()
  call Polarisation_destroy()
- call spectral_damage_destroy()
  call spectral_thermal_destroy()
  call utilities_destroy()
 
