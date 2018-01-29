@@ -4,7 +4,8 @@
 module chemicalFE_quadenergy
  use prec, only: &
    pReal,&
-   pInt
+   pInt, &
+   p_vec
 
  implicit none
  private
@@ -28,6 +29,7 @@ module chemicalFE_quadenergy
  real(pReal),                         dimension(:,:),   allocatable,         private :: &
    chemicalFE_quadenergy_Mobility, &                                                         
    chemicalFE_quadenergy_EqConc, &                                                          
+   chemicalFE_quadenergy_InitialConc, &                                                          
    chemicalFE_quadenergy_LinCoeff                                                        
  real(pReal),                         dimension(:,:,:), allocatable,         private :: &
    chemicalFE_quadenergy_QuadCoeff, &
@@ -47,6 +49,7 @@ module chemicalFE_quadenergy
    chemicalFE_quadenergy_getEnergy, &
    chemicalFE_quadenergy_getChemPot, &
    chemicalFE_quadenergy_getConc, &
+   chemicalFE_quadenergy_putConc, &
    chemicalFE_quadenergy_getConcTangent, &
    chemicalFE_quadenergy_getMobility, &
    chemicalFE_quadenergy_postResults
@@ -86,6 +89,9 @@ subroutine chemicalFE_quadenergy_init(fileUnit)
  use math, only: &
    math_invert
  use material, only: &
+   chemicalMapping, &
+   chemicalConc, &
+   phasememberAt, &
    phase_chemicalFE, &
    phase_chemicalFEInstance, &
    phase_Noutput, &
@@ -134,6 +140,7 @@ subroutine chemicalFE_quadenergy_init(fileUnit)
  allocate(chemicalFE_quadenergy_ConstCoeff                        (maxNinstance),source=0.0_pReal)
  allocate(chemicalFE_quadenergy_Mobility  (material_maxNcomponents,maxNinstance),source=0.0_pReal)
  allocate(chemicalFE_quadenergy_EqConc    (material_maxNcomponents,maxNinstance),source=0.0_pReal)
+ allocate(chemicalFE_quadenergy_InitialConc(material_maxNcomponents,maxNinstance),source=0.0_pReal)
  allocate(chemicalFE_quadenergy_LinCoeff  (material_maxNcomponents,maxNinstance),source=0.0_pReal)
  allocate(chemicalFE_quadenergy_QuadCoeff (material_maxNcomponents, &
                                            material_maxNcomponents,maxNinstance),source=0.0_pReal)
@@ -201,6 +208,13 @@ subroutine chemicalFE_quadenergy_init(fileUnit)
            call IO_error(150_pInt,ext_msg=trim(tag)//' ('//CHEMICALFE_QUADENERGY_label//')')
          do j = 1_pInt, chemicalFE_quadenergy_Ncomponents(instance)
            chemicalFE_quadenergy_EqConc(j,instance) = IO_floatValue(line,chunkPos,1_pInt+j)
+         enddo
+         
+       case ('component_initialconc')
+         if (chunkPos(1) /= chemicalFE_quadenergy_Ncomponents(instance) + 1_pInt) &
+           call IO_error(150_pInt,ext_msg=trim(tag)//' ('//CHEMICALFE_QUADENERGY_label//')')
+         do j = 1_pInt, chemicalFE_quadenergy_Ncomponents(instance)
+           chemicalFE_quadenergy_InitialConc(j,instance) = IO_floatValue(line,chunkPos,1_pInt+j)
          enddo
          
        case ('component_constcoeff')
@@ -299,6 +313,11 @@ subroutine chemicalFE_quadenergy_init(fileUnit)
        allocate(chemicalState(phase)%RK4dotState      (sizeDotState,NipcMyPhase), source=0.0_pReal)
      if (any(numerics_integrator == 5_pInt)) &
        allocate(chemicalState(phase)%RKCK45dotState (6,sizeDotState,NipcMyPhase), source=0.0_pReal)
+     chemicalMapping(phase)%p => phasememberAt
+     do j = 1_pInt, chemicalFE_quadenergy_Ncomponents(instance)
+       allocate(chemicalConc(j,phase)%p(NipcMyPhase), &
+                  source=chemicalFE_quadenergy_InitialConc(j,instance))
+     enddo
    endif myPhase2
  enddo initializeInstances
 
@@ -421,6 +440,40 @@ function chemicalFE_quadenergy_getConc(chempot,ipc,ip,el)
  enddo
 
 end function chemicalFE_quadenergy_getConc
+
+
+!--------------------------------------------------------------------------------------------------
+!> @brief stores the component concentration for a given instance of this model
+!--------------------------------------------------------------------------------------------------
+subroutine chemicalFE_quadenergy_putConc(chempot,ipc,ip,el)
+ use material, only: &
+   material_phase, &
+   phase_chemicalFEInstance, &
+   material_maxNcomponents, &
+   chemicalMapping, &
+   chemicalConc
+
+ implicit none
+ integer(pInt), intent(in) :: &
+   ipc, ip, el
+ real(pReal), dimension(material_maxNcomponents), intent(in) :: &
+   chempot
+ real(pReal), dimension(material_maxNcomponents) :: &
+   conc
+ integer(pInt) :: &
+   cp, &
+   phase, &
+   instance    
+
+ phase = material_phase(ipc,ip,el)
+ instance = phase_chemicalFEInstance(phase)
+ conc = chemicalFE_quadenergy_getConc(chempot,ipc,ip,el)
+ do cp = 1_pInt, chemicalFE_quadenergy_Ncomponents(instance)
+   chemicalConc(cp,phase)%p(chemicalMapping(phase)%p(ipc,ip,el)) = &
+     conc(cp)
+ enddo
+
+end subroutine chemicalFE_quadenergy_putConc
 
 
 !--------------------------------------------------------------------------------------------------

@@ -72,6 +72,10 @@ module homogenization_multiphase
    homogenization_multiphase_getPhaseSource, &
    homogenization_multiphase_getPhaseSourceTangent, &
    homogenization_multiphase_putPhaseFrac, &
+   homogenization_multiphase_getComponentConc, &
+   homogenization_multiphase_getComponentConcTangent, &
+   homogenization_multiphase_getComponentMobility, &
+   homogenization_multiphase_putComponentConc, &
    homogenization_multiphase_postResults
 
 contains
@@ -1203,6 +1207,207 @@ subroutine homogenization_multiphase_putPhaseFrac(frac,ip,el)
  enddo
 
 end subroutine homogenization_multiphase_putPhaseFrac
+
+
+!--------------------------------------------------------------------------------------------------
+!> @brief return component concentration at material point 
+!--------------------------------------------------------------------------------------------------
+function homogenization_multiphase_getComponentConc(chempot,conc0,ip,el)
+ use material, only: &
+   material_homog, &
+   homogenization_Ngrains, &
+   material_phase, &
+   material_maxNcomponents, &
+   phase_chemicalFE, &
+   CHEMICALFE_quadenergy_ID, &
+   CHEMICALFE_thermodynamic_ID, &
+   phasefracMapping, &
+   phasefrac
+ use chemicalFE_quadenergy, only: &
+   chemicalFE_quadenergy_getConc  
+ use chemicalFE_thermodynamic, only: &
+   chemicalFE_thermodynamic_getConc  
+ 
+ implicit none
+ integer(pInt),                                   intent(in) :: &
+   ip, el                                                                                      !< element number
+ real(pReal), dimension(material_maxNcomponents), intent(in) :: &
+   chempot, conc0
+ real(pReal), dimension(material_maxNcomponents) :: &
+   homogenization_multiphase_getComponentConc
+ integer(pInt) :: &
+   gr, &
+   homog, & 
+   offset
+
+ homog = material_homog(ip,el)
+ offset = phasefracMapping(homog)%p(ip,el)
+ homogenization_multiphase_getComponentConc = 0.0_pReal
+ do gr = 1_pInt, homogenization_Ngrains(homog)
+   chemicalFEType: select case (phase_chemicalFE(material_phase(gr,ip,el)))
+     case (CHEMICALFE_quadenergy_ID) chemicalFEType
+       homogenization_multiphase_getComponentConc = &
+         homogenization_multiphase_getComponentConc + &
+         phasefrac(gr,homog)%p(offset)* &
+         chemicalFE_quadenergy_getConc(chempot,gr,ip,el)
+
+     case (CHEMICALFE_thermodynamic_ID) chemicalFEType
+       homogenization_multiphase_getComponentConc = &
+         homogenization_multiphase_getComponentConc + &
+         phasefrac(gr,homog)%p(offset)* &
+         chemicalFE_thermodynamic_getConc(chempot,conc0,300.0_pReal,gr,ip,el)
+
+   end select chemicalFEType
+ enddo
+
+end function homogenization_multiphase_getComponentConc
+
+
+!--------------------------------------------------------------------------------------------------
+!> @brief return component concentration tangent at material point 
+!--------------------------------------------------------------------------------------------------
+function homogenization_multiphase_getComponentConcTangent(chempot,conc0,ip,el)
+ use material, only: &
+   material_homog, &
+   homogenization_Ngrains, &
+   material_phase, &
+   material_maxNcomponents, &
+   phase_chemicalFE, &
+   CHEMICALFE_quadenergy_ID, &
+   CHEMICALFE_thermodynamic_ID, &
+   phasefracMapping, &
+   phasefrac
+ use chemicalFE_quadenergy, only: &
+   chemicalFE_quadenergy_getConcTangent  
+ use chemicalFE_thermodynamic, only: &
+   chemicalFE_thermodynamic_getConcTangent  
+ 
+ implicit none
+ integer(pInt),                                   intent(in) :: &
+   ip, el                                                                                      !< element number
+ real(pReal), dimension(material_maxNcomponents), intent(in) :: &
+   chempot, conc0
+ real(pReal), dimension(material_maxNcomponents,material_maxNcomponents) :: &
+   homogenization_multiphase_getComponentConcTangent
+ integer(pInt) :: &
+   gr, &
+   homog, & 
+   offset
+
+ homog = material_homog(ip,el)
+ offset = phasefracMapping(homog)%p(ip,el)
+ homogenization_multiphase_getComponentConcTangent = 0.0_pReal
+ do gr = 1_pInt, homogenization_Ngrains(homog)
+   chemicalFEType: select case (phase_chemicalFE(material_phase(gr,ip,el)))
+     case (CHEMICALFE_quadenergy_ID) chemicalFEType
+       homogenization_multiphase_getComponentConcTangent = &
+         homogenization_multiphase_getComponentConcTangent + &
+         phasefrac(gr,homog)%p(offset)* &
+         chemicalFE_quadenergy_getConcTangent(gr,ip,el)
+
+     case (CHEMICALFE_thermodynamic_ID) chemicalFEType
+       homogenization_multiphase_getComponentConcTangent = &
+         homogenization_multiphase_getComponentConcTangent + &
+         phasefrac(gr,homog)%p(offset)* &
+         chemicalFE_thermodynamic_getConcTangent(chempot,conc0,300.0_pReal,gr,ip,el)
+
+   end select chemicalFEType
+ enddo
+
+end function homogenization_multiphase_getComponentConcTangent
+
+
+!--------------------------------------------------------------------------------------------------
+!> @brief return component mobility at material point 
+!--------------------------------------------------------------------------------------------------
+function homogenization_multiphase_getComponentMobility(ip,el)
+ use material, only: &
+   material_homog, &
+   homogenization_Ngrains, &
+   material_phase, &
+   material_maxNcomponents, &
+   phase_chemicalFE, &
+   CHEMICALFE_quadenergy_ID, &
+   CHEMICALFE_thermodynamic_ID, &
+   phasefracMapping, &
+   phasefrac
+ use chemicalFE_quadenergy, only: &
+   chemicalFE_quadenergy_getMobility  
+ use chemicalFE_thermodynamic, only: &
+   chemicalFE_thermodynamic_getMobility  
+ 
+ implicit none
+ integer(pInt),                                   intent(in) :: &
+   ip, el                                                                                      !< element number
+ real(pReal), dimension(material_maxNcomponents) :: &
+   homogenization_multiphase_getComponentMobility
+ integer(pInt) :: &
+   gr, &
+   homog, & 
+   offset
+
+ homog = material_homog(ip,el)
+ offset = phasefracMapping(homog)%p(ip,el)
+ homogenization_multiphase_getComponentMobility = 0.0_pReal
+ do gr = 1_pInt, homogenization_Ngrains(homog)
+   chemicalFEType: select case (phase_chemicalFE(material_phase(gr,ip,el)))
+     case (CHEMICALFE_quadenergy_ID) chemicalFEType
+       homogenization_multiphase_getComponentMobility = &
+         homogenization_multiphase_getComponentMobility + &
+         phasefrac(gr,homog)%p(offset)* &
+         chemicalFE_quadenergy_getMobility(gr,ip,el)
+
+     case (CHEMICALFE_thermodynamic_ID) chemicalFEType
+       homogenization_multiphase_getComponentMobility = &
+         homogenization_multiphase_getComponentMobility + &
+         phasefrac(gr,homog)%p(offset)* &
+         chemicalFE_thermodynamic_getMobility(gr,ip,el)
+
+   end select chemicalFEType
+ enddo
+
+end function homogenization_multiphase_getComponentMobility
+
+
+!--------------------------------------------------------------------------------------------------
+!> @brief set module wide component concentrations 
+!--------------------------------------------------------------------------------------------------
+subroutine homogenization_multiphase_putComponentConc(chempot,conc0,ip,el)
+ use material, only: &
+   material_homog, &
+   homogenization_Ngrains, &
+   material_phase, &
+   material_maxNcomponents, &
+   phase_chemicalFE, &
+   CHEMICALFE_quadenergy_ID, &
+   CHEMICALFE_thermodynamic_ID
+ use chemicalFE_quadenergy, only: &
+   chemicalFE_quadenergy_putConc  
+ use chemicalFE_thermodynamic, only: &
+   chemicalFE_thermodynamic_putConc  
+ 
+ implicit none
+ integer(pInt),                                   intent(in) :: &
+   ip, el                                                                                      !< element number
+ real(pReal), dimension(material_maxNcomponents), intent(in) :: &
+   chempot, conc0
+ integer(pInt) :: &
+   gr, &
+   homog
+
+ homog = material_homog(ip,el)
+ do gr = 1_pInt, homogenization_Ngrains(homog)
+   chemicalFEType: select case (phase_chemicalFE(material_phase(gr,ip,el)))
+     case (CHEMICALFE_quadenergy_ID) chemicalFEType
+       call chemicalFE_quadenergy_putConc(chempot,gr,ip,el)
+
+     case (CHEMICALFE_thermodynamic_ID) chemicalFEType
+       call chemicalFE_thermodynamic_putConc(chempot,conc0,300.0_pReal,gr,ip,el)
+
+   end select chemicalFEType
+ enddo
+
+end subroutine homogenization_multiphase_putComponentConc
 
 
 !--------------------------------------------------------------------------------------------------

@@ -4,7 +4,9 @@
 !--------------------------------------------------------------------------------------------------
 module chemicalFE_none
  use prec, only: &
-   pInt
+   pReal, &
+   pInt, &
+   p_vec
 
  implicit none
  private
@@ -39,6 +41,10 @@ subroutine chemicalFE_none_init
  use numerics, only: &
    numerics_integrator
  use material, only: &
+   chemicalMapping, &
+   chemicalConc, &
+   material_maxNcomponents, &
+   phaseconstmemberAt, &
    phase_chemicalFE, &
    CHEMICALFE_NONE_label, &
    material_phase, &
@@ -50,6 +56,7 @@ subroutine chemicalFE_none_init
  integer(pInt) :: &
    maxNinstance, &
    phase, &
+   cp, &
    NofMyPhase, &
    sizeState, &
    sizeDotState, &
@@ -67,7 +74,7 @@ subroutine chemicalFE_none_init
 
  initializeInstances: do phase = 1_pInt, size(phase_chemicalFE)
    if (phase_chemicalFE(phase) == CHEMICALFE_none_ID) then
-   NofMyPhase=count(material_phase==phase)
+     NofMyPhase=count(material_phase==phase)
 
      sizeState    = 0_pInt
      chemicalState(phase)%sizeState = sizeState
@@ -92,6 +99,10 @@ subroutine chemicalFE_none_init
        allocate(chemicalState(phase)%RK4dotState      (sizeDotState,NofMyPhase))
      if (any(numerics_integrator == 5_pInt)) &
        allocate(chemicalState(phase)%RKCK45dotState (6,sizeDotState,NofMyPhase))
+     chemicalMapping(phase)%p => phaseconstmemberAt
+     do cp = 1_pInt, material_maxNcomponents
+       allocate(chemicalConc(cp,phase)%p(1), source=0.0_pReal)
+     enddo
    endif
  enddo initializeInstances
 

@@ -4,7 +4,8 @@
 module chemicalFE_thermodynamic
  use prec, only: &
    pReal,&
-   pInt
+   pInt, &
+   p_vec
 
  implicit none
  private
@@ -46,6 +47,7 @@ module chemicalFE_thermodynamic
    chemicalFE_thermodynamic_getEnergy, &
    chemicalFE_thermodynamic_getChemPot, &
    chemicalFE_thermodynamic_getConc, &
+   chemicalFE_thermodynamic_putConc, &
    chemicalFE_thermodynamic_getConcTangent, &
    chemicalFE_thermodynamic_getMobility, &
    chemicalFE_thermodynamic_postResults
@@ -83,6 +85,9 @@ subroutine chemicalFE_thermodynamic_init(fileUnit)
    IO_timeStamp, &
    IO_EOF
  use material, only: &
+   chemicalMapping, &
+   chemicalConc, &
+   phasememberAt, &
    phase_chemicalFE, &
    phase_chemicalFEInstance, &
    phase_Noutput, &
@@ -269,6 +274,10 @@ subroutine chemicalFE_thermodynamic_init(fileUnit)
        allocate(chemicalState(phase)%RK4dotState      (sizeDotState,NipcMyPhase), source=0.0_pReal)
      if (any(numerics_integrator == 5_pInt)) &
        allocate(chemicalState(phase)%RKCK45dotState (6,sizeDotState,NipcMyPhase), source=0.0_pReal)
+     chemicalMapping(phase)%p => phasememberAt
+     do j = 1_pInt, chemicalFE_thermodynamic_Ncomponents(instance)
+       allocate(chemicalConc(j,phase)%p(NipcMyPhase), source=0.0_pReal)
+     enddo
    endif myPhase2
  enddo initializeInstances
 
@@ -402,6 +411,42 @@ function chemicalFE_thermodynamic_getConc(chempot,conc0,T,ipc,ip,el)
     sum(chemicalFE_thermodynamic_getConc(1:chemicalFE_thermodynamic_Ncomponents(instance))))
  
 end function chemicalFE_thermodynamic_getConc
+
+
+!--------------------------------------------------------------------------------------------------
+!> @brief returns the component concentration for a given instance of this model
+!--------------------------------------------------------------------------------------------------
+subroutine chemicalFE_thermodynamic_putConc(chempot,conc0,T,ipc,ip,el)
+ use material, only: &
+   material_phase, &
+   phase_chemicalFEInstance, &
+   material_maxNcomponents, &
+   chemicalMapping, &
+   chemicalConc
+
+ implicit none
+ integer(pInt), intent(in) :: &
+   ipc, ip, el
+ real(pReal), dimension(material_maxNcomponents), intent(in) :: &
+   chempot, conc0
+ real(pReal), intent(in) :: &
+   T
+ real(pReal), dimension(material_maxNcomponents) :: &
+   conc
+ integer(pInt) :: &
+   cp, &
+   phase, &
+   instance    
+
+ phase = material_phase(ipc,ip,el)
+ instance = phase_chemicalFEInstance(phase)
+ conc = chemicalFE_thermodynamic_getConc(chempot,conc0,T,ipc,ip,el)
+ do cp = 1_pInt, chemicalFE_thermodynamic_Ncomponents(instance)
+   chemicalConc(cp,phase)%p(chemicalMapping(phase)%p(ipc,ip,el)) = &
+     conc(cp)
+ enddo
+ 
+end subroutine chemicalFE_thermodynamic_putConc
 
 
 !--------------------------------------------------------------------------------------------------
