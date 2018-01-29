@@ -32,6 +32,7 @@ subroutine homogenization_none_init()
  
  implicit none
  integer(pInt) :: &
+   grI, &
    homog, &
    NofMyHomog
 
@@ -49,6 +50,10 @@ subroutine homogenization_none_init()
      allocate(homogState(homog)%subState0(0_pInt,NofMyHomog), source=0.0_pReal)
      allocate(homogState(homog)%state    (0_pInt,NofMyHomog), source=0.0_pReal)
 
+     phasefracMapping(homog)%p => mappingHomogenizationConst
+     do grI = 1_pInt, homogenization_Ngrains(homog)
+       allocate  (phasefrac(grI,homog)%p(1), source = 1.0_pReal/real(homogenization_Ngrains(homog),pReal))
+     enddo  
    endif myhomog
  enddo initializeInstances
 
