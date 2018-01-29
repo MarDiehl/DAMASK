@@ -431,22 +431,6 @@ subroutine crystallite_init
  call crystallite_orientations()
  crystallite_orientation0 = crystallite_orientation                                                 ! store initial orientations for calculation of grain rotations
 
- !$OMP PARALLEL DO PRIVATE(myNcomponents)
-   do e = FEsolving_execElem(1),FEsolving_execElem(2)
-     myNcomponents = homogenization_Ngrains(mesh_element(3,e))
-     do i = FEsolving_execIP(1,e),FEsolving_execIP(2,e)
-       do c = 1_pInt,myNcomponents
-         call constitutive_microstructure(crystallite_orientation, &                                ! pass orientation to constitutive module
-                                          crystallite_Fe(1:3,1:3,c,i,e), &
-                                          crystallite_Fp(1:3,1:3,c,i,e), &
-                                          c,i,e)                                                    ! update dependent state variables to be consistent with basic states
-      enddo
-     enddo
-   enddo
- !$OMP END PARALLEL DO
-
- !call crystallite_stressAndItsTangent(.true.)                                                       ! request elastic answers
-
 !--------------------------------------------------------------------------------------------------
 ! debug output
  if (iand(debug_level(debug_crystallite), debug_levelBasic) /= 0_pInt) then
