@@ -259,13 +259,6 @@ Spectral_ipNeighborhood:
     - master
     - release
 
-Nonlocal_Damage_DetectChanges:
-  stage: spectral
-  script: Nonlocal_Damage_DetectChanges/test.py
-  except:
-    - master
-    - release
-
 SpectralAll_restart:
   stage: spectral
   script: SpectralAll_restart/test.py
