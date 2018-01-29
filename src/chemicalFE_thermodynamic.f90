@@ -24,23 +24,26 @@ module chemicalFE_thermodynamic
  integer(pInt),                       dimension(:),     allocatable, target, public :: &
    chemicalFE_thermodynamic_Noutput                                                               !< number of outputs per instance of this constitution
 
- integer(pInt),                       dimension(:),     allocatable,         private, protected :: &
-   chemicalFE_thermodynamic_Ncomponents                                                           !< no. of chemical components
-
- real(pReal),                         dimension(:,:),   allocatable,         private :: &
-   chemicalFE_thermodynamic_Mobility, &                                                         
-   chemicalFE_thermodynamic_SolutionEnergy                                                        
- real(pReal),                         dimension(:,:,:), allocatable,         private :: &
-   chemicalFE_thermodynamic_InteractionEnergy
-
  enum, bind(c)
    enumerator :: undefined_ID, &
                  chemicalFE_ID, &
                  chemicalPot_ID, &
                  chemicalConc_ID
  end enum
- integer(kind(undefined_ID)),         dimension(:,:),   allocatable,          private :: &
-   chemicalFE_thermodynamic_outputID                                                              !< ID of each post result output
+
+ type, private :: tParameters                                                                         !< container type for internal constitutive parameters
+   integer(kind(undefined_ID)), dimension(:), allocatable :: & 
+     outputID
+   integer(pInt) :: &
+     Ncomponents = 0_pInt
+   real(pReal), dimension(:,:), allocatable :: &
+     InteractionEnergy
+   real(pReal), dimension(:  ), allocatable :: &
+     Mobility, &
+     SolutionEnergy
+ end type
+
+ type(tParameters), dimension(:), allocatable, private :: param                                       !< containers of constitutive parameters (len Ninstance)
 
  public :: &
    chemicalFE_thermodynamic_init, &
@@ -112,6 +115,13 @@ subroutine chemicalFE_thermodynamic_init(fileUnit)
  character(len=65536) :: &
    tag  = '', &
    line = ''
+ real(pReal), dimension(:,:), allocatable :: &
+   tempMobility, &
+   tempSolutionEnergy
+ real(pReal), dimension(:,:,:), allocatable :: &
+   tempInteractionEnergy
+ integer(kind(undefined_ID)), dimension(:,:), allocatable :: & 
+   tempOutputID
 
  write(6,'(/,a)')   ' <<<+-  chemicalFE_'//CHEMICALFE_THERMODYNAMIC_label//' init  -+>>>'
  write(6,'(a15,a)') ' Current time: ',IO_timeStamp()
@@ -129,13 +139,15 @@ subroutine chemicalFE_thermodynamic_init(fileUnit)
                                                                                  source=0_pInt)
  allocate(chemicalFE_thermodynamic_output(maxval(phase_Noutput),maxNinstance))
           chemicalFE_thermodynamic_output               = ''
- allocate(chemicalFE_thermodynamic_outputID(maxval(phase_Noutput),maxNinstance),source=undefined_ID)
  allocate(chemicalFE_thermodynamic_Noutput(maxNinstance),                       source=0_pInt)
- allocate(chemicalFE_thermodynamic_Ncomponents                              (maxNinstance),source=  0_pInt )
- allocate(chemicalFE_thermodynamic_Mobility         (material_maxNcomponents,maxNinstance),source=0.0_pReal)
- allocate(chemicalFE_thermodynamic_SolutionEnergy   (material_maxNcomponents,maxNinstance),source=0.0_pReal)
- allocate(chemicalFE_thermodynamic_InteractionEnergy(material_maxNcomponents, &
-                                                     material_maxNcomponents,maxNinstance),source=0.0_pReal)
+ 
+ allocate(param(maxNinstance))
+
+ allocate(tempOutputID         (maxval(phase_Noutput)  ,maxNinstance))
+ allocate(tempMobility         (material_maxNcomponents,maxNinstance),source=0.0_pReal)
+ allocate(tempSolutionEnergy   (material_maxNcomponents,maxNinstance),source=0.0_pReal)
+ allocate(tempInteractionEnergy(material_maxNcomponents, &
+                                material_maxNcomponents,maxNinstance),source=0.0_pReal)
 
  rewind(fileUnit)
  phase = 0_pInt
@@ -163,53 +175,53 @@ subroutine chemicalFE_thermodynamic_init(fileUnit)
          select case(IO_lc(IO_stringValue(line,chunkPos,2_pInt)))
            case ('chemicalfe')
              chemicalFE_thermodynamic_Noutput(instance) = chemicalFE_thermodynamic_Noutput(instance) + 1_pInt
-             chemicalFE_thermodynamic_outputID(chemicalFE_thermodynamic_Noutput(instance),instance) = chemicalFE_ID
              chemicalFE_thermodynamic_output(chemicalFE_thermodynamic_Noutput(instance),instance) = &
                                                            IO_lc(IO_stringValue(line,chunkPos,2_pInt))
+             tempOutputID(chemicalFE_thermodynamic_Noutput(instance),instance) = chemicalFE_ID
            case ('chemicalpot')
              chemicalFE_thermodynamic_Noutput(instance) = chemicalFE_thermodynamic_Noutput(instance) + 1_pInt
-             chemicalFE_thermodynamic_outputID(chemicalFE_thermodynamic_Noutput(instance),instance) = chemicalPot_ID
              chemicalFE_thermodynamic_output(chemicalFE_thermodynamic_Noutput(instance),instance) = &
                                                            IO_lc(IO_stringValue(line,chunkPos,2_pInt))
+             tempOutputID(chemicalFE_thermodynamic_Noutput(instance),instance) = chemicalPot_ID
            case ('chemicalconc')
              chemicalFE_thermodynamic_Noutput(instance) = chemicalFE_thermodynamic_Noutput(instance) + 1_pInt
-             chemicalFE_thermodynamic_outputID(chemicalFE_thermodynamic_Noutput(instance),instance) = chemicalConc_ID
              chemicalFE_thermodynamic_output(chemicalFE_thermodynamic_Noutput(instance),instance) = &
                                                            IO_lc(IO_stringValue(line,chunkPos,2_pInt))
+             tempOutputID(chemicalFE_thermodynamic_Noutput(instance),instance) = chemicalConc_ID
 
            case default
 
          end select
 
        case ('ncomponents')
-         chemicalFE_thermodynamic_Ncomponents(instance) = IO_intValue(line,chunkPos,2_pInt)
+         param(instance)%Ncomponents = IO_intValue(line,chunkPos,2_pInt)
 
 !--------------------------------------------------------------------------------------------------
 ! parameters depending on number of components
        case ('component_mobility')
-         if (chunkPos(1) /= chemicalFE_thermodynamic_Ncomponents(instance) + 1_pInt) &
+         if (chunkPos(1) /= param(instance)%Ncomponents + 1_pInt) &
            call IO_error(150_pInt,ext_msg=trim(tag)//' ('//CHEMICALFE_THERMODYNAMIC_label//')')
-         do j = 1_pInt, chemicalFE_thermodynamic_Ncomponents(instance)
-           chemicalFE_thermodynamic_Mobility(j,instance) = IO_floatValue(line,chunkPos,1_pInt+j)
+         do j = 1_pInt, param(instance)%Ncomponents
+           tempMobility(j,instance) = IO_floatValue(line,chunkPos,1_pInt+j)
          enddo
          
        case ('component_solutione')
-         if (chunkPos(1) /= chemicalFE_thermodynamic_Ncomponents(instance) + 1_pInt) &
+         if (chunkPos(1) /= param(instance)%Ncomponents + 1_pInt) &
            call IO_error(150_pInt,ext_msg=trim(tag)//' ('//CHEMICALFE_THERMODYNAMIC_label//')')
-         do j = 1_pInt, chemicalFE_thermodynamic_Ncomponents(instance)
-           chemicalFE_thermodynamic_SolutionEnergy(j,instance) = IO_floatValue(line,chunkPos,1_pInt+j)
+         do j = 1_pInt, param(instance)%Ncomponents
+           tempSolutionEnergy(j,instance) = IO_floatValue(line,chunkPos,1_pInt+j)
          enddo
          
        case ('component_interactione')
-         if (chunkPos(1) /= chemicalFE_thermodynamic_Ncomponents(instance)* &
-                            (chemicalFE_thermodynamic_Ncomponents(instance) + 1_pInt) + 1_pInt) &
+         if (chunkPos(1) /= param(instance)%Ncomponents* &
+                            (param(instance)%Ncomponents + 1_pInt) + 1_pInt) &
            call IO_error(150_pInt,ext_msg=trim(tag)//' ('//CHEMICALFE_THERMODYNAMIC_label//')')
          o = 0_pInt
-         do j = 1_pInt, chemicalFE_thermodynamic_Ncomponents(instance)
-           do k = j, chemicalFE_thermodynamic_Ncomponents(instance)
+         do j = 1_pInt, param(instance)%Ncomponents
+           do k = j, param(instance)%Ncomponents
              o = o + 1_pInt
-             chemicalFE_thermodynamic_InteractionEnergy(j,k,instance) = IO_floatValue(line,chunkPos,1_pInt+o)
-             chemicalFE_thermodynamic_InteractionEnergy(k,j,instance) = IO_floatValue(line,chunkPos,1_pInt+o)
+             tempInteractionEnergy(j,k,instance) = IO_floatValue(line,chunkPos,1_pInt+o)
+             tempInteractionEnergy(k,j,instance) = IO_floatValue(line,chunkPos,1_pInt+o)
            enddo
          enddo
 
@@ -222,7 +234,17 @@ subroutine chemicalFE_thermodynamic_init(fileUnit)
  sanityChecks: do phase = 1_pInt, size(phase_chemicalFE)
    myPhase: if (phase_chemicalFE(phase) == CHEMICALFE_thermodynamic_ID) then
      instance = phase_chemicalFEInstance(phase)
-     if (any(chemicalFE_thermodynamic_Mobility(:,instance) < 0.0_pReal)) &
+     allocate(param(instance)%OutputID         (chemicalFE_thermodynamic_Noutput(instance)))
+     param(instance)%OutputID = tempOutputID(1:chemicalFE_thermodynamic_Noutput(instance),instance)
+     allocate(param(instance)%Mobility         (param(instance)%Ncomponents))
+     allocate(param(instance)%SolutionEnergy   (param(instance)%Ncomponents))
+     allocate(param(instance)%InteractionEnergy(param(instance)%Ncomponents, &
+                                                param(instance)%Ncomponents))
+     param(instance)%Mobility          = tempMobility         (1:param(instance)%Ncomponents,instance)
+     param(instance)%SolutionEnergy    = tempSolutionEnergy   (1:param(instance)%Ncomponents,instance)
+     param(instance)%InteractionEnergy = tempInteractionEnergy(1:param(instance)%Ncomponents, &
+                                                               1:param(instance)%Ncomponents,instance)
+     if (any(param(instance)%Mobility < 0.0_pReal)) &
        call IO_error(211_pInt,el=instance,ext_msg='mobility ('//CHEMICALFE_THERMODYNAMIC_label//')')
    endif myPhase
  enddo sanityChecks
@@ -235,13 +257,13 @@ subroutine chemicalFE_thermodynamic_init(fileUnit)
 !--------------------------------------------------------------------------------------------------
 !  Determine size of postResults array
      outputsLoop: do o = 1_pInt,chemicalFE_thermodynamic_Noutput(instance)
-       select case(chemicalFE_thermodynamic_outputID(o,instance))
+       select case(param(instance)%outputID(o))
          case(chemicalFE_ID)
            mySize = 1_pInt
          case(chemicalPot_ID, &
               chemicalConc_ID &
               )
-           mySize = chemicalFE_thermodynamic_Ncomponents(instance)
+           mySize = param(instance)%Ncomponents
          case default
        end select
 
@@ -275,7 +297,7 @@ subroutine chemicalFE_thermodynamic_init(fileUnit)
      if (any(numerics_integrator == 5_pInt)) &
        allocate(chemicalState(phase)%RKCK45dotState (6,sizeDotState,NipcMyPhase), source=0.0_pReal)
      chemicalMapping(phase)%p => phasememberAt
-     do j = 1_pInt, chemicalFE_thermodynamic_Ncomponents(instance)
+     do j = 1_pInt, param(instance)%Ncomponents
        allocate(chemicalConc(j,phase)%p(NipcMyPhase), source=0.0_pReal)
      enddo
    endif myPhase2
@@ -310,17 +332,17 @@ function chemicalFE_thermodynamic_getEnergy(conc,T,ipc,ip,el)
  phase = material_phase(ipc,ip,el)
  instance = phase_chemicalFEInstance(phase)
  chemicalFE_thermodynamic_getEnergy = &
-   kB*T*(1.0_pReal - sum(conc(1:chemicalFE_thermodynamic_Ncomponents(instance))))* &
-   log(1.0_pReal - sum(conc(1:chemicalFE_thermodynamic_Ncomponents(instance))))
- do cpI = 1_pInt, chemicalFE_thermodynamic_Ncomponents(instance)
+   kB*T*(1.0_pReal - sum(conc(1:param(instance)%Ncomponents)))* &
+   log(1.0_pReal - sum(conc(1:param(instance)%Ncomponents)))
+ do cpI = 1_pInt, param(instance)%Ncomponents
    chemicalFE_thermodynamic_getEnergy = &
      chemicalFE_thermodynamic_getEnergy + &
-     chemicalFE_thermodynamic_SolutionEnergy(cpI,instance)*conc(cpI) + &
+     param(instance)%SolutionEnergy(cpI)*conc(cpI) + &
      kB*T*conc(cpI)*log(conc(cpI))
-   do cpJ = 1_pInt, chemicalFE_thermodynamic_Ncomponents(instance)  
+   do cpJ = 1_pInt, param(instance)%Ncomponents  
      chemicalFE_thermodynamic_getEnergy = &
        chemicalFE_thermodynamic_getEnergy + &
-       chemicalFE_thermodynamic_InteractionEnergy(cpI,cpJ,instance)*conc(cpI)*conc(cpJ)
+       param(instance)%InteractionEnergy(cpI,cpJ)*conc(cpI)*conc(cpJ)
    enddo
  enddo
 
@@ -352,15 +374,15 @@ function chemicalFE_thermodynamic_getChemPot(conc,T,ipc,ip,el)
  phase = material_phase(ipc,ip,el)
  instance = phase_chemicalFEInstance(phase)
  chemicalFE_thermodynamic_getChemPot = 0.0_pReal
- do cpI = 1_pInt, chemicalFE_thermodynamic_Ncomponents(instance)
+ do cpI = 1_pInt, param(instance)%Ncomponents
    chemicalFE_thermodynamic_getChemPot(cpI) = &
-     chemicalFE_thermodynamic_SolutionEnergy(cpI,instance) + &
+     param(instance)%SolutionEnergy(cpI) + &
      kB*T* &
-     log(conc(cpI)/(1.0_pReal - sum(conc(1:chemicalFE_thermodynamic_Ncomponents(instance)))))
-   do cpJ = 1_pInt, chemicalFE_thermodynamic_Ncomponents(instance)
+     log(conc(cpI)/(1.0_pReal - sum(conc(1:param(instance)%Ncomponents))))
+   do cpJ = 1_pInt, param(instance)%Ncomponents
      chemicalFE_thermodynamic_getChemPot(cpI) = &
        chemicalFE_thermodynamic_getChemPot(cpI) + &
-       chemicalFE_thermodynamic_InteractionEnergy(cpI,cpJ,instance)*conc(cpJ)
+       param(instance)%InteractionEnergy(cpI,cpJ)*conc(cpJ)
    enddo
  enddo
 
@@ -393,22 +415,22 @@ function chemicalFE_thermodynamic_getConc(chempot,conc0,T,ipc,ip,el)
  phase = material_phase(ipc,ip,el)
  instance = phase_chemicalFEInstance(phase)
  chemicalFE_thermodynamic_getConc = 0.0_pReal
- do cpI = 1_pInt, chemicalFE_thermodynamic_Ncomponents(instance)
+ do cpI = 1_pInt, param(instance)%Ncomponents
    chemicalFE_thermodynamic_getConc(cpI) = &
-     chempot(cpI) - chemicalFE_thermodynamic_SolutionEnergy(cpI,instance)
-   do cpJ = 1_pInt, chemicalFE_thermodynamic_Ncomponents(instance)
+     chempot(cpI) - param(instance)%SolutionEnergy(cpI)
+   do cpJ = 1_pInt, param(instance)%Ncomponents
      chemicalFE_thermodynamic_getConc(cpI) = &
        chemicalFE_thermodynamic_getConc(cpI) - &
-       chemicalFE_thermodynamic_InteractionEnergy(cpI,cpJ,instance)*conc0(cpJ)
+       param(instance)%InteractionEnergy(cpI,cpJ)*conc0(cpJ)
    enddo
  enddo
- chemicalFE_thermodynamic_getConc(1:chemicalFE_thermodynamic_Ncomponents(instance)) = &
-   exp(chemicalFE_thermodynamic_getConc(1:chemicalFE_thermodynamic_Ncomponents(instance))/(kB*T))
+ chemicalFE_thermodynamic_getConc(1:param(instance)%Ncomponents) = &
+   exp(chemicalFE_thermodynamic_getConc(1:param(instance)%Ncomponents)/(kB*T))
 
- chemicalFE_thermodynamic_getConc(1:chemicalFE_thermodynamic_Ncomponents(instance)) = &
-   chemicalFE_thermodynamic_getConc(1:chemicalFE_thermodynamic_Ncomponents(instance))/ &
+ chemicalFE_thermodynamic_getConc(1:param(instance)%Ncomponents) = &
+   chemicalFE_thermodynamic_getConc(1:param(instance)%Ncomponents)/ &
    (1.0_pReal + &
-    sum(chemicalFE_thermodynamic_getConc(1:chemicalFE_thermodynamic_Ncomponents(instance))))
+    sum(chemicalFE_thermodynamic_getConc(1:param(instance)%Ncomponents)))
  
 end function chemicalFE_thermodynamic_getConc
 
@@ -441,7 +463,7 @@ subroutine chemicalFE_thermodynamic_putConc(chempot,conc0,T,ipc,ip,el)
  phase = material_phase(ipc,ip,el)
  instance = phase_chemicalFEInstance(phase)
  conc = chemicalFE_thermodynamic_getConc(chempot,conc0,T,ipc,ip,el)
- do cp = 1_pInt, chemicalFE_thermodynamic_Ncomponents(instance)
+ do cp = 1_pInt, param(instance)%Ncomponents
    chemicalConc(cp,phase)%p(chemicalMapping(phase)%p(ipc,ip,el)) = &
      conc(cp)
  enddo
@@ -479,8 +501,8 @@ function chemicalFE_thermodynamic_getConcTangent(chempot,conc0,T,ipc,ip,el)
  conc = chemicalFE_thermodynamic_getConc(chempot,conc0,T,ipc,ip,el)
  
  chemicalFE_thermodynamic_getConcTangent = 0.0_pReal
- do cpI = 1_pInt, chemicalFE_thermodynamic_Ncomponents(instance)
-   do cpJ = 1_pInt, chemicalFE_thermodynamic_Ncomponents(instance)
+ do cpI = 1_pInt, param(instance)%Ncomponents
+   do cpJ = 1_pInt, param(instance)%Ncomponents
      chemicalFE_thermodynamic_getConcTangent(cpI,cpJ) = &
        conc(cpI) - conc(cpI)*conc(cpJ)
    enddo
@@ -511,9 +533,9 @@ function chemicalFE_thermodynamic_getMobility(ipc,ip,el)
  phase = material_phase(ipc,ip,el)
  instance = phase_chemicalFEInstance(phase)
  chemicalFE_thermodynamic_getMobility = 0.0_pReal
- do cp = 1_pInt, chemicalFE_thermodynamic_Ncomponents(instance)
+ do cp = 1_pInt, param(instance)%Ncomponents
    chemicalFE_thermodynamic_getMobility(cp) = &
-     chemicalFE_thermodynamic_Mobility(cp,instance)
+     param(instance)%Mobility(cp)
  enddo
 
 end function chemicalFE_thermodynamic_getMobility
@@ -552,21 +574,21 @@ function chemicalFE_thermodynamic_postResults(conc,T,ipc,ip,el)
  c = 0_pInt
 
  outputsLoop: do o = 1_pInt,chemicalFE_thermodynamic_Noutput(instance)
-   select case(chemicalFE_thermodynamic_outputID(o,instance))
+   select case(param(instance)%outputID(o))
      case (chemicalFE_ID)
        chemicalFE_thermodynamic_postResults(c+1_pInt) = chemicalFE_thermodynamic_getEnergy(conc,T,ipc,ip,el)
        c = c + 1_pInt
 
      case (chemicalPot_ID)
        tempPerComponent = chemicalFE_thermodynamic_getChemPot(conc,T,ipc,ip,el)
-       chemicalFE_thermodynamic_postResults(c+1_pInt:c+chemicalFE_thermodynamic_Ncomponents(instance)) = &
-         tempPerComponent(1_pInt:chemicalFE_thermodynamic_Ncomponents(instance))
-       c = c + chemicalFE_thermodynamic_Ncomponents(instance)
+       chemicalFE_thermodynamic_postResults(c+1_pInt:c+param(instance)%Ncomponents) = &
+         tempPerComponent(1_pInt:param(instance)%Ncomponents)
+       c = c + param(instance)%Ncomponents
 
      case (chemicalConc_ID)
-       chemicalFE_thermodynamic_postResults(c+1_pInt:c+chemicalFE_thermodynamic_Ncomponents(instance)) = &
-         conc(1_pInt:chemicalFE_thermodynamic_Ncomponents(instance))
-       c = c + chemicalFE_thermodynamic_Ncomponents(instance)
+       chemicalFE_thermodynamic_postResults(c+1_pInt:c+param(instance)%Ncomponents) = &
+         conc(1_pInt:param(instance)%Ncomponents)
+       c = c + param(instance)%Ncomponents
 
    end select
  enddo outputsLoop
