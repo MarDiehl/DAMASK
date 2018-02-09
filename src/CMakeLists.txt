@@ -139,7 +139,8 @@ if ("${PROJECT_NAME}" STREQUAL "DAMASK_spectral")
       "spectral_thermal.f90"
       "spectral_mech_AL.f90"
       "spectral_mech_Polarisation.f90"
-      "spectral_mech_Basic.f90")
+      "spectral_mech_Basic.f90"
+      "spectral_mech_FEM.f90")
       add_dependencies(SPECTRAL_SOLVER SPECTRAL_UTILITIES)
       list(APPEND OBJECTFILES $<TARGET_OBJECTS:SPECTRAL_SOLVER>)
       if(NOT "${CMAKE_BUILD_TYPE}" STREQUAL "SYNTAXONLY")

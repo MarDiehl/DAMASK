@@ -79,6 +79,7 @@ program DAMASK_spectral
  use spectral_mech_Basic
  use spectral_mech_AL
  use spectral_mech_Polarisation
+ use spectral_mech_FEM
  use spectral_thermal
 
 
@@ -367,6 +368,9 @@ program DAMASK_spectral
            call IO_warning(42_pInt, ext_msg='debug Divergence')
            call Polarisation_init
 
+         case (DAMASK_spectral_SolverFEM_label)
+           call FEM_init
+
          case default
            call IO_error(error_ID = 891_pInt, ext_msg = trim(spectral_solver))
        
@@ -527,6 +531,12 @@ program DAMASK_spectral
                        deformation_BC     = loadCases(currentLoadCase)%deformation, &
                        stress_BC          = loadCases(currentLoadCase)%stress, &
                        rotation_BC        = loadCases(currentLoadCase)%rotation)
+                 case (DAMASK_spectral_SolverFEM_label)
+                   call FEM_forward (&
+                       guess,timeinc,timeIncOld,remainingLoadCaseTime, &
+                       deformation_BC     = loadCases(currentLoadCase)%deformation, &
+                       stress_BC          = loadCases(currentLoadCase)%stress, &
+                       rotation           = loadCases(currentLoadCase)%rotation   )
                end select
 
            case(FIELD_THERMAL_ID); call spectral_thermal_forward()
@@ -560,6 +570,12 @@ program DAMASK_spectral
                          stress_BC          = loadCases(currentLoadCase)%stress, &
                          rotation_BC        = loadCases(currentLoadCase)%rotation)
 
+                   case (DAMASK_spectral_SolverFEM_label)
+                     solres(field) = FEM_solution (&
+                         incInfo,timeinc,timeIncOld,remainingLoadCaseTime, &
+                         stress_BC          = loadCases(currentLoadCase)%stress, &
+                         rotation           = loadCases(currentLoadCase)%rotation)
+         
                  end select
 
                case(FIELD_THERMAL_ID)
@@ -683,6 +699,8 @@ subroutine quit(stop_id)
    AL_destroy
  use spectral_mech_Polarisation, only: &
    Polarisation_destroy
+ use spectral_mech_FEM, only: &
+   FEM_destroy
  use spectral_thermal, only: &
    spectral_thermal_destroy
  use spectral_utilities, only: &
@@ -704,6 +722,7 @@ subroutine quit(stop_id)
  call BasicPETSC_destroy()
  call AL_destroy()
  call Polarisation_destroy()
+ call FEM_destroy()
  call spectral_thermal_destroy()
  call utilities_destroy()
 
