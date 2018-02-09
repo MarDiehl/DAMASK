@@ -270,7 +270,7 @@ subroutine homogenization_multiphase_init(fileUnit)
      if (any(param(instance)%InterfaceEnergy < 0.0_pReal)) &
        call IO_error(211_pInt,el=instance, &
                      ext_msg='interface_energy ('//HOMOGENIZATION_multiphase_label//')')
-     if (param(instance)%InterfaceWidth <= 0.0_pReal) &
+     if (param(instance)%InterfaceWidth < 0.0_pReal) &
        call IO_error(211_pInt,el=instance, &
                      ext_msg='interface_width ('//HOMOGENIZATION_multiphase_label//')')
    endif myHomog1
