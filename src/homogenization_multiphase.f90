@@ -987,7 +987,7 @@ end function homogenization_multiphase_updateState
 !--------------------------------------------------------------------------------------------------
 !> @brief flux function for each phase 
 !--------------------------------------------------------------------------------------------------
-function homogenization_multiphase_getPhaseFlux(gradPhi,ip,el)
+function homogenization_multiphase_getPhaseFlux(gradPhi,phi,ip,el)
  use material, only: &
    material_homog, &
    homogenization_Ngrains, &
@@ -997,21 +997,30 @@ function homogenization_multiphase_getPhaseFlux(gradPhi,ip,el)
  implicit none
  real(pReal),   dimension(3,homogenization_maxNgrains)             :: homogenization_multiphase_getPhaseFlux
  real(pReal),   dimension(3,homogenization_maxNgrains), intent(in) :: gradPhi
+ real(pReal),   dimension(  homogenization_maxNgrains), intent(in) :: phi
  integer(pInt),                                         intent(in) :: ip, el                !< element number
  integer(pInt) :: &
    grI, grJ, grK, &
    homog, & 
    instance
+ logical, dimension(homogenization_maxNgrains) :: &
+   activeGrain
+ real(pReal) :: &
+   NActiveGrains, &
+   tol = 1e-6_pReal    
 
  homog = material_homog(ip,el)
  instance = homogenization_typeInstance(homog)
  homogenization_multiphase_getPhaseFlux = 0.0_pReal
+ activeGrain = phi > tol
+ NActiveGrains = real(count(activeGrain), pReal)
  do grI = 1_pInt, homogenization_Ngrains(homog)
    do grJ = 1_pInt, homogenization_Ngrains(homog)
      do grK = 1_pInt, homogenization_Ngrains(homog)
+       if (activeGrain(grJ) .and. activeGrain(grK)) &
        homogenization_multiphase_getPhaseFlux(1:3,grI) = &
          homogenization_multiphase_getPhaseFlux(1:3,grI) + &
-         param(instance)%InterfaceMobility(grI,grJ)* &
+         (param(instance)%InterfaceMobility(grI,grJ)/NActiveGrains)* &
          (param(instance)%InterfaceEnergy(grJ,grK) - &
           param(instance)%InterfaceEnergy(grI,grK))* &
          gradPhi(1:3,grK) 
@@ -1028,7 +1037,7 @@ end function homogenization_multiphase_getPhaseFlux
 !--------------------------------------------------------------------------------------------------
 !> @brief flux tangent function for each phase 
 !--------------------------------------------------------------------------------------------------
-function homogenization_multiphase_getPhaseFluxTangent(ip,el)
+function homogenization_multiphase_getPhaseFluxTangent(phi,ip,el)
  use math, only: &
    math_I3
  use material, only: &
@@ -1040,21 +1049,30 @@ function homogenization_multiphase_getPhaseFluxTangent(ip,el)
  implicit none
  real(pReal),   dimension(3,3,homogenization_maxNgrains,homogenization_maxNgrains) :: &
    homogenization_multiphase_getPhaseFluxTangent
+ real(pReal),   dimension(homogenization_maxNgrains), intent(in) :: phi
  integer(pInt), intent(in) :: ip, el                                                                !< element number
  integer(pInt) :: &
    grI, grJ, grK, &
    homog, & 
    instance
+ logical, dimension(homogenization_maxNgrains) :: &
+   activeGrain
+ real(pReal) :: &
+   NActiveGrains, &
+   tol = 1e-6_pReal    
 
  homog = material_homog(ip,el)
  instance = homogenization_typeInstance(homog)
  homogenization_multiphase_getPhaseFluxTangent = 0.0_pReal
+ activeGrain = phi > tol
+ NActiveGrains = real(count(activeGrain), pReal)
  do grI = 1_pInt, homogenization_Ngrains(homog)
    do grJ = 1_pInt, homogenization_Ngrains(homog)
      do grK = 1_pInt, homogenization_Ngrains(homog)
+       if (activeGrain(grJ) .and. activeGrain(grK)) &
        homogenization_multiphase_getPhaseFluxTangent(1:3,1:3,grI,grK) = &
          homogenization_multiphase_getPhaseFluxTangent(1:3,1:3,grI,grK) + &
-         param(instance)%InterfaceMobility(grI,grJ)* &
+         (param(instance)%InterfaceMobility(grI,grJ)/NActiveGrains)* &
          (param(instance)%InterfaceEnergy(grJ,grK) - &
           param(instance)%InterfaceEnergy(grI,grK))* &
          math_I3
@@ -1093,10 +1111,18 @@ function homogenization_multiphase_getPhaseSource(phi,ip,el)
    instance, &
    source, &
    phase
+ logical, dimension(homogenization_maxNgrains) :: &
+   activeGrain
+ real(pReal) :: &
+   NActiveGrains, &
+   tol = 1e-6_pReal    
 
  homog = material_homog(ip,el)
  instance = homogenization_typeInstance(homog)
  
+ activeGrain = phi > tol
+ NActiveGrains = real(count(activeGrain), pReal)
+
  bulkSource = 0.0_pReal
  do grI = 1_pInt, homogenization_Ngrains(homog)
    phase = phaseAt(grI,ip,el)
@@ -1111,16 +1137,18 @@ function homogenization_multiphase_getPhaseSource(phi,ip,el)
  do grI = 1_pInt, homogenization_Ngrains(homog)
    do grJ = 1_pInt, homogenization_Ngrains(homog)
      do grK = 1_pInt, homogenization_Ngrains(homog)
+       if (activeGrain(grJ) .and. activeGrain(grK)) &
        homogenization_multiphase_getPhaseSource(grI) = &
          homogenization_multiphase_getPhaseSource(grI) + &
-         param(instance)%InterfaceMobility(grI,grJ)* &
+         (param(instance)%InterfaceMobility(grI,grJ)/NActiveGrains)* &
          (param(instance)%InterfaceEnergy(grJ,grK) - &
           param(instance)%InterfaceEnergy(grI,grK))* &
          phi(grK) 
      enddo
+     if (activeGrain(grJ)) &
      homogenization_multiphase_getPhaseSource(grI) = &
-       homogenization_multiphase_getPhaseSource(grI) + &
-       param(instance)%InterfaceMobility(grI,grJ)* &
+       homogenization_multiphase_getPhaseSource(grI) + &         
+       (param(instance)%InterfaceMobility(grI,grJ)/NActiveGrains)* &
        (bulkSource(grI) - bulkSource(grJ))
    enddo
  enddo
@@ -1134,7 +1162,7 @@ end function homogenization_multiphase_getPhaseSource
 !--------------------------------------------------------------------------------------------------
 !> @brief source tangent function for each phase 
 !--------------------------------------------------------------------------------------------------
-function homogenization_multiphase_getPhaseSourceTangent(ip,el)
+function homogenization_multiphase_getPhaseSourceTangent(phi,ip,el)
  use material, only: &
    material_homog, &
    homogenization_Ngrains, &
@@ -1144,22 +1172,32 @@ function homogenization_multiphase_getPhaseSourceTangent(ip,el)
  implicit none
  real(pReal),   dimension(homogenization_maxNgrains,homogenization_maxNgrains) :: &
    homogenization_multiphase_getPhaseSourceTangent
+ real(pReal),   dimension(homogenization_maxNgrains), intent(in) :: phi
  integer(pInt), intent(in) :: ip, el                                                                !< element number
  integer(pInt) :: &
    grI, grJ, grK, &
    homog, & 
    instance
+ logical, dimension(homogenization_maxNgrains) :: &
+   activeGrain
+ real(pReal) :: &
+   NActiveGrains, &
+   tol = 1e-6_pReal    
 
  homog = material_homog(ip,el)
  instance = homogenization_typeInstance(homog)
+
+ activeGrain = phi > tol
+ NActiveGrains = real(count(activeGrain), pReal)
  
  homogenization_multiphase_getPhaseSourceTangent = 0.0_pReal
  do grI = 1_pInt, homogenization_Ngrains(homog)
    do grJ = 1_pInt, homogenization_Ngrains(homog)
      do grK = 1_pInt, homogenization_Ngrains(homog)
+       if (activeGrain(grJ) .and. activeGrain(grK)) &
        homogenization_multiphase_getPhaseSourceTangent(grI,grK) = &
          homogenization_multiphase_getPhaseSourceTangent(grI,grK) + &
-         param(instance)%InterfaceMobility(grI,grJ)* &
+         (param(instance)%InterfaceMobility(grI,grJ)/NActiveGrains)* &
          (param(instance)%InterfaceEnergy(grJ,grK) - &
           param(instance)%InterfaceEnergy(grI,grK)) 
      enddo

@@ -25,7 +25,8 @@ module spectral_utilities
  enum, bind(c)
    enumerator :: FIELD_UNDEFINED_ID, &
                  FIELD_MECH_ID, &
-                 FIELD_THERMAL_ID
+                 FIELD_THERMAL_ID, &
+                 FIELD_MULTIPHASE_ID
  end enum
 
 !--------------------------------------------------------------------------------------------------
@@ -142,7 +143,8 @@ module spectral_utilities
    utilities_updateIPcoords, &
    FIELD_UNDEFINED_ID, &
    FIELD_MECH_ID, &
-   FIELD_THERMAL_ID
+   FIELD_THERMAL_ID, &
+   FIELD_MULTIPHASE_ID
  private :: &
    utilities_getFreqDerivative
 

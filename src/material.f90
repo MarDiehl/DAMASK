@@ -220,7 +220,7 @@ module material
    texture_Fiber, &                                                                                 !< data of each Fiber component
    texture_transformation                                                                           !< transformation for each texture
 
- logical,                                   dimension(:),  allocatable, private            :: &
+ logical,                                   dimension(:),  allocatable, public             :: &
    homogenization_active
 
  integer(pInt),                         dimension(:,:,:),  allocatable,  public,    target :: &

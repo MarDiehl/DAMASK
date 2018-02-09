@@ -136,6 +136,7 @@ if ("${PROJECT_NAME}" STREQUAL "DAMASK_spectral")
       list(APPEND OBJECTFILES $<TARGET_OBJECTS:SPECTRAL_UTILITIES>)
 
       add_library(SPECTRAL_SOLVER OBJECT
+      "spectral_multiphase.f90"
       "spectral_thermal.f90"
       "spectral_mech_AL.f90"
       "spectral_mech_Polarisation.f90"
