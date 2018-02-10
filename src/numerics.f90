@@ -685,7 +685,7 @@ subroutine numerics_init
  if (volDiscrPow_RGC <= 0.0_pReal)         call IO_error(301_pInt,ext_msg='volDiscrPw_RGC')
  if (residualStiffness < 0.0_pReal)        call IO_error(301_pInt,ext_msg='residualStiffness')
  if (itmax <= 1_pInt)                      call IO_error(301_pInt,ext_msg='itmax')
- if (itmin > itmax .or. itmin < 1_pInt)    call IO_error(301_pInt,ext_msg='itmin')
+ if (itmin > itmax .or. itmin < 0_pInt)    call IO_error(301_pInt,ext_msg='itmin')
  if (maxCutBack < 0_pInt)                  call IO_error(301_pInt,ext_msg='maxCutBack')
  if (stagItMax < 0_pInt)                   call IO_error(301_pInt,ext_msg='maxStaggeredIter')
  if (vacancyPolyOrder < 0_pInt)            call IO_error(301_pInt,ext_msg='vacancyPolyOrder')
