@@ -24,6 +24,7 @@ module homogenization_multiphase
    enumerator :: undefined_ID, &
                  nconstituents_ID, &
                  ipcoords_ID, &
+                 phasefrac_ID, &
                  avgdefgrad_ID, &
                  avgfirstpiola_ID
  end enum
@@ -68,6 +69,7 @@ module homogenization_multiphase
    homogenization_multiphase_getPhaseFluxTangent, &
    homogenization_multiphase_getPhaseSource, &
    homogenization_multiphase_getPhaseSourceTangent, &
+   homogenization_multiphase_getPhaseMobility, &
    homogenization_multiphase_putPhaseFrac, &
    homogenization_multiphase_getComponentConc, &
    homogenization_multiphase_getComponentConcTangent, &
@@ -190,6 +192,11 @@ subroutine homogenization_multiphase_init(fileUnit)
                homogenization_multiphase_output(homogenization_multiphase_Noutput(i),i) = &
                  IO_lc(IO_stringValue(line,chunkPos,2_pInt))
                param(i)%outputID(homogenization_multiphase_Noutput(i)) = ipcoords_ID
+             case('phasefrac')
+               homogenization_multiphase_Noutput(i) = homogenization_multiphase_Noutput(i) + 1_pInt
+               homogenization_multiphase_output(homogenization_multiphase_Noutput(i),i) = &
+                 IO_lc(IO_stringValue(line,chunkPos,2_pInt))
+               param(i)%outputID(homogenization_multiphase_Noutput(i)) = phasefrac_ID
              case('avgdefgrad','avgf')
                homogenization_multiphase_Noutput(i) = homogenization_multiphase_Noutput(i) + 1_pInt
                homogenization_multiphase_output(homogenization_multiphase_Noutput(i),i) = &
@@ -288,6 +295,8 @@ subroutine homogenization_multiphase_init(fileUnit)
           mySize = 1_pInt
         case(ipcoords_ID)
           mySize = 3_pInt
+        case(phasefrac_ID)
+          mySize = homogenization_Ngrains(homog)
         case(avgdefgrad_ID, avgfirstpiola_ID)
           mySize = 9_pInt
         case default
@@ -987,49 +996,27 @@ end function homogenization_multiphase_updateState
 !--------------------------------------------------------------------------------------------------
 !> @brief flux function for each phase 
 !--------------------------------------------------------------------------------------------------
-function homogenization_multiphase_getPhaseFlux(gradPhi,phi,ip,el)
+function homogenization_multiphase_getPhaseFlux(nablaPhi,ip,el)
+ use math, only: &
+   PI
  use material, only: &
    material_homog, &
-   homogenization_Ngrains, &
    homogenization_maxNgrains, &
    homogenization_typeInstance
  
  implicit none
- real(pReal),   dimension(3,homogenization_maxNgrains)             :: homogenization_multiphase_getPhaseFlux
- real(pReal),   dimension(3,homogenization_maxNgrains), intent(in) :: gradPhi
- real(pReal),   dimension(  homogenization_maxNgrains), intent(in) :: phi
- integer(pInt),                                         intent(in) :: ip, el                !< element number
+ real(pReal),   dimension(homogenization_maxNgrains)             :: homogenization_multiphase_getPhaseFlux
+ real(pReal),   dimension(homogenization_maxNgrains), intent(in) :: nablaPhi
+ integer(pInt),                                       intent(in) :: ip, el                !< element number
  integer(pInt) :: &
-   grI, grJ, grK, &
    homog, & 
    instance
- logical, dimension(homogenization_maxNgrains) :: &
-   activeGrain
- real(pReal) :: &
-   NActiveGrains, &
-   tol = 1e-6_pReal    
 
  homog = material_homog(ip,el)
  instance = homogenization_typeInstance(homog)
- homogenization_multiphase_getPhaseFlux = 0.0_pReal
- activeGrain = phi > tol
- NActiveGrains = real(count(activeGrain), pReal)
- do grI = 1_pInt, homogenization_Ngrains(homog)
-   do grJ = 1_pInt, homogenization_Ngrains(homog)
-     do grK = 1_pInt, homogenization_Ngrains(homog)
-       if (activeGrain(grJ) .and. activeGrain(grK)) &
-       homogenization_multiphase_getPhaseFlux(1:3,grI) = &
-         homogenization_multiphase_getPhaseFlux(1:3,grI) + &
-         (param(instance)%InterfaceMobility(grI,grJ)/NActiveGrains)* &
-         (param(instance)%InterfaceEnergy(grJ,grK) - &
-          param(instance)%InterfaceEnergy(grI,grK))* &
-         gradPhi(1:3,grK) 
-     enddo
-   enddo
- enddo
  homogenization_multiphase_getPhaseFlux = &
-   homogenization_multiphase_getPhaseFlux* &
-   param(instance)%InterfaceWidth
+   -(8.0_pReal*param(instance)%InterfaceWidth/PI/PI)* &
+    matmul(param(instance)%InterfaceEnergy,nablaPhi)
 
 end function homogenization_multiphase_getPhaseFlux
 
@@ -1037,51 +1024,27 @@ end function homogenization_multiphase_getPhaseFlux
 !--------------------------------------------------------------------------------------------------
 !> @brief flux tangent function for each phase 
 !--------------------------------------------------------------------------------------------------
-function homogenization_multiphase_getPhaseFluxTangent(phi,ip,el)
+function homogenization_multiphase_getPhaseFluxTangent(ip,el)
  use math, only: &
-   math_I3
+   PI
  use material, only: &
    material_homog, &
-   homogenization_Ngrains, &
    homogenization_maxNgrains, &
    homogenization_typeInstance
  
  implicit none
- real(pReal),   dimension(3,3,homogenization_maxNgrains,homogenization_maxNgrains) :: &
+ real(pReal),   dimension(homogenization_maxNgrains,homogenization_maxNgrains) :: &
    homogenization_multiphase_getPhaseFluxTangent
- real(pReal),   dimension(homogenization_maxNgrains), intent(in) :: phi
  integer(pInt), intent(in) :: ip, el                                                                !< element number
  integer(pInt) :: &
-   grI, grJ, grK, &
    homog, & 
    instance
- logical, dimension(homogenization_maxNgrains) :: &
-   activeGrain
- real(pReal) :: &
-   NActiveGrains, &
-   tol = 1e-6_pReal    
 
  homog = material_homog(ip,el)
  instance = homogenization_typeInstance(homog)
- homogenization_multiphase_getPhaseFluxTangent = 0.0_pReal
- activeGrain = phi > tol
- NActiveGrains = real(count(activeGrain), pReal)
- do grI = 1_pInt, homogenization_Ngrains(homog)
-   do grJ = 1_pInt, homogenization_Ngrains(homog)
-     do grK = 1_pInt, homogenization_Ngrains(homog)
-       if (activeGrain(grJ) .and. activeGrain(grK)) &
-       homogenization_multiphase_getPhaseFluxTangent(1:3,1:3,grI,grK) = &
-         homogenization_multiphase_getPhaseFluxTangent(1:3,1:3,grI,grK) + &
-         (param(instance)%InterfaceMobility(grI,grJ)/NActiveGrains)* &
-         (param(instance)%InterfaceEnergy(grJ,grK) - &
-          param(instance)%InterfaceEnergy(grI,grK))* &
-         math_I3
-     enddo
-   enddo
- enddo
  homogenization_multiphase_getPhaseFluxTangent = &
-   homogenization_multiphase_getPhaseFluxTangent* &
-   param(instance)%InterfaceWidth
+   -(8.0_pReal*param(instance)%InterfaceWidth/PI/PI)* &
+    param(instance)%InterfaceEnergy
 
 end function homogenization_multiphase_getPhaseFluxTangent
 
@@ -1106,23 +1069,15 @@ function homogenization_multiphase_getPhaseSource(phi,ip,el)
  real(pReal),   dimension(homogenization_maxNgrains)  :: &
    bulkSource
  integer(pInt) :: &
-   grI, grJ, grK, &
+   grI, &
    homog, & 
    instance, &
    source, &
    phase
- logical, dimension(homogenization_maxNgrains) :: &
-   activeGrain
- real(pReal) :: &
-   NActiveGrains, &
-   tol = 1e-6_pReal    
 
  homog = material_homog(ip,el)
  instance = homogenization_typeInstance(homog)
  
- activeGrain = phi > tol
- NActiveGrains = real(count(activeGrain), pReal)
-
  bulkSource = 0.0_pReal
  do grI = 1_pInt, homogenization_Ngrains(homog)
    phase = phaseAt(grI,ip,el)
@@ -1133,28 +1088,10 @@ function homogenization_multiphase_getPhaseSource(phi,ip,el)
    enddo  
  enddo
  
- homogenization_multiphase_getPhaseSource = 0.0_pReal
- do grI = 1_pInt, homogenization_Ngrains(homog)
-   do grJ = 1_pInt, homogenization_Ngrains(homog)
-     do grK = 1_pInt, homogenization_Ngrains(homog)
-       if (activeGrain(grJ) .and. activeGrain(grK)) &
-       homogenization_multiphase_getPhaseSource(grI) = &
-         homogenization_multiphase_getPhaseSource(grI) + &
-         (param(instance)%InterfaceMobility(grI,grJ)/NActiveGrains)* &
-         (param(instance)%InterfaceEnergy(grJ,grK) - &
-          param(instance)%InterfaceEnergy(grI,grK))* &
-         phi(grK) 
-     enddo
-     if (activeGrain(grJ)) &
-     homogenization_multiphase_getPhaseSource(grI) = &
-       homogenization_multiphase_getPhaseSource(grI) + &         
-       (param(instance)%InterfaceMobility(grI,grJ)/NActiveGrains)* &
-       (bulkSource(grI) - bulkSource(grJ))
-   enddo
- enddo
  homogenization_multiphase_getPhaseSource = &
-   8.0_pReal*homogenization_multiphase_getPhaseSource/&
-   param(instance)%InterfaceWidth
+   bulkSource - &
+   (8.0_pReal/param(instance)%InterfaceWidth)* &
+   matmul(param(instance)%InterfaceEnergy,phi)
  
 end function homogenization_multiphase_getPhaseSource
 
@@ -1162,52 +1099,47 @@ end function homogenization_multiphase_getPhaseSource
 !--------------------------------------------------------------------------------------------------
 !> @brief source tangent function for each phase 
 !--------------------------------------------------------------------------------------------------
-function homogenization_multiphase_getPhaseSourceTangent(phi,ip,el)
+function homogenization_multiphase_getPhaseSourceTangent(ip,el)
  use material, only: &
    material_homog, &
-   homogenization_Ngrains, &
    homogenization_maxNgrains, &
    homogenization_typeInstance
  
  implicit none
  real(pReal),   dimension(homogenization_maxNgrains,homogenization_maxNgrains) :: &
    homogenization_multiphase_getPhaseSourceTangent
- real(pReal),   dimension(homogenization_maxNgrains), intent(in) :: phi
  integer(pInt), intent(in) :: ip, el                                                                !< element number
  integer(pInt) :: &
-   grI, grJ, grK, &
    homog, & 
    instance
- logical, dimension(homogenization_maxNgrains) :: &
-   activeGrain
- real(pReal) :: &
-   NActiveGrains, &
-   tol = 1e-6_pReal    
 
  homog = material_homog(ip,el)
  instance = homogenization_typeInstance(homog)
 
- activeGrain = phi > tol
- NActiveGrains = real(count(activeGrain), pReal)
- 
- homogenization_multiphase_getPhaseSourceTangent = 0.0_pReal
- do grI = 1_pInt, homogenization_Ngrains(homog)
-   do grJ = 1_pInt, homogenization_Ngrains(homog)
-     do grK = 1_pInt, homogenization_Ngrains(homog)
-       if (activeGrain(grJ) .and. activeGrain(grK)) &
-       homogenization_multiphase_getPhaseSourceTangent(grI,grK) = &
-         homogenization_multiphase_getPhaseSourceTangent(grI,grK) + &
-         (param(instance)%InterfaceMobility(grI,grJ)/NActiveGrains)* &
-         (param(instance)%InterfaceEnergy(grJ,grK) - &
-          param(instance)%InterfaceEnergy(grI,grK)) 
-     enddo
-   enddo
- enddo
  homogenization_multiphase_getPhaseSourceTangent = &
-   8.0_pReal*homogenization_multiphase_getPhaseSourceTangent/ &
-   param(instance)%InterfaceWidth
+   -(8.0_pReal/param(instance)%InterfaceWidth)*param(instance)%InterfaceEnergy
 
 end function homogenization_multiphase_getPhaseSourceTangent
+
+
+!--------------------------------------------------------------------------------------------------
+!> @brief mobility for each interface 
+!--------------------------------------------------------------------------------------------------
+function homogenization_multiphase_getPhaseMobility(ip,el)
+ use material, only: &
+   material_homog, &
+   homogenization_maxNgrains, &
+   homogenization_typeInstance
+ 
+ implicit none
+ real(pReal),   dimension(homogenization_maxNgrains,homogenization_maxNgrains) :: &
+   homogenization_multiphase_getPhaseMobility
+ integer(pInt), intent(in) :: ip, el                          !< element number
+
+ homogenization_multiphase_getPhaseMobility = &
+   param(homogenization_typeInstance(material_homog(ip,el)))%InterfaceMobility
+
+end function homogenization_multiphase_getPhaseMobility
 
 
 !--------------------------------------------------------------------------------------------------
@@ -1450,6 +1382,8 @@ pure function homogenization_multiphase_postResults(ip,el,avgP,avgF)
    mesh_ipCoordinates
  use material, only: &
    material_homog, &
+   phaseFrac, &
+   phasefracMapping, &
    homogenization_Ngrains, &
    homogenization_typeInstance, &
    homogenization_Noutput
@@ -1467,7 +1401,7 @@ pure function homogenization_multiphase_postResults(ip,el,avgP,avgF)
  
  integer(pInt) :: &
    homID, &
-   o, c
+   o, c, gr
    
  c = 0_pInt
  homID = homogenization_typeInstance(material_homog(ip,el))
@@ -1487,6 +1421,13 @@ pure function homogenization_multiphase_postResults(ip,el,avgP,avgF)
      case (ipcoords_ID)
        homogenization_multiphase_postResults(c+1_pInt:c+3_pInt) = mesh_ipCoordinates(1:3,ip,el)                       ! current ip coordinates
        c = c + 3_pInt
+     case (phasefrac_ID)
+       do gr = 1_pInt, homogenization_Ngrains(material_homog(ip,el))
+         homogenization_multiphase_postResults(c+1_pInt) = &
+           phasefrac(gr,material_homog(ip,el))% &
+             p(phasefracMapping(material_homog(ip,el))%p(ip,el))                       ! current ip coordinates
+         c = c + 1_pInt
+       enddo  
     end select
  enddo
 
