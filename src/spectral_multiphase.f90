@@ -31,9 +31,9 @@ module spectral_multiphase
 
 !--------------------------------------------------------------------------------------------------
 ! common pointwise data
- integer(pInt) , private :: NPhases
- real   (pReal), private :: delta(3),  nablaMat(7)
- PetscInt      , private :: xstart,ystart,zstart,xend,yend,zend
+ integer(pInt)                     , private              :: NActivePhases
+ real   (pReal)                    , private              :: delta(3), BMat(3,4)
+ PetscInt                          , private              :: xstart,ystart,zstart,xend,yend,zend
 
  public :: &
    spectral_multiphase_init, &
@@ -108,8 +108,8 @@ subroutine spectral_multiphase_init
        call IO_error(211_pInt,ext_msg='# of phases mismatch in spectral_multiphase')
    endif
  enddo 
- NPhases = homogenization_maxNgrains
- if (NPhases < 2_pInt) call IO_error(211_pInt,ext_msg='# of phases < 2 in spectral_multiphase')
+ NActivePhases = homogenization_maxNgrains
+ if (NActivePhases < 2_pInt) call IO_error(211_pInt,ext_msg='# of phases < 2 in spectral_multiphase')
 
 !--------------------------------------------------------------------------------------------------
 ! initialize solver specific parts of PETSc
@@ -124,7 +124,7 @@ subroutine spectral_multiphase_init
         DMDA_STENCIL_BOX, &                                                                         ! Moore (26) neighborhood around central point
         grid(1),grid(2),grid(3), &                                                                  ! global grid
         1, 1, worldsize, &
-        NPhases, 1, &                                                                               ! #dof, ghost boundary width
+        NActivePhases, 1, &                                                                         ! #dof, ghost boundary width
         grid (1),grid(2),localK, &                                                                  ! local grid
         multiphase_grid,ierr)                                                                       ! handle, error
  CHKERRQ(ierr)
@@ -161,11 +161,11 @@ subroutine spectral_multiphase_init
 
  cell = 0_pInt
  call DMDAVecGetArrayF90(multiphase_grid,solution_current,x_scal,ierr)
- CHKERRQ(ierr)                   !< get the data out of PETSc to work with
+ CHKERRQ(ierr)                  
  do k = zstart, zend;  do j = ystart, yend;  do i = xstart, xend
    cell = cell + 1_pInt
    homog = material_homog(1,cell)
-   do phase = 1, NPhases
+   do phase = 1, NActivePhases
      x_scal(phase-1,i,j,k) =  phasefrac(phase,homog)%p(phasefracMapping(homog)%p(1,cell))
    enddo
  enddo; enddo; enddo
@@ -175,10 +175,13 @@ subroutine spectral_multiphase_init
 !--------------------------------------------------------------------------------------------------
 ! init FEM                 
  delta = geomSize/real(grid,pReal)                                                                  ! grid spacing
- nablaMat = [ 1.0/delta(1)/delta(1), 1.0/delta(1)/delta(1), &
-              1.0/delta(2)/delta(2), 1.0/delta(2)/delta(2), &
-              1.0/delta(3)/delta(3), 1.0/delta(3)/delta(3), &
-             -2.0/delta(1)/delta(1) -2.0/delta(2)/delta(2) -2.0/delta(3)/delta(3)]
+ BMat = 0.0_pReal
+ BMat(1,1) = -1.0_pReal/delta(1)
+ BMat(1,2) =  1.0_pReal/delta(1)
+ BMat(2,1) = -1.0_pReal/delta(2)
+ BMat(2,3) =  1.0_pReal/delta(2)
+ BMat(3,1) = -1.0_pReal/delta(3)
+ BMat(3,4) =  1.0_pReal/delta(3)
    
 end subroutine spectral_multiphase_init
   
@@ -207,8 +210,8 @@ type(tSolutionState) function spectral_multiphase_solution(timeinc,timeinc_old)
    timeinc_old                                                                                      !< increment in time of last increment
  DM :: da_local
  PetscScalar, pointer :: x_scal_current(:,:,:,:), x_scal_lastInc(:,:,:,:)
- real(pReal), dimension(NPhases) :: phi_current, phi_lastInc, phi_stagInc
- real(pReal), dimension(NPhases) :: stagNorm, minPhi, maxPhi, avgPhi
+ real(pReal), dimension(NActivePhases) :: phi_current, phi_lastInc, phi_stagInc
+ real(pReal), dimension(NActivePhases) :: stagNorm, minPhi, maxPhi, avgPhi
  integer(pInt) :: i, j, k, cell, phase, homog
 
 !--------------------------------------------------------------------------------------------------
@@ -246,12 +249,12 @@ type(tSolutionState) function spectral_multiphase_solution(timeinc,timeinc_old)
  do k = zstart, zend; do j = ystart, yend; do i = xstart, xend
    cell = cell + 1
    homog = material_homog(1,cell)
-   do phase = 1, NPhases
+   do phase = 1, NActivePhases
      phi_stagInc(phase) = phasefrac(phase,homog)%p(phasefracMapping(homog)%p(1,cell))
      phi_current(phase) = x_scal_current(phase-1,i,j,k)
      phi_lastInc(phase) = x_scal_lastInc(phase-1,i,j,k)
    enddo
-   do phase = 1, NPhases
+   do phase = 1, NActivePhases
      minPhi(phase) = min(minPhi(phase),phi_current(phase))
      maxPhi(phase) = max(maxPhi(phase),phi_current(phase))
      avgPhi(phase) = avgPhi(phase) + phi_current(phase)
@@ -259,10 +262,10 @@ type(tSolutionState) function spectral_multiphase_solution(timeinc,timeinc_old)
    enddo
    call homogenization_multiphase_putPhaseFrac(phi_current,1,cell)
  enddo; enddo; enddo
- call MPI_Allreduce(MPI_IN_PLACE,minPhi    ,NPhases,MPI_DOUBLE,MPI_MIN,PETSC_COMM_WORLD,ierr)
- call MPI_Allreduce(MPI_IN_PLACE,maxPhi    ,NPhases,MPI_DOUBLE,MPI_MAX,PETSC_COMM_WORLD,ierr)
- call MPI_Allreduce(MPI_IN_PLACE,avgPhi    ,NPhases,MPI_DOUBLE,MPI_SUM,PETSC_COMM_WORLD,ierr)
- call MPI_Allreduce(MPI_IN_PLACE,stagNorm,  NPhases,MPI_DOUBLE,MPI_MAX,PETSC_COMM_WORLD,ierr)
+ call MPI_Allreduce(MPI_IN_PLACE,minPhi    ,NActivePhases,MPI_DOUBLE,MPI_MIN,PETSC_COMM_WORLD,ierr)
+ call MPI_Allreduce(MPI_IN_PLACE,maxPhi    ,NActivePhases,MPI_DOUBLE,MPI_MAX,PETSC_COMM_WORLD,ierr)
+ call MPI_Allreduce(MPI_IN_PLACE,avgPhi    ,NActivePhases,MPI_DOUBLE,MPI_SUM,PETSC_COMM_WORLD,ierr)
+ call MPI_Allreduce(MPI_IN_PLACE,stagNorm,  NActivePhases,MPI_DOUBLE,MPI_MAX,PETSC_COMM_WORLD,ierr)
 
 !--------------------------------------------------------------------------------------------------
 ! restore local fields 
@@ -277,7 +280,7 @@ type(tSolutionState) function spectral_multiphase_solution(timeinc,timeinc_old)
 
  if (spectral_multiphase_solution%converged) then 
    write(6,'(/,a)') ' ... multiphase converged .....................................'
-   do phase = 1, NPhases
+   do phase = 1, NActivePhases
      write(6,'(/,a,e12.5,2x,e12.5,2x,e11.4,/)',advance='no') ' Minimum|Maximum|Avg Phi           = ',&
        minPhi(phase), maxPhi(phase), avgPhi(phase)*wgt
    enddo
@@ -291,12 +294,11 @@ end function spectral_multiphase_solution
 !> @brief forms the residual vector
 !--------------------------------------------------------------------------------------------------
 subroutine spectral_multiphase_formResidual(da_local,solution_current_local,residual_current_local,dummy,ierr)
- use numerics, only: &
-   err_phasefr_tolAbs
+ use mesh, only: &
+   grid
  use homogenization_multiphase, only: &
    homogenization_multiphase_getPhaseFlux, &
-   homogenization_multiphase_getPhaseSource, &
-   homogenization_multiphase_getPhaseMobility
+   homogenization_multiphase_getPhaseSource
 
  implicit none
 
@@ -306,16 +308,14 @@ subroutine spectral_multiphase_formResidual(da_local,solution_current_local,resi
  PetscScalar, pointer :: solution_current_scal(:,:,:,:), &
                          solution_lastInc_scal(:,:,:,:), &
                          residual_current_scal(:,:,:,:)
- PetscScalar          :: phi_current(NPhases), &
-                         phi_lastInc(NPhases), &
-                         phi_nabla  (NPhases), &
-                         phi_fluxRate(NPhases), &
-                         phi_bulkRate(NPhases), &
-                         phi_intfRate_prediction(NPhases), &
-                         phi_intfRate_correction(NPhases), &
-                         phi_mobility(NPhases,NPhases)
- logical              :: phi_active(NPhases)
- PetscInt             :: i, j, k, cell, phaseI, phaseJ
+ PetscScalar          :: solution_current_elem(4,NActivePhases), &
+                         residual_current_elem(4,NActivePhases)
+ PetscScalar          :: phi_current(NActivePhases), &
+                         phi_lastInc(NActivePhases), &
+                         phi_grad(3,NActivePhases)
+ real(pReal)          :: phi_source(NActivePhases), &
+                         phi_flux(3,NActivePhases)
+ PetscInt             :: i, j, k, phase, cell
  PetscObject          :: dummy
  PetscErrorCode       :: ierr
 
@@ -324,66 +324,41 @@ subroutine spectral_multiphase_formResidual(da_local,solution_current_local,resi
  call VecSet(residual_current_local,0.0,ierr);CHKERRQ(ierr)                                         ! set residual to zero
  call DMDAVecGetArrayF90(da_local,residual_current_local,residual_current_scal,ierr)
  CHKERRQ(ierr)                                                                                      ! residual_current_local(PETSc) -> residual_current_scal(our) with layout from da_local
- call DMDAVecGetArrayF90(da_local,solution_current_local,solution_current_scal,ierr)                ! sol_cur_local(PETSc, phase fracs) -> sol_cut_scal(our) ...
+ call DMDAVecGetArrayF90(da_local,solution_current_local,solution_current_scal,ierr)                ! sol_cur_local(PETSc, phase frac) -> sol_cut_scal(our) ...
  CHKERRQ(ierr)
- call DMDAVecGetArrayF90(da_local,solution_lastInc,      solution_lastInc_scal,ierr)                
+ call DMDAVecGetArrayF90(da_local,solution_lastInc,      solution_lastInc_scal,ierr)                ! solution_lastInc(PETSc) -> sol_last_scal(our, but phase fracs)
  CHKERRQ(ierr)
  cell = 0
  do k = zstart, zend; do j = ystart, yend; do i = xstart, xend
    cell = cell + 1
-   phi_current(1:NPhases) = &
-     solution_current_scal(0:NPhases-1,i,j,k)                 
-   phi_lastInc(1:NPhases) = &
-     solution_lastInc_scal(0:NPhases-1,i,j,k)                 
-   phi_nabla  = &
-     (solution_current_scal(0:NPhases-1,i+1,j  ,k  ) - &
-      solution_current_scal(0:NPhases-1,i  ,j  ,k  ))/delta(1)/delta(1) - &
-     (solution_current_scal(0:NPhases-1,i  ,j  ,k  ) - &
-      solution_current_scal(0:NPhases-1,i-1,j  ,k  ))/delta(1)/delta(1) + &
-     (solution_current_scal(0:NPhases-1,i  ,j+1,k  ) - &
-      solution_current_scal(0:NPhases-1,i  ,j  ,k  ))/delta(2)/delta(2) - &
-     (solution_current_scal(0:NPhases-1,i  ,j  ,k  ) - &
-      solution_current_scal(0:NPhases-1,i  ,j-1,k  ))/delta(2)/delta(2) + &
-     (solution_current_scal(0:NPhases-1,i  ,j  ,k+1) - &
-      solution_current_scal(0:NPhases-1,i  ,j  ,k  ))/delta(3)/delta(3) - &
-     (solution_current_scal(0:NPhases-1,i  ,j  ,k  ) - &
-      solution_current_scal(0:NPhases-1,i  ,j  ,k-1))/delta(3)/delta(3)
-
-   phi_fluxRate = homogenization_multiphase_getPhaseFlux    (phi_nabla  ,1,cell)
-   phi_bulkRate = homogenization_multiphase_getPhaseSource  (phi_current,1,cell)
-   phi_mobility = homogenization_multiphase_getPhaseMobility(            1,cell) 
+   solution_current_elem(1,1:NActivePhases) = solution_current_scal(0:NActivePhases-1,i  ,j  ,k  )  ! phase fracs at three neighboring points for differetiation
+   solution_current_elem(2,1:NActivePhases) = solution_current_scal(0:NActivePhases-1,i+1,j  ,k  )
+   solution_current_elem(3,1:NActivePhases) = solution_current_scal(0:NActivePhases-1,i  ,j+1,k  )
+   solution_current_elem(4,1:NActivePhases) = solution_current_scal(0:NActivePhases-1,i  ,j  ,k+1)
    
-   phi_intfRate_prediction = phi_current - phi_lastInc
-   do phaseI = 1, NPhases; do phaseJ = 1, NPhases
-     phi_intfRate_prediction(phaseI) = &
-       phi_intfRate_prediction(phaseI) - &
-       params%timeinc* &
-       phi_mobility(phaseI,phaseJ)* &
-       ((phi_fluxRate(phaseI) + phi_bulkRate(phaseI)) - &
-        (phi_fluxRate(phaseJ) + phi_bulkRate(phaseJ)))
-   enddo; enddo
-   phi_active =      (phi_current <= 0.0 + err_phasefr_tolAbs .and. phi_intfRate_prediction >= 0.0) &
-                .or. (phi_current >= 1.0 - err_phasefr_tolAbs .and. phi_intfRate_prediction <= 0.0)
+   phi_current(1:NActivePhases) = solution_current_scal(0:NActivePhases-1,i,j,k)                 
+   phi_lastInc(1:NActivePhases) = solution_lastInc_scal(0:NActivePhases-1,i,j,k)                 
+   phi_grad = matmul(BMat,solution_current_elem)
    
-   phi_intfRate_correction = 0.0_pReal
-   do phaseI = 1, NPhases
-     if (.not. phi_active(phaseI)) then
-       phi_intfRate_correction(phaseI) = phi_current(phaseI) - phi_lastInc(phaseI)
-       do phaseJ = 1, NPhases
-         if (.not. phi_active(phaseJ)) then
-           phi_intfRate_correction(phaseI) = &
-             phi_intfRate_correction(phaseI) - &
-             params%timeinc* &
-             phi_mobility(phaseI,phaseJ)* &
-             ((phi_fluxRate(phaseI) + phi_bulkRate(phaseI)) - &
-              (phi_fluxRate(phaseJ) + phi_bulkRate(phaseJ)))
-         endif
-       enddo 
-     else
-       phi_intfRate_correction(phaseI) = phi_intfRate_prediction(phaseI)
-     endif
-   enddo  
-   residual_current_scal(0:NPhases-1,i,j,k) = phi_intfRate_correction
+   phi_flux   = homogenization_multiphase_getPhaseFlux  (phi_grad   ,1,cell)
+   phi_source = homogenization_multiphase_getPhaseSource(phi_current,1,cell)
+   
+   residual_current_elem = 0.0_pReal
+   residual_current_elem(1  ,1:NActivePhases) = residual_current_elem(1,1:NActivePhases) + &
+                                               (phi_current(1:NActivePhases) - &
+                                                phi_lastInc(1:NActivePhases) - &
+                                                params%timeinc*phi_source(1:NActivePhases))
+   residual_current_elem(1:4,1:NActivePhases) = residual_current_elem(1:4,1:NActivePhases) + &
+                                                params%timeinc* &
+                                                matmul(transpose(BMat),phi_flux(1:3,1:NActivePhases))
+   residual_current_scal(0:NActivePhases-1,i  ,j  ,k  ) = &
+   residual_current_scal(0:NActivePhases-1,i  ,j  ,k  ) + residual_current_elem(1,1:NActivePhases)
+   residual_current_scal(0:NActivePhases-1,i+1,j  ,k  ) = &
+   residual_current_scal(0:NActivePhases-1,i+1,j  ,k  ) + residual_current_elem(2,1:NActivePhases)
+   residual_current_scal(0:NActivePhases-1,i  ,j+1,k  ) = &
+   residual_current_scal(0:NActivePhases-1,i  ,j+1,k  ) + residual_current_elem(3,1:NActivePhases)
+   residual_current_scal(0:NActivePhases-1,i  ,j  ,k+1) = &
+   residual_current_scal(0:NActivePhases-1,i  ,j  ,k+1) + residual_current_elem(4,1:NActivePhases)
  enddo; enddo; enddo
  call DMDAVecRestoreArrayF90(da_local,solution_lastInc      ,solution_lastInc_scal,ierr)
  CHKERRQ(ierr)
@@ -399,160 +374,83 @@ end subroutine spectral_multiphase_formResidual
 !> @brief forms the FEM stiffness matrix
 !--------------------------------------------------------------------------------------------------
 subroutine spectral_multiphase_formJacobian(da_local,solution_current_local,Jac_pre,Jac,dummy,ierr)
- use numerics, only: &
-   err_phasefr_tolAbs
+ use math, only: &
+   math_identity2nd
+ use mesh, only: &
+   grid
  use homogenization_multiphase, only: &
-   homogenization_multiphase_getPhaseFlux, &
    homogenization_multiphase_getPhaseFluxTangent, &
-   homogenization_multiphase_getPhaseSource, &
-   homogenization_multiphase_getPhaseSourceTangent, &
-   homogenization_multiphase_getPhaseMobility
+   homogenization_multiphase_getPhaseSourceTangent
 
  implicit none
 
  DM                   :: da_local
  Vec                  :: solution_current_local
  Mat                  :: Jac, Jac_pre
- MatStencil           :: col(4,7*NPhases), &
-                         row(4,  NPhases)   
- PetscScalar          :: k_correction(NPhases,7*NPhases)
- PetscScalar, pointer :: solution_current_scal(:,:,:,:), &
-                         solution_lastInc_scal(:,:,:,:)
- PetscScalar          :: phi_current(NPhases), &
-                         phi_lastInc(NPhases), &
-                         phi_nabla  (NPhases), &
-                         phi_fluxRate(NPhases), &
-                         phi_bulkRate(NPhases), &
-                         phi_intfRate_prediction(NPhases), &
-                         phi_fluxRateTangent(NPhases,NPhases), &
-                         phi_bulkRateTangent(NPhases,NPhases), &
-                         phi_mobility(NPhases,NPhases)
- logical              :: phi_active(NPhases)
- PetscInt             :: i, j, k, cell, phaseI, phaseJ, phaseK
+ MatStencil           :: col(4,4*NActivePhases)
+ PetscScalar, pointer :: solution_current_scal(:,:,:,:)
+ PetscScalar          :: k_ele(4*NActivePhases,4*NActivePhases)
+ PetscScalar          :: phi_current(NActivePhases)
+ real(pReal)          :: phi_sourceTangent(NActivePhases,NActivePhases), &
+                         phi_fluxTangent  (NActivePhases,NActivePhases)
+ PetscInt             :: i, j, k, cell, phaseI, phaseJ
  PetscObject          :: dummy
  PetscErrorCode       :: ierr
 
 !--------------------------------------------------------------------------------------------------
-! constructing residual
+! assemble matrix
  call MatSetOption(Jac,MAT_KEEP_NONZERO_PATTERN,PETSC_TRUE,ierr); CHKERRQ(ierr)
  call MatSetOption(Jac,MAT_NEW_NONZERO_ALLOCATION_ERR,PETSC_FALSE,ierr); CHKERRQ(ierr)
  call MatZeroEntries(Jac,ierr); CHKERRQ(ierr)
- call DMDAVecGetArrayF90(da_local,solution_current_local,solution_current_scal,ierr)                ! sol_cur_local(PETSc, phase fracs) -> sol_cut_scal(our) ...
- CHKERRQ(ierr)
- call DMDAVecGetArrayF90(da_local,solution_lastInc,      solution_lastInc_scal,ierr)                
+ call DMDAVecGetArrayF90(da_local,solution_current_local,solution_current_scal,ierr)
  CHKERRQ(ierr)
  cell = 0
  do k = zstart, zend; do j = ystart, yend; do i = xstart, xend
    cell = cell + 1
-   do phaseI = 0, NPhases-1 
-     col(MatStencil_i,7*phaseI+1) = i+1
-     col(MatStencil_j,7*phaseI+1) = j
-     col(MatStencil_k,7*phaseI+1) = k
-     col(MatStencil_c,7*phaseI+1) = phaseI
-     col(MatStencil_i,7*phaseI+2) = i-1
-     col(MatStencil_j,7*phaseI+2) = j
-     col(MatStencil_k,7*phaseI+2) = k
-     col(MatStencil_c,7*phaseI+2) = phaseI
-     col(MatStencil_i,7*phaseI+3) = i
-     col(MatStencil_j,7*phaseI+3) = j+1
-     col(MatStencil_k,7*phaseI+3) = k
-     col(MatStencil_c,7*phaseI+3) = phaseI
-     col(MatStencil_i,7*phaseI+4) = i
-     col(MatStencil_j,7*phaseI+4) = j-1
-     col(MatStencil_k,7*phaseI+4) = k
-     col(MatStencil_c,7*phaseI+4) = phaseI
-     col(MatStencil_i,7*phaseI+5) = i
-     col(MatStencil_j,7*phaseI+5) = j
-     col(MatStencil_k,7*phaseI+5) = k+1
-     col(MatStencil_c,7*phaseI+5) = phaseI
-     col(MatStencil_i,7*phaseI+6) = i
-     col(MatStencil_j,7*phaseI+6) = j
-     col(MatStencil_k,7*phaseI+6) = k-1
-     col(MatStencil_c,7*phaseI+6) = phaseI
-     col(MatStencil_i,7*phaseI+7) = i
-     col(MatStencil_j,7*phaseI+7) = j
-     col(MatStencil_k,7*phaseI+7) = k
-     col(MatStencil_c,7*phaseI+7) = phaseI
-     row(MatStencil_i,  phaseI+1) = i
-     row(MatStencil_j,  phaseI+1) = j
-     row(MatStencil_k,  phaseI+1) = k
-     row(MatStencil_c,  phaseI+1) = phaseI
+   do phaseI = 0, NActivePhases-1 
+     col(MatStencil_i,4*phaseI+1) = i
+     col(MatStencil_j,4*phaseI+1) = j
+     col(MatStencil_k,4*phaseI+1) = k
+     col(MatStencil_c,4*phaseI+1) = phaseI
+     col(MatStencil_i,4*phaseI+2) = i+1
+     col(MatStencil_j,4*phaseI+2) = j
+     col(MatStencil_k,4*phaseI+2) = k
+     col(MatStencil_c,4*phaseI+2) = phaseI
+     col(MatStencil_i,4*phaseI+3) = i
+     col(MatStencil_j,4*phaseI+3) = j+1
+     col(MatStencil_k,4*phaseI+3) = k
+     col(MatStencil_c,4*phaseI+3) = phaseI
+     col(MatStencil_i,4*phaseI+4) = i
+     col(MatStencil_j,4*phaseI+4) = j
+     col(MatStencil_k,4*phaseI+4) = k+1
+     col(MatStencil_c,4*phaseI+4) = phaseI
    enddo
 
-   phi_current(1:NPhases) = &
-     solution_current_scal(0:NPhases-1,i,j,k)                 
-   phi_lastInc(1:NPhases) = &
-     solution_lastInc_scal(0:NPhases-1,i,j,k)                 
-   phi_nabla  = &
-     (solution_current_scal(0:NPhases-1,i+1,j  ,k  ) - &
-      solution_current_scal(0:NPhases-1,i  ,j  ,k  ))/delta(1)/delta(1) - &
-     (solution_current_scal(0:NPhases-1,i  ,j  ,k  ) - &
-      solution_current_scal(0:NPhases-1,i-1,j  ,k  ))/delta(1)/delta(1) + &
-     (solution_current_scal(0:NPhases-1,i  ,j+1,k  ) - &
-      solution_current_scal(0:NPhases-1,i  ,j  ,k  ))/delta(2)/delta(2) - &
-     (solution_current_scal(0:NPhases-1,i  ,j  ,k  ) - &
-      solution_current_scal(0:NPhases-1,i  ,j-1,k  ))/delta(2)/delta(2) + &
-     (solution_current_scal(0:NPhases-1,i  ,j  ,k+1) - &
-      solution_current_scal(0:NPhases-1,i  ,j  ,k  ))/delta(3)/delta(3) - &
-     (solution_current_scal(0:NPhases-1,i  ,j  ,k  ) - &
-      solution_current_scal(0:NPhases-1,i  ,j  ,k-1))/delta(3)/delta(3)
+   phi_current = solution_current_scal(0:NActivePhases-1,i,j,k)                 
+   phi_fluxTangent   = homogenization_multiphase_getPhaseFluxTangent  (           1,cell)
+   phi_sourceTangent = homogenization_multiphase_getPhaseSourceTangent(phi_current,1,cell)
 
-   phi_fluxRate = homogenization_multiphase_getPhaseFlux  (phi_nabla  ,1,cell)
-   phi_bulkRate = homogenization_multiphase_getPhaseSource(phi_current,1,cell)
-   phi_mobility = homogenization_multiphase_getPhaseMobility(          1,cell) 
-   
-   phi_intfRate_prediction = phi_current - phi_lastInc
-   do phaseI = 1, NPhases; do phaseJ = 1, NPhases
-     phi_intfRate_prediction(phaseI) = &
-       phi_intfRate_prediction(phaseI) - &
-       params%timeinc* &
-       phi_mobility(phaseI,phaseJ)* &
-       ((phi_fluxRate(phaseI) + phi_bulkRate(phaseI)) - &
-        (phi_fluxRate(phaseJ) + phi_bulkRate(phaseJ)))
-   enddo; enddo
-   phi_active =      (phi_current <= 0.0 + err_phasefr_tolAbs .and. phi_intfRate_prediction >= 0.0) &
-                .or. (phi_current >= 1.0 - err_phasefr_tolAbs .and. phi_intfRate_prediction <= 0.0)
-   
-   phi_fluxRateTangent = homogenization_multiphase_getPhaseFluxTangent  (1,cell)
-   phi_bulkRateTangent = homogenization_multiphase_getPhaseSourceTangent(1,cell)
-   
-   k_correction = 0.0_pReal
-   do phaseI = 0, NPhases-1
-     if (.not. phi_active(phaseI+1)) then
-       k_correction(phaseI+1,7*phaseI+7) = 1.0
-       do phaseJ = 0, NPhases-1
-         do phaseK = 0, NPhases-1
-           if ((.not. phi_active(phaseJ+1)) .and. &
-               (.not. phi_active(phaseK+1))) then
-             k_correction(phaseI+1,7*phaseK+7) = &
-               k_correction(phaseI+1,7*phaseK+7) - &
-               params%timeinc* &
-               phi_mobility(phaseI+1,phaseJ+1)* &
-               (phi_bulkRateTangent(phaseI+1,phaseK+1) - &
-                phi_bulkRateTangent(phaseJ+1,phaseK+1))
-             k_correction(phaseI+1,7*phaseK+1:7*phaseK+7) = &
-               k_correction(phaseI+1,7*phaseK+1:7*phaseK+7) - &
-               params%timeinc* &
-               phi_mobility(phaseI+1,phaseJ+1)* &
-               (phi_fluxRateTangent(phaseI+1,phaseK+1) - &
-                phi_fluxRateTangent(phaseJ+1,phaseK+1))*nablaMat
-           endif
-         enddo
-       enddo
-     endif
-   enddo      
-   call MatSetValuesStencil(Jac,NPhases,row,7*NPhases,col,transpose(k_correction),ADD_VALUES,ierr)
+   k_ele = 0.0
+   k_ele(1:4*NActivePhases:4,1:4*NActivePhases:4) = &
+     k_ele(1:4*NActivePhases:4,1:4*NActivePhases:4) + &
+     math_identity2nd(NActivePhases) - params%timeinc*phi_sourceTangent
+   do phaseI = 0, NActivePhases-1; do phaseJ = 0, NActivePhases-1
+     k_ele(4*phaseI+1:4*(phaseI+1),4*phaseJ+1:4*(phaseJ+1)) = &
+       k_ele(4*phaseI+1:4*(phaseI+1),4*phaseJ+1:4*(phaseJ+1)) + &
+       params%timeinc*phi_fluxTangent(phaseI+1,phaseJ+1)* &
+       matmul(transpose(BMat),BMat)
+   enddo; enddo  
+   k_ele = transpose(k_ele)
+   call MatSetValuesStencil(Jac,4*NActivePhases,col,4*NActivePhases,col,k_ele,ADD_VALUES,ierr)
    CHKERRQ(ierr)
  enddo; enddo; enddo
  call MatAssemblyBegin(Jac,MAT_FINAL_ASSEMBLY,ierr); CHKERRQ(ierr)
  call MatAssemblyEnd(Jac,MAT_FINAL_ASSEMBLY,ierr); CHKERRQ(ierr)
  call MatAssemblyBegin(Jac_pre,MAT_FINAL_ASSEMBLY,ierr); CHKERRQ(ierr)
  call MatAssemblyEnd(Jac_pre,MAT_FINAL_ASSEMBLY,ierr); CHKERRQ(ierr)
- call DMDAVecRestoreArrayF90(da_local,solution_lastInc      ,solution_lastInc_scal,ierr)
+ call DMDAVecRestoreArrayF90(da_local,solution_current_local,solution_current_scal,ierr)
  CHKERRQ(ierr)
- call DMDAVecRestoreArrayF90(da_local,solution_current_local,solution_current_scal,ierr)            ! put back to PETSc data structure
- CHKERRQ(ierr)
-
+   
 end subroutine spectral_multiphase_formJacobian
 
 
@@ -579,7 +477,7 @@ subroutine spectral_multiphase_forward()
    cell = 0
    do k = zstart, zend; do j = ystart, yend; do i = xstart, xend                                    ! walk through my (sub)domain
      cell = cell + 1
-     call homogenization_multiphase_putPhaseFrac(solution_current_scal(0:NPhases-1,i,j,k),1,cell)
+     call homogenization_multiphase_putPhaseFrac(solution_current_scal(0:NActivePhases-1,i,j,k),1,cell)
    enddo; enddo; enddo
    call DMDAVecRestoreArrayF90(da_local,solution_current,solution_current_scal,ierr)
    CHKERRQ(ierr)
