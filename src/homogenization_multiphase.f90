@@ -166,9 +166,9 @@ subroutine homogenization_multiphase_init(fileUnit)
        i = homogenization_typeInstance(section)                                                     ! count instances of my homogenization law
        allocate(param(i)%outputID(homogenization_Noutput(section)))                                 ! allocate space for IDs of every requested output
        allocate(param(i)%interfaceMobility(homogenization_Ngrains(section), &
-                                           homogenization_Ngrains(section)))
+                                           homogenization_Ngrains(section)), source = 0.0_pReal)
        allocate(param(i)%interfaceEnergy  (homogenization_Ngrains(section), &
-                                           homogenization_Ngrains(section)))
+                                           homogenization_Ngrains(section)), source = 0.0_pReal)
      endif
      cycle
    endif
