@@ -25,7 +25,8 @@ module homogenization_multiphase
                  nconstituents_ID, &
                  ipcoords_ID, &
                  avgdefgrad_ID, &
-                 avgfirstpiola_ID
+                 avgfirstpiola_ID, &
+                 phasefrac_ID
  end enum
 
  enum, bind(c) 
@@ -200,6 +201,11 @@ subroutine homogenization_multiphase_init(fileUnit)
                homogenization_multiphase_output(homogenization_multiphase_Noutput(i),i) = &
                  IO_lc(IO_stringValue(line,chunkPos,2_pInt))
                param(i)%outputID(homogenization_multiphase_Noutput(i)) = avgfirstpiola_ID
+             case('phasefrac','phasefraction')
+               homogenization_multiphase_Noutput(i) = homogenization_multiphase_Noutput(i) + 1_pInt
+               homogenization_multiphase_output(homogenization_multiphase_Noutput(i),i) = &
+                 IO_lc(IO_stringValue(line,chunkPos,2_pInt))
+               param(i)%outputID(homogenization_multiphase_Noutput(i)) = phasefrac_ID
 
            end select
 
@@ -290,6 +296,8 @@ subroutine homogenization_multiphase_init(fileUnit)
           mySize = 3_pInt
         case(avgdefgrad_ID, avgfirstpiola_ID)
           mySize = 9_pInt
+        case(phasefrac_ID)
+          mySize = homogenization_Ngrains(homog)
         case default
           mySize = 0_pInt
        end select
@@ -1486,6 +1494,8 @@ pure function homogenization_multiphase_postResults(ip,el,avgP,avgF)
  use mesh, only: &
    mesh_ipCoordinates
  use material, only: &
+   phasefrac, &
+   phasefracMapping, &
    material_homog, &
    homogenization_Ngrains, &
    homogenization_typeInstance, &
@@ -1504,7 +1514,7 @@ pure function homogenization_multiphase_postResults(ip,el,avgP,avgF)
  
  integer(pInt) :: &
    homID, &
-   o, c
+   o, c, gr
    
  c = 0_pInt
  homID = homogenization_typeInstance(material_homog(ip,el))
@@ -1521,6 +1531,12 @@ pure function homogenization_multiphase_postResults(ip,el,avgP,avgF)
      case (avgfirstpiola_ID)
        homogenization_multiphase_postResults(c+1_pInt:c+9_pInt) = reshape(avgP,[9])
        c = c + 9_pInt
+     case (phasefrac_ID)
+       do gr = 1_pInt, homogenization_Ngrains(material_homog(ip,el))
+         homogenization_multiphase_postResults(c+1_pInt) = &
+         phasefrac(gr,material_homog(ip,el))%p(phasefracMapping(material_homog(ip,el))%p(ip,el))
+         c = c + 1_pInt
+       enddo  
      case (ipcoords_ID)
        homogenization_multiphase_postResults(c+1_pInt:c+3_pInt) = mesh_ipCoordinates(1:3,ip,el)                       ! current ip coordinates
        c = c + 3_pInt
