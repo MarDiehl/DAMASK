@@ -16,7 +16,7 @@ module spectral_utilities
 #include <petsc/finclude/petscsys.h>
  include 'fftw3-mpi.f03'
 
- logical,       public             :: cutBack =.false.                                              !< cut back of BVP solver in case convergence is not achieved or a material point is terminally ill
+ logical,       public             :: cutBack = .false.                                              !< cut back of BVP solver in case convergence is not achieved or a material point is terminally ill
  integer(pInt), public, parameter  :: maxPhaseFields = 2_pInt
  integer(pInt), public             :: nActiveFields = 0_pInt
 
@@ -69,7 +69,6 @@ module spectral_utilities
 ! derived types
  type, public :: tSolutionState                                                                     !< return type of solution from spectral solver variants
    logical       :: converged         = .true.
-   logical       :: regrid            = .false.
    logical       :: stagConverged     = .true.
    logical       :: termIll           = .false.
    integer(pInt) :: iterationsNeeded  = 0_pInt
@@ -152,14 +151,14 @@ contains
 
 !--------------------------------------------------------------------------------------------------
 !> @brief allocates all neccessary fields, sets debug flags, create plans for FFTW
-!> @details Sets the debug levels for general, divergence, restart and FFTW from the biwise coding
+!> @details Sets the debug levels for general, divergence, restart, and FFTW from the bitwise coding
 !> provided by the debug module to logicals.
-!> Allocates all fields used by FFTW and create the corresponding plans depending on the debug
+!> Allocate all fields used by FFTW and create the corresponding plans depending on the debug
 !> level chosen.
 !> Initializes FFTW.
 !--------------------------------------------------------------------------------------------------
 subroutine utilities_init()
-#ifdef __GFORTRAN__
+#if defined(__GFORTRAN__) || __INTEL_COMPILER >= 1800
  use, intrinsic :: iso_fortran_env, only: &
    compiler_version, &
    compiler_options
@@ -376,10 +375,10 @@ end subroutine utilities_init
 
 
 !--------------------------------------------------------------------------------------------------
-!> @brief updates references stiffness and potentially precalculated gamma operator
+!> @brief updates reference stiffness and potentially precalculated gamma operator
 !> @details Sets the current reference stiffness to the stiffness given as an argument.
 !> If the gamma operator is precalculated, it is calculated with this stiffness.
-!> In case of a on-the-fly calculation, only the reference stiffness is updated.
+!> In case of an on-the-fly calculation, only the reference stiffness is updated.
 !> Also writes out the current reference stiffness for restart.
 !--------------------------------------------------------------------------------------------------
 subroutine utilities_updateGamma(C,saveReference)
@@ -412,8 +411,7 @@ subroutine utilities_updateGamma(C,saveReference)
      write(6,'(/,a)') ' writing reference stiffness to file'
      flush(6)
      call IO_write_jobRealFile(777,'C_ref',size(C_ref))
-     write (777,rec=1) C_ref
-     close(777)
+     write (777,rec=1) C_ref; close(777)
    endif
  endif
 
@@ -782,7 +780,7 @@ function utilities_maskedCompliance(rot_BC,mask_stress,C)
    if(debugGeneral) then
      write(6,'(/,a)') ' ... updating masked compliance ............................................'
      write(6,'(/,a,/,9(9(2x,f12.7,1x)/))',advance='no') ' Stiffness C (load) / GPa =',&
-                                                  transpose(temp99_Real)/1.e9_pReal
+                                                  transpose(temp99_Real)*1.0e-9_pReal
      flush(6)
    endif
    k = 0_pInt                                                                                       ! calculate reduced stiffness
@@ -798,7 +796,7 @@ function utilities_maskedCompliance(rot_BC,mask_stress,C)
 
    call math_invert(size_reduced, c_reduced, s_reduced, errmatinv)                                  ! invert reduced stiffness
    if (any(IEEE_is_NaN(s_reduced))) errmatinv = .true.
-   if(errmatinv) call IO_error(error_ID=400_pInt,ext_msg='utilities_maskedCompliance')
+   if (errmatinv) call IO_error(error_ID=400_pInt,ext_msg='utilities_maskedCompliance')
    temp99_Real = 0.0_pReal                                                                          ! fill up compliance with zeros
     k = 0_pInt
     do n = 1_pInt,9_pInt
@@ -816,28 +814,30 @@ function utilities_maskedCompliance(rot_BC,mask_stress,C)
    sTimesC = matmul(c_reduced,s_reduced)
    do m=1_pInt, size_reduced
      do n=1_pInt, size_reduced
-       if(m==n .and. abs(sTimesC(m,n)) > (1.0_pReal + 10.0e-12_pReal)) errmatinv = .true.           ! diagonal elements of S*C should be 1
-       if(m/=n .and. abs(sTimesC(m,n)) > (0.0_pReal + 10.0e-12_pReal)) errmatinv = .true.           ! off diagonal elements of S*C should be 0
+       errmatinv = errmatinv &
+              .or. (m==n .and. abs(sTimesC(m,n)-1.0_pReal) > 1.0e-12_pReal) &                    ! diagonal elements of S*C should be 1
+              .or. (m/=n .and. abs(sTimesC(m,n))           > 1.0e-12_pReal)                      ! off-diagonal elements of S*C should be 0
      enddo
    enddo
-   if(debugGeneral .or. errmatinv) then
-     write(formatString, '(I16.16)') size_reduced
+   if (debugGeneral .or. errmatinv) then
+     write(formatString, '(i2)') size_reduced
      formatString = '(/,a,/,'//trim(formatString)//'('//trim(formatString)//'(2x,es9.2,1x)/))'
      write(6,trim(formatString),advance='no') ' C * S (load) ', &
                                                             transpose(matmul(c_reduced,s_reduced))
      write(6,trim(formatString),advance='no') ' S (load) ', transpose(s_reduced)
+     if(errmatinv) call IO_error(error_ID=400_pInt,ext_msg='utilities_maskedCompliance')
    endif
-   if(errmatinv) call IO_error(error_ID=400_pInt,ext_msg='utilities_maskedCompliance')
    deallocate(c_reduced)
    deallocate(s_reduced)
    deallocate(sTimesC)
  else
    temp99_real = 0.0_pReal
  endif
- if(debugGeneral) &
-   write(6,'(/,a,/,9(9(2x,f12.7,1x)/),/)',advance='no') ' Masked Compliance (load) * GPa =', &
-                                                    transpose(temp99_Real*1.e9_pReal)
- flush(6)
+ if(debugGeneral) then
+   write(6,'(/,a,/,9(9(2x,f10.5,1x)/),/)',advance='no') &
+     ' Masked Compliance (load) * GPa =', transpose(temp99_Real)*1.0e9_pReal
+   flush(6)
+ endif
  utilities_maskedCompliance = math_Plain99to3333(temp99_Real)
 
 end function utilities_maskedCompliance
@@ -923,47 +923,37 @@ end subroutine utilities_fourierTensorDivergence
 
 
 !--------------------------------------------------------------------------------------------------
-!> @brief calculates constitutive response
+!> @brief calculate constitutive response from materialpoint_F0 to F during timeinc
 !--------------------------------------------------------------------------------------------------
-subroutine utilities_constitutiveResponse(F_lastInc,F,timeinc, &
-                                          P,C_volAvg,C_minmaxAvg,P_av,forwardData,rotation_BC)
+subroutine utilities_constitutiveResponse(P,P_av,C_volAvg,C_minmaxAvg,&
+                                          F,timeinc,rotation_BC)
  use IO, only: &
    IO_error
  use debug, only: &
    debug_reset, &
    debug_info
  use math, only: &
-   math_transpose33, &
    math_rotate_forward33, &
    math_det33
  use mesh, only: &
    grid,&
    grid3
- use FEsolving, only: &
-   restartWrite
- use CPFEM2, only: &
-   CPFEM_general
  use homogenization, only: &
-   materialpoint_F0, &
    materialpoint_F, &
    materialpoint_P, &
-   materialpoint_dPdF
+   materialpoint_dPdF, &
+   materialpoint_stressAndItsTangent
 
  implicit none
- real(pReal), intent(in), dimension(3,3,grid(1),grid(2),grid3) :: &
-   F_lastInc, &                                                                                     !< target deformation gradient
-   F                                                                                                !< previous deformation gradient
- real(pReal), intent(in)                                         :: timeinc                         !< loading time
- logical,     intent(in)                                         :: forwardData                     !< age results
- real(pReal), intent(in), dimension(3,3)                         :: rotation_BC                     !< rotation of load frame
-
  real(pReal),intent(out), dimension(3,3,3,3)                     :: C_volAvg, C_minmaxAvg           !< average stiffness
  real(pReal),intent(out), dimension(3,3)                         :: P_av                            !< average PK stress
  real(pReal),intent(out), dimension(3,3,grid(1),grid(2),grid3)   :: P                               !< PK stress
 
- logical :: &
-   age
+ real(pReal), intent(in), dimension(3,3,grid(1),grid(2),grid3)   :: F                               !< deformation gradient target                                                                                                !< previous deformation gradient
+ real(pReal), intent(in)                                         :: timeinc                         !< loading time
+ real(pReal), intent(in), dimension(3,3)                         :: rotation_BC                     !< rotation of load frame
 
+ 
  integer(pInt) :: &
    j,k,ierr
  real(pReal), dimension(3,3,3,3) :: max_dPdF, min_dPdF
@@ -974,17 +964,9 @@ subroutine utilities_constitutiveResponse(F_lastInc,F,timeinc, &
 
  write(6,'(/,a)') ' ... evaluating constitutive response ......................................'
  flush(6)
- age = .False.
-
- if (forwardData) then                                                                              ! aging results
-   age = .True.
-   materialpoint_F0 = reshape(F_lastInc, [3,3,1,product(grid(1:2))*grid3])
- endif
- if (cutBack) age = .False.                                                                         ! restore saved variables
-
- materialpoint_F  = reshape(F,[3,3,1,product(grid(1:2))*grid3])
- call debug_reset()                                                                                 ! this has no effect on rank >0
-
+ 
+ materialpoint_F  = reshape(F,[3,3,1,product(grid(1:2))*grid3])                                     ! set materialpoint target F to estimated field
+ 
 !--------------------------------------------------------------------------------------------------
 ! calculate bounds of det(F) and report
  if(debugGeneral) then
@@ -1001,7 +983,19 @@ subroutine utilities_constitutiveResponse(F_lastInc,F,timeinc, &
    flush(6)
  endif
 
- call CPFEM_general(age,timeinc)
+ call debug_reset()                                                                                 ! this has no effect on rank >0
+ call materialpoint_stressAndItsTangent(.true.,timeinc)                                              ! calculate P field
+
+ P = reshape(materialpoint_P, [3,3,grid(1),grid(2),grid3])
+ P_av = sum(sum(sum(P,dim=5),dim=4),dim=3) * wgt                                                    ! average of P
+ call MPI_Allreduce(MPI_IN_PLACE,P_av,9,MPI_DOUBLE,MPI_SUM,PETSC_COMM_WORLD,ierr)
+ if (debugRotation) &
+ write(6,'(/,a,/,3(3(2x,f12.4,1x)/))',advance='no') ' Piola--Kirchhoff stress (lab) / MPa =',&
+                                                     transpose(P_av)*1.e-6_pReal
+ P_av = math_rotate_forward33(P_av,rotation_BC)
+ write(6,'(/,a,/,3(3(2x,f12.4,1x)/))',advance='no') ' Piola--Kirchhoff stress       / MPa =',&
+                                                     transpose(P_av)*1.e-6_pReal
+ flush(6)
 
  max_dPdF = 0.0_pReal
  max_dPdF_norm = 0.0_pReal
@@ -1019,30 +1013,16 @@ subroutine utilities_constitutiveResponse(F_lastInc,F,timeinc, &
  end do
 
  call MPI_Allreduce(MPI_IN_PLACE,max_dPdF,81,MPI_DOUBLE,MPI_MAX,PETSC_COMM_WORLD,ierr)
- if(ierr /=0_pInt) call IO_error(894_pInt, ext_msg='MPI_Allreduce max')
+ if (ierr /= 0_pInt) call IO_error(894_pInt, ext_msg='MPI_Allreduce max')
  call MPI_Allreduce(MPI_IN_PLACE,min_dPdF,81,MPI_DOUBLE,MPI_MIN,PETSC_COMM_WORLD,ierr)
- if(ierr /=0_pInt) call IO_error(894_pInt, ext_msg='MPI_Allreduce min')
+ if (ierr /= 0_pInt) call IO_error(894_pInt, ext_msg='MPI_Allreduce min')
 
  C_minmaxAvg = 0.5_pReal*(max_dPdF + min_dPdF)
- C_volAvg = sum(sum(materialpoint_dPdF,dim=6),dim=5) * wgt
 
+ C_volAvg = sum(sum(materialpoint_dPdF,dim=6),dim=5) * wgt
  call MPI_Allreduce(MPI_IN_PLACE,C_volAvg,81,MPI_DOUBLE,MPI_SUM,PETSC_COMM_WORLD,ierr)
 
  call debug_info()                                                                                  ! this has no effect on rank >0
-
- restartWrite = .false.                                                                             ! reset restartWrite status
- cutBack = .false.                                                                                  ! reset cutBack status
-
- P = reshape(materialpoint_P, [3,3,grid(1),grid(2),grid3])
- P_av = sum(sum(sum(P,dim=5),dim=4),dim=3) * wgt                                                    ! average of P
- call MPI_Allreduce(MPI_IN_PLACE,P_av,9,MPI_DOUBLE,MPI_SUM,PETSC_COMM_WORLD,ierr)
- if (debugRotation) &
- write(6,'(/,a,/,3(3(2x,f12.4,1x)/))',advance='no') ' Piola--Kirchhoff stress (lab) / MPa =',&
-                                                     math_transpose33(P_av)*1.e-6_pReal
- P_av = math_rotate_forward33(P_av,rotation_BC)
- write(6,'(/,a,/,3(3(2x,f12.4,1x)/))',advance='no') ' Piola--Kirchhoff stress / MPa =',&
-                                                     math_transpose33(P_av)*1.e-6_pReal
- flush(6)
 
 end subroutine utilities_constitutiveResponse
 
@@ -1050,7 +1030,7 @@ end subroutine utilities_constitutiveResponse
 !--------------------------------------------------------------------------------------------------
 !> @brief calculates forward rate, either guessing or just add delta/timeinc
 !--------------------------------------------------------------------------------------------------
-pure function utilities_calculateRate(avRate,timeinc_old,guess,field_lastInc,field)
+pure function utilities_calculateRate(heterogeneous,field0,field,dt,avRate)
  use mesh, only: &
    grid3, &
    grid
@@ -1058,17 +1038,17 @@ pure function utilities_calculateRate(avRate,timeinc_old,guess,field_lastInc,fie
  implicit none
  real(pReal), intent(in), dimension(3,3)                      :: avRate                             !< homogeneous addon
  real(pReal), intent(in) :: &
-   timeinc_old                                                                                      !< timeinc of last step
+   dt                                                                                               !< timeinc between field0 and field
  logical, intent(in) :: &
-   guess                                                                                            !< guess along former trajectory
+   heterogeneous                                                                                    !< calculate field of rates
  real(pReal), intent(in), dimension(3,3,grid(1),grid(2),grid3) :: &
-   field_lastInc, &                                                                                 !< data of previous step
+   field0, &                                                                                        !< data of previous step
    field                                                                                            !< data of current step
  real(pReal),             dimension(3,3,grid(1),grid(2),grid3) :: &
    utilities_calculateRate
 
- if (guess) then
-   utilities_calculateRate = (field-field_lastInc) / timeinc_old
+ if (heterogeneous) then
+   utilities_calculateRate = (field-field0) / dt
  else
    utilities_calculateRate = spread(spread(spread(avRate,3,grid(1)),4,grid(2)),5,grid3)
  endif

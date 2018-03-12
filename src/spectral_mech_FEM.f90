@@ -102,12 +102,13 @@ subroutine FEM_init
    worldsize
  use DAMASK_interface, only: &
    getSolverJobName
+ use homogenization, only: &
+   materialpoint_F0
  use spectral_utilities, only: &
    utilities_constitutiveResponse, &
    utilities_updateIPcoords, &
    wgt
  use mesh, only: &
-   mesh_ipCoordinates, &
    geomSize, &
    grid, &
    grid3
@@ -204,36 +205,32 @@ subroutine FEM_init
                           1.0_pReal, 1.0_pReal, 1.0_pReal, 1.0_pReal], [4,8]))* &
          HGCoeff*(delta(1)*delta(2) + delta(2)*delta(3) + delta(3)*delta(1))/16.0_pReal             ! hourglass stabilisation matrix
  
- restart: if (restartInc > 1_pInt) then                                                     
-   if (iand(debug_level(debug_spectral),debug_spectralRestart)/= 0 .and. worldrank == 0_pInt) &
-     write(6,'(/,a,'//IO_intOut(restartInc-1_pInt)//',a)') &
-     'reading values of increment ', restartInc - 1_pInt, ' from file'
-   flush(6)
+ restart: if (restartInc > 0_pInt) then                                                     
+   if (iand(debug_level(debug_spectral),debug_spectralRestart) /= 0) then
+     write(6,'(/,a,'//IO_intOut(restartInc)//',a)') &
+     'reading values of increment ', restartInc, ' from file'
+     flush(6)
+   endif
    write(rankStr,'(a1,i0)')'_',worldrank
    call IO_read_realFile(777,'F'//trim(rankStr),trim(getSolverJobName()),size(F_current))
-   read (777,rec=1) F_current
-   close (777)
+   read (777,rec=1) F_current; close (777)
    call IO_read_realFile(777,'F_lastInc'//trim(rankStr),trim(getSolverJobName()),size(F_lastInc))
-   read (777,rec=1) F_lastInc
-   close (777)
-   call IO_read_realFile(777,'F_aimDot',trim(getSolverJobName()),size(f_aimDot))
-   read (777,rec=1) f_aimDot
-   close (777)
+   read (777,rec=1) F_lastInc; close (777)
+   call IO_read_realFile(777,'F_aimDot',trim(getSolverJobName()),size(F_aimDot))
+   read (777,rec=1) F_aimDot; close (777)
    F_aim         = sum(sum(sum(F_current,dim=5),dim=4),dim=3) * wgt                                 ! average of F
    F_aim_lastInc = sum(sum(sum(F_lastInc,dim=5),dim=4),dim=3) * wgt                                 ! average of F_lastInc 
- elseif (restartInc == 1_pInt) then restart 
+ elseif (restartInc == 0_pInt) then restart
    F_lastInc = spread(spread(spread(math_I3,3,grid(1)),4,grid(2)),5,grid3)                          ! initialize to identity
    F_current = spread(spread(spread(math_I3,3,grid(1)),4,grid(2)),5,grid3)
  endif restart
 
- !call Utilities_updateIPcoords(F_current)
- call Utilities_constitutiveResponse(F_lastInc, F_current, &
-    0.0_pReal, &
-    P_current, &
-    C_volAvg,C_minMaxAvg, &                                                                         ! global average of stiffness and (min+max)/2
-    temp33_Real, &
-    .false., &
-    math_I3)
+ materialpoint_F0 = reshape(F_lastInc, [3,3,1,product(grid(1:2))*grid3])                            ! set starting condition for materialpoint_stressAndItsTangent
+ call Utilities_updateIPcoords(F_current)
+ call Utilities_constitutiveResponse(P_current,temp33_Real,C_volAvg,C_minMaxAvg, &                  ! stress field, stress avg, global average of stiffness and (min+max)/2
+                                     F_current, &                                                   ! target F
+                                     0.0_pReal, &                                                   ! time increment
+                                     math_I3)                                                       ! no rotation of boundary condition
 
  restartRead: if (restartInc > 1_pInt) then                                                    
    if (iand(debug_level(debug_spectral),debug_spectralRestart)/= 0 .and. worldrank == 0_pInt) &
@@ -260,13 +257,10 @@ type(tSolutionState) function &
   FEM_solution(incInfoIn,timeinc,timeinc_old,loadCaseTime,stress_BC,rotation)
  use IO, only: &
    IO_error
- use numerics, only: &
-   update_gamma
  use spectral_utilities, only: &
    tBoundaryCondition, &
    utilities_maskedCompliance
  use FEsolving, only: &
-   restartWrite, &
    terminallyIll
 
  implicit none
@@ -328,8 +322,7 @@ subroutine FEM_formResidual(da_local,x_local,f_local,dummy,ierr)
  use numerics, only: &
    worldrank
  use mesh, only: &
-   grid, &
-   grid3
+   grid
  use math, only: &
    math_rotate_backward33, &
    math_transpose33, &
@@ -393,8 +386,8 @@ subroutine FEM_formResidual(da_local,x_local,f_local,dummy,ierr)
 
 !--------------------------------------------------------------------------------------------------
 ! evaluate constitutive response
- call Utilities_constitutiveResponse(F_lastInc,F_current,params%timeinc, &
-                                     P_current,C_volAvg,C_minmaxAvg,P_av,ForwardData,params%rotation_BC)
+ call Utilities_constitutiveResponse(P_current,P_av,C_volAvg,C_minmaxAvg, &
+                                     F_current,params%timeinc,params%rotation_BC)
  call MPI_Allreduce(MPI_IN_PLACE,terminallyIll,1,MPI_LOGICAL,MPI_LOR,PETSC_COMM_WORLD,ierr)
  ForwardData = .false.
   
@@ -456,8 +449,7 @@ end subroutine FEM_formResidual
 !--------------------------------------------------------------------------------------------------
 subroutine FEM_formJacobian(da_local,x_local,Jac_pre,Jac,dummy,ierr)
  use mesh, only: &
-   mesh_ipCoordinates, &
-   grid
+   mesh_ipCoordinates
  use homogenization, only: &
    materialpoint_dPdF
 
@@ -621,8 +613,16 @@ subroutine FEM_forward(guess,timeinc,timeinc_old,loadCaseTime,deformation_BC,str
  use math, only: &
    math_mul33x33
  use spectral_utilities, only: &
+   utilities_updateIPcoords, &
    tBoundaryCondition, &
    cutBack
+  use homogenization, only: &
+    materialpoint_F0
+  use mesh, only: &
+    grid, &
+    grid3
+  use CPFEM2, only: &
+    CPFEM_age
 
  implicit none
  real(pReal), intent(in) :: &
@@ -637,43 +637,48 @@ subroutine FEM_forward(guess,timeinc,timeinc_old,loadCaseTime,deformation_BC,str
    guess
  PetscErrorCode :: ierr
 
- if (cutBack) then 
-   F_aim = F_aim_lastInc
-   call VecCopy(solution_lastInc,solution_current,ierr)
-   C_volAvg = C_volAvgLastInc
- else
-   ForwardData = .True.
-   C_volAvgLastInc = C_volAvg
-!--------------------------------------------------------------------------------------------------
-! calculate rate for aim
-   if (deformation_BC%myType=='l') then                                                             ! calculate f_aimDot from given L and current F
-     f_aimDot = deformation_BC%maskFloat * math_mul33x33(deformation_BC%values, F_aim)
-   elseif(deformation_BC%myType=='fdot') then                                                       ! f_aimDot is prescribed
-     f_aimDot = deformation_BC%maskFloat * deformation_BC%values
-   elseif(deformation_BC%myType=='f') then                                                          ! aim at end of load case is prescribed
-     f_aimDot = deformation_BC%maskFloat * (deformation_BC%values -F_aim)/loadCaseTime
-   endif
+  if (cutBack) then
+    C_volAvg    = C_volAvgLastInc                                                                  ! QUESTION: where is this required?
+  else
+    call CPFEM_age()                                                                                 ! age state and kinematics
+    call utilities_updateIPcoords(F_current)
+
+    C_volAvgLastInc    = C_volAvg
+ 
+    F_aimDot = merge(stress_BC%maskFloat*(F_aim-F_aim_lastInc)/timeinc_old, 0.0_pReal, guess)
+    F_aim_lastInc = F_aim
+
+    !--------------------------------------------------------------------------------------------------
+    ! calculate rate for aim
+    if     (deformation_BC%myType=='l') then                                                          ! calculate F_aimDot from given L and current F
+      F_aimDot = &
+      F_aimDot + deformation_BC%maskFloat * math_mul33x33(deformation_BC%values, F_aim_lastInc)
+    elseif(deformation_BC%myType=='fdot') then                                                        ! F_aimDot is prescribed
+      F_aimDot = &
+      F_aimDot + deformation_BC%maskFloat * deformation_BC%values
+    elseif (deformation_BC%myType=='f') then                                                          ! aim at end of load case is prescribed
+      F_aimDot = &
+      F_aimDot + deformation_BC%maskFloat * (deformation_BC%values - F_aim_lastInc)/loadCaseTime
+    endif
+
+
+    if (guess) then
+      call VecWAXPY(solution_rate,-1.0,solution_lastInc,solution_current,ierr)
+      CHKERRQ(ierr)
+      call VecScale(solution_rate,1.0/timeinc_old,ierr); CHKERRQ(ierr)
+    else
+      call VecSet(solution_rate,0.0,ierr); CHKERRQ(ierr)
+    endif
+    call VecCopy(solution_current,solution_lastInc,ierr); CHKERRQ(ierr)
+    F_lastInc        = F_current                                                                      ! winding F forward
+    materialpoint_F0 = reshape(F_lastInc, [3,3,1,product(grid(1:2))*grid3])                           ! set starting condition for materialpoint_stressAndItsTangent
+  endif
 
 !--------------------------------------------------------------------------------------------------
-! update coordinates and rate and forward last inc
-   if (guess) then
-     f_aimDot  = f_aimDot + stress_BC%maskFloat * (F_aim - F_aim_lastInc)/timeinc_old
-     call VecWAXPY(solution_rate,-1.0,solution_lastInc,solution_current,ierr)
-     CHKERRQ(ierr)
-     call VecScale(solution_rate,1.0/timeinc_old,ierr); CHKERRQ(ierr)
-   else
-     call VecSet(solution_rate,0.0,ierr); CHKERRQ(ierr)
-   endif
-   F_aim_lastInc = F_aim
-   F_lastInc = F_current
-   call VecCopy(solution_current,solution_lastInc,ierr); CHKERRQ(ierr)
- endif
- F_aim = F_aim + f_aimDot * timeinc
-
-!--------------------------------------------------------------------------------------------------
-! update local deformation gradient
- call VecAXPY(solution_current,timeinc,solution_rate,ierr); CHKERRQ(ierr)
-
+! update average and local deformation gradients
+  F_aim = F_aim_lastInc + F_aimDot * timeinc
+  call VecAXPY(solution_current,timeinc,solution_rate,ierr); CHKERRQ(ierr)
+  
 end subroutine FEM_forward
 
 !--------------------------------------------------------------------------------------------------

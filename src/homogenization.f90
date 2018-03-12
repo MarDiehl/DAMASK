@@ -16,7 +16,7 @@ module homogenization
 ! General variables for the homogenization at a  material point
  implicit none
  private
-   real(pReal),   dimension(:,:,:,:),     allocatable, public :: &
+   real(pReal),   dimension(:,:,:,:),   allocatable, public :: &
    materialpoint_F0, &                                                                              !< def grad of IP at start of FE increment
    materialpoint_F, &                                                                               !< def grad of IP to be reached at end of FE increment
    materialpoint_P                                                                                  !< first P--K stress of IP
@@ -67,7 +67,7 @@ contains
 !> @brief module initialization
 !--------------------------------------------------------------------------------------------------
 subroutine homogenization_init
-#ifdef __GFORTRAN__
+#if defined(__GFORTRAN__) || __INTEL_COMPILER >= 1800
  use, intrinsic :: iso_fortran_env, only: &
    compiler_version, &
    compiler_options
@@ -115,7 +115,7 @@ subroutine homogenization_init
  integer(pInt), dimension(:)  , pointer :: thisNoutput
  character(len=64), dimension(:,:), pointer :: thisOutput
  character(len=32) :: outputName                                                                    !< name of output, intermediate fix until HDF5 output is ready
- logical :: knownHomogenization, knownThermal
+ logical :: valid
 
 
 !--------------------------------------------------------------------------------------------------
@@ -151,7 +151,7 @@ subroutine homogenization_init
    do p = 1,material_Nhomogenization
      if (any(material_homog == p)) then
        i = homogenization_typeInstance(p)                                                               ! which instance of this homogenization type
-       knownHomogenization = .true.                                                                     ! assume valid
+       valid = .true.                                                                                   ! assume valid
        select case(homogenization_type(p))                                                              ! split per homogenization type
          case (HOMOGENIZATION_NONE_ID)
            outputName = HOMOGENIZATION_NONE_label
@@ -174,10 +174,10 @@ subroutine homogenization_init
            thisOutput => homogenization_RGC_output
            thisSize   => homogenization_RGC_sizePostResult
          case default
-           knownHomogenization = .false.
+           valid = .false.
        end select
        write(FILEUNIT,'(/,a,/)')  '['//trim(homogenization_name(p))//']'
-       if (knownHomogenization) then
+       if (valid) then
          write(FILEUNIT,'(a)') '(type)'//char(9)//trim(outputName)
          write(FILEUNIT,'(a,i4)') '(ngrains)'//char(9),homogenization_Ngrains(p)
          if (homogenization_type(p) /= HOMOGENIZATION_NONE_ID) then
@@ -187,7 +187,7 @@ subroutine homogenization_init
          endif
        endif
        i = thermal_typeInstance(p)                                                                      ! which instance of this thermal type
-       knownThermal = .true.                                                                            ! assume valid
+       valid = .true.                                                                                   ! assume valid
        select case(thermal_type(p))                                                                     ! split per thermal type
          case (THERMAL_isothermal_ID)
            outputName = THERMAL_isothermal_label
@@ -205,9 +205,9 @@ subroutine homogenization_init
            thisOutput => thermal_conduction_output
            thisSize   => thermal_conduction_sizePostResult
          case default
-           knownThermal = .false.
+           valid = .false.
        end select
-       if (knownThermal) then
+       if (valid) then
          write(FILEUNIT,'(a)') '(thermal)'//char(9)//trim(outputName)
          if (thermal_type(p) /= THERMAL_isothermal_ID) then
            do e = 1,thisNoutput(i)

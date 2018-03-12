@@ -121,9 +121,9 @@ module numerics
    petsc_options              = ''
  integer(pInt), protected, public :: &
    fftw_planner_flag          =  32_pInt, &                                                         !< conversion of fftw_plan_mode to integer, basically what is usually done in the include file of fftw
-   continueCalculation        =  0_pInt, &                                                          !< 0: exit if BVP solver does not converge, 1: continue calculation if BVP solver does not converge
    divergence_correction      =  2_pInt                                                             !< correct divergence calculation in fourier space 0: no correction, 1: size scaled to 1, 2: size scaled to Npoints
  logical, protected, public :: &
+   continueCalculation        = .false., &                                                          !< false:exit if BVP solver does not converge, true: continue calculation despite BVP solver not converging
    memory_efficient           = .true., &                                                           !< for fast execution (pre calculation of gamma_hat), Default .true.: do not precalculate
    update_gamma               = .false.                                                             !< update gamma operator with current stiffness, Default .false.: use initial stiffness 
 #endif
@@ -199,7 +199,7 @@ contains
 ! a sanity check
 !--------------------------------------------------------------------------------------------------
 subroutine numerics_init
-#ifdef __GFORTRAN__
+#if defined(__GFORTRAN__) || __INTEL_COMPILER >= 1800
  use, intrinsic :: iso_fortran_env, only: &
    compiler_version, &
    compiler_options
@@ -427,9 +427,9 @@ subroutine numerics_init
        case ('err_stress_tolabs')
          err_stress_tolabs = IO_floatValue(line,chunkPos,2_pInt)
        case ('continuecalculation')
-         continueCalculation = IO_intValue(line,chunkPos,2_pInt)
+         continueCalculation = IO_intValue(line,chunkPos,2_pInt) > 0_pInt
        case ('memory_efficient')
-         memory_efficient = IO_intValue(line,chunkPos,2_pInt)  > 0_pInt
+         memory_efficient = IO_intValue(line,chunkPos,2_pInt) > 0_pInt
        case ('fftw_timelimit')
          fftw_timelimit = IO_floatValue(line,chunkPos,2_pInt)
        case ('fftw_plan_mode')
@@ -439,7 +439,7 @@ subroutine numerics_init
        case ('divergence_correction')
          divergence_correction = IO_intValue(line,chunkPos,2_pInt)
        case ('update_gamma')
-         update_gamma = IO_intValue(line,chunkPos,2_pInt)  > 0_pInt
+         update_gamma = IO_intValue(line,chunkPos,2_pInt) > 0_pInt
        case ('petsc_options')
          petsc_options = trim(line(chunkPos(4):))
        case ('spectralsolver','myspectralsolver')
@@ -603,7 +603,7 @@ subroutine numerics_init
 !--------------------------------------------------------------------------------------------------
 ! spectral parameters
 #ifdef Spectral
- write(6,'(a24,1x,i8)')      ' continueCalculation:    ',continueCalculation
+ write(6,'(a24,1x,L8)')      ' continueCalculation:    ',continueCalculation
  write(6,'(a24,1x,L8)')      ' memory_efficient:       ',memory_efficient
  write(6,'(a24,1x,i8)')      ' divergence_correction:  ',divergence_correction
  write(6,'(a24,1x,a)')       ' spectral_derivative:    ',trim(spectral_derivative)
@@ -703,8 +703,6 @@ subroutine numerics_init
  if (err_hydrogenflux_tolabs <= 0.0_pReal) call IO_error(301_pInt,ext_msg='err_hydrogenflux_tolabs')
  if (err_hydrogenflux_tolrel <= 0.0_pReal) call IO_error(301_pInt,ext_msg='err_hydrogenflux_tolrel')
 #ifdef Spectral
- if (continueCalculation /= 0_pInt .and. &
-     continueCalculation /= 1_pInt)        call IO_error(301_pInt,ext_msg='continueCalculation')
  if (divergence_correction < 0_pInt .or. &
      divergence_correction > 2_pInt)       call IO_error(301_pInt,ext_msg='divergence_correction')
  if (update_gamma .and. &
@@ -718,7 +716,7 @@ subroutine numerics_init
  if (polarAlpha <= 0.0_pReal .or. &
      polarAlpha >  2.0_pReal)              call IO_error(301_pInt,ext_msg='polarAlpha')
  if (polarBeta < 0.0_pReal .or. &
-     polarBeta >  2.0_pReal)               call IO_error(301_pInt,ext_msg='polarBeta')
+     polarBeta > 2.0_pReal)                call IO_error(301_pInt,ext_msg='polarBeta')
 #endif
 
 end subroutine numerics_init
