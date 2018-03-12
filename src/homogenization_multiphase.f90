@@ -33,8 +33,8 @@ module homogenization_multiphase
    enumerator :: isostrain_ID, &
                  isofPKstress_ID, &
                  isoCauchystress_ID, &
-                 rankone_ID, &
-                 laminate_ID
+                 partialrankone_ID, &
+                 fullrankone_ID
  end enum
 
  type, private :: tParameters                                                                         !< container type for internal constitutive parameters
@@ -45,10 +45,12 @@ module homogenization_multiphase
    real(pReal), dimension(:,:), allocatable :: &
      interfaceMobility, &
      interfaceEnergy
+   real(pReal), dimension(:,:,:), allocatable :: &
+     interfaceNormal
    real(pReal) :: &
-     interfaceWidth, &
-     absTol, &
-     relTol
+     interfaceWidth = 0.0_pReal, &
+     absTol= 0.0_pReal , &
+     relTol= 0.0_pReal
    real(pReal), pointer, dimension(:,:) :: &                                                        ! scalars along NipcMyInstance
      newIter, &
      oldIter, &
@@ -96,6 +98,7 @@ subroutine homogenization_multiphase_init(fileUnit)
    math_I3, &
    math_inv33, &
    math_mul33x33, &
+   math_mul33x3 , &   
    math_transpose33, &
    math_EulerToR
  use lattice, only: &
@@ -170,6 +173,9 @@ subroutine homogenization_multiphase_init(fileUnit)
                                            homogenization_Ngrains(section)), source = 0.0_pReal)
        allocate(param(i)%interfaceEnergy  (homogenization_Ngrains(section), &
                                            homogenization_Ngrains(section)), source = 0.0_pReal)
+       allocate(param(i)%interfaceNormal  (3, &
+                                           homogenization_Ngrains(section), &
+                                           homogenization_Ngrains(section)), source = 0.0_pReal)
      endif
      cycle
    endif
@@ -218,9 +224,9 @@ subroutine homogenization_multiphase_init(fileUnit)
              case('isocauchystress')
                param(i)%mixtureID = isoCauchystress_ID
              case('rankone')
-               param(i)%mixtureID = rankone_ID
+               param(i)%mixtureID = partialrankone_ID
              case('laminate')
-               param(i)%mixtureID = laminate_ID
+               param(i)%mixtureID = fullrankone_ID
            end select
 
          case ('interface_mobility')
@@ -250,6 +256,29 @@ subroutine homogenization_multiphase_init(fileUnit)
                  IO_floatValue(line,chunkPos,1_pInt+o)
                param(i)%interfaceEnergy(grJ,grI) = &
                  IO_floatValue(line,chunkPos,1_pInt+o)
+             enddo
+           enddo
+
+         case ('interface_normal')
+           Ninterface = homogenization_Ngrains(section)*(homogenization_Ngrains(section) - 1_pInt)/2_pInt
+           if (chunkPos(1) /= 3_pInt*Ninterface + 1_pInt) &
+             call IO_error(150_pInt,ext_msg=trim(tag)//' ('//HOMOGENIZATION_multiphase_label//')')
+           o = 1_pInt
+           do grI = 1_pInt, homogenization_Ngrains(section)
+             do grJ = grI+1_pInt, homogenization_Ngrains(section)
+               param(i)%interfaceNormal(1,grI,grJ) = &
+                 IO_floatValue(line,chunkPos,1_pInt+o)
+               param(i)%interfaceNormal(1,grJ,grI) = &
+                 IO_floatValue(line,chunkPos,1_pInt+o)
+               param(i)%interfaceNormal(1,grI,grJ) = &
+                 IO_floatValue(line,chunkPos,2_pInt+o)
+               param(i)%interfaceNormal(1,grJ,grI) = &
+                 IO_floatValue(line,chunkPos,2_pInt+o)
+               param(i)%interfaceNormal(1,grI,grJ) = &
+                 IO_floatValue(line,chunkPos,3_pInt+o)
+               param(i)%interfaceNormal(1,grJ,grI) = &
+                 IO_floatValue(line,chunkPos,3_pInt+o)
+               o = o + 3_pInt
              enddo
            enddo
 
@@ -322,10 +351,11 @@ subroutine homogenization_multiphase_init(fileUnit)
          homogState(homog)%sizeState = &
            18*homogenization_Ngrains(homog)*(homogenization_Ngrains(homog) - 1_pInt)/2_pInt + 2_pInt
          
-       case(rankone_ID)
-         homogState(homog)%sizeState = 0_pInt
+       case(partialrankone_ID)
+         homogState(homog)%sizeState = &    
+           9*homogenization_Ngrains(homog)*(homogenization_Ngrains(homog) - 1_pInt)/2_pInt + 2_pInt
 
-       case(laminate_ID)
+       case(fullrankone_ID)
          homogState(homog)%sizeState = 0_pInt
 
      end select
@@ -359,9 +389,18 @@ subroutine homogenization_multiphase_init(fileUnit)
          param(instance)%residual  => homogState(homog)%state(xioffset*18_pInt + 1_pInt,1:NofMyHomog)
          param(instance)%stepLength=> homogState(homog)%state(xioffset*18_pInt + 2_pInt,1:NofMyHomog)
 
-       case(rankone_ID)
+       case(partialrankone_ID)
+         xioffset = homogenization_Ngrains(homog)*(homogenization_Ngrains(homog) - 1_pInt)/2_pInt
+         param(instance)%newIter   => homogState(homog)% &
+                                        state(xioffset* 0_pInt + 1_pInt:xioffset* 3_pInt,1:NofMyHomog)
+         param(instance)%oldIter   => homogState(homog)% &
+                                        state(xioffset* 3_pInt + 1_pInt:xioffset* 6_pInt,1:NofMyHomog)
+         param(instance)%searchDir => homogState(homog)% &
+                                        state(xioffset* 6_pInt + 1_pInt:xioffset* 9_pInt,1:NofMyHomog)
+         param(instance)%residual  => homogState(homog)%state(xioffset*9_pInt + 1_pInt,1:NofMyHomog)
+         param(instance)%stepLength=> homogState(homog)%state(xioffset*9_pInt + 2_pInt,1:NofMyHomog)
 
-       case(laminate_ID)
+       case(fullrankone_ID)
 
 
      end select
@@ -392,11 +431,6 @@ subroutine homogenization_multiphase_init(fileUnit)
            offset = mappingHomogenization(1,ip,el)
            param(instance)%residual  (offset) = 0.0_pReal
            param(instance)%stepLength(offset) = 1.0_pReal
-
-           homogState(homog)%state0   (1:homogState(homog)%sizeState,offset) = &
-             homogState(homog)%state(1:homogState(homog)%sizeState,offset)
-           homogState(homog)%subState0(1:homogState(homog)%sizeState,offset) = &
-             homogState(homog)%state(1:homogState(homog)%sizeState,offset)
          
            do grI = 1_pInt, homogenization_Ngrains(homog)
              crystallite_F0(1:3,1:3,grI,ip,el) = &
@@ -420,17 +454,18 @@ subroutine homogenization_multiphase_init(fileUnit)
                          crystallite_F0(1:3,1:3,grJ,ip,el), shape = [9])
              enddo
            enddo
+
+           homogState(homog)%state0   (1:homogState(homog)%sizeState,offset) = &
+             homogState(homog)%state(1:homogState(homog)%sizeState,offset)
+           homogState(homog)%subState0(1:homogState(homog)%sizeState,offset) = &
+             homogState(homog)%state(1:homogState(homog)%sizeState,offset)
+
                                            
          case(isoCauchystress_ID)
            offset = mappingHomogenization(1,ip,el)
            param(instance)%residual  (offset) = 0.0_pReal
            param(instance)%stepLength(offset) = 1.0_pReal
 
-           homogState(homog)%state0   (1:homogState(homog)%sizeState,offset) = &
-             homogState(homog)%state(1:homogState(homog)%sizeState,offset)
-           homogState(homog)%subState0(1:homogState(homog)%sizeState,offset) = &
-             homogState(homog)%state(1:homogState(homog)%sizeState,offset)
-           
            do grI = 1_pInt, homogenization_Ngrains(homog)
              crystallite_F0(1:3,1:3,grI,ip,el) = &
                math_I3 + &
@@ -443,9 +478,48 @@ subroutine homogenization_multiphase_init(fileUnit)
                                                       crystallite_Fp0(1:3,1:3,grI,ip,el))))
            enddo                                           
 
-         case(rankone_ID)
+           homogState(homog)%state0   (1:homogState(homog)%sizeState,offset) = &
+             homogState(homog)%state(1:homogState(homog)%sizeState,offset)
+           homogState(homog)%subState0(1:homogState(homog)%sizeState,offset) = &
+             homogState(homog)%state(1:homogState(homog)%sizeState,offset)
 
-         case(laminate_ID)
+
+         case(partialrankone_ID) 
+           offset = mappingHomogenization(1,ip,el)
+           param(instance)%residual  (offset) = 0.0_pReal
+           param(instance)%stepLength(offset) = 1.0_pReal
+         
+           do grI = 1_pInt, homogenization_Ngrains(homog)
+             crystallite_F0(1:3,1:3,grI,ip,el) = &
+               math_I3 + &
+               math_mul33x33(math_transpose33(math_EulerToR(material_EulerAngles(1:3,grI,ip,el))), &
+                             math_mul33x33(lattice_initialPlasticStrain(1:3,1:3,material_phase(grI,ip,el)), &
+                                           math_EulerToR(material_EulerAngles(1:3,grI,ip,el))))
+             crystallite_Fe(1:3,1:3,grI,ip,el)  = &
+               math_mul33x33(crystallite_F0(1:3,1:3,grI,ip,el), &
+                             math_inv33(math_mul33x33(crystallite_Fi0(1:3,1:3,grI,ip,el), & 
+                                                      crystallite_Fp0(1:3,1:3,grI,ip,el))))
+           enddo                                           
+
+           do grI = 1_pInt, homogenization_Ngrains(homog)-1 
+             do grJ = grI+1_pInt, homogenization_Ngrains(homog)
+               xioffset = 3_pInt*((grI-1_pInt)*(2_pInt*homogenization_Ngrains(homog)-grI)/2_pInt + grJ - grI - 1_pInt) 
+               param(instance)%newIter(xioffset+1:xioffset+3,offset) = &
+                math_mul33x3(crystallite_F0(1:3,1:3,grI,ip,el) - &
+                             crystallite_F0(1:3,1:3,grJ,ip,el), &
+                             param(instance)%interfaceNormal(1:3,grI,grJ)) 
+               param(instance)%oldIter(xioffset+1:xioffset+3,offset) = &
+                math_mul33x3(crystallite_F0(1:3,1:3,grI,ip,el) - crystallite_F0(1:3,1:3,grJ,ip,el), &
+                             param(instance)%interfaceNormal(1:3,grI,grJ)) 
+             enddo
+           enddo
+           
+           homogState(homog)%state0   (1:homogState(homog)%sizeState,offset) = &
+             homogState(homog)%state(1:homogState(homog)%sizeState,offset)
+           homogState(homog)%subState0(1:homogState(homog)%sizeState,offset) = &
+             homogState(homog)%state(1:homogState(homog)%sizeState,offset)           
+           
+         case(fullrankone_ID)
 
        end select
      endif myHomog3
@@ -465,7 +539,8 @@ subroutine homogenization_multiphase_partitionDeformation(F,F0,avgF,avgF0,ip,el)
    math_I3, &
    math_inv33, &
    math_mul33x33, &
-   math_Mandel6to33
+   math_Mandel6to33, &
+   math_tensorproduct33    
  use material, only: &
    material_homog, &
    phasefrac, &
@@ -547,9 +622,32 @@ subroutine homogenization_multiphase_partitionDeformation(F,F0,avgF,avgF0,ip,el)
          F(1:3,1:3,grI) = math_mul33x33(math_inv33(math_I3 - Ldt(1:3,1:3,grI)),F0(1:3,1:3,grI))
      enddo                          
 
-   case(rankone_ID)
+   case(partialrankone_ID)
+     do grI = 1_pInt, homogenization_Ngrains(homog)
+       if (phasefrac(grI,homog)%p(offset) > err_phasefr_tolabs) &
+         F(1:3,1:3,grI) = avgF
+     enddo
+     
+     do grI = 1_pInt, homogenization_Ngrains(homog)-1_pInt
+       do grJ = grI+1_pInt, homogenization_Ngrains(homog)
+         if (      phasefrac(grI,homog)%p(offset) > err_phasefr_tolabs &
+             .and. phasefrac(grJ,homog)%p(offset) > err_phasefr_tolabs) then
+           xioffset = 3_pInt*((grI-1_pInt)*(2_pInt*homogenization_Ngrains(homog)-grI)/2_pInt + grJ - grI - 1_pInt)
+           F(1:3,1:3,grI) = &
+             F(1:3,1:3,grI) + &
+             phasefrac(grJ,homog)%p(offset)* &
+             math_tensorproduct33(param(instance)%newIter(xioffset+1:xioffset+3,offset), &
+                                  param(instance)%interfaceNormal(1:3,grI,grJ))
+           F(1:3,1:3,grJ) = &
+             F(1:3,1:3,grJ) - &
+             phasefrac(grI,homog)%p(offset)* &
+             math_tensorproduct33(param(instance)%newIter(xioffset+1:xioffset+3,offset), &
+                                  param(instance)%interfaceNormal(1:3,grI,grJ))
+         endif
+       enddo
+     enddo
 
-   case(laminate_ID)
+   case(fullrankone_ID)
 
  end select
 
@@ -680,9 +778,19 @@ subroutine homogenization_multiphase_averageStressAndItsTangent(avgP,dAvgPdAvgF,
                          ) + &
        math_tensorproduct3333(avgP,math_inv33(math_transpose33(avgF)))
 
-   case(rankone_ID)
+   case(partialrankone_ID)
+     avgP = 0.0_pReal
+     dAvgPdAvgF = 0.0_pReal
+     do gr = 1_pInt, homogenization_Ngrains(homog)
+       if (phasefrac(gr,homog)%p(offset) > err_phasefr_tolabs) then
+         avgP = avgP + &
+            phasefrac(gr,homog)%p(offset)*P(1:3,1:3,gr) 
+         dAvgPdAvgF = dAvgPdAvgF + &
+              phasefrac(gr,homog)%p(offset)*dPdF(1:3,1:3,1:3,1:3,gr) 
+       endif
+     enddo
 
-   case(laminate_ID)
+   case(fullrankone_ID)
 
  end select
 
@@ -704,9 +812,11 @@ function homogenization_multiphase_updateState(P,dPdF,F,F0,iter,ip,el)
    math_Mandel3333to66, &
    math_tensorcomp3333, &
    math_tensorcomptransp3333, &
+   math_tensorproduct33 , &  
    math_tensorproduct3333, &
    math_mul3333xx3333, &
    math_mul33x33, &
+   math_mul33x3 , &      
    math_inv33, &
    math_det33, &
    math_transpose33
@@ -731,7 +841,9 @@ function homogenization_multiphase_updateState(P,dPdF,F,F0,iter,ip,el)
    avgR                                                                                             !< average stress
  real(pReal),   dimension(:),                 allocatable                :: &
    residual, &
-   detFiInv   
+   detFiInv
+ real(pReal),   dimension(:,:,:,:,:,:),       allocatable                :: &
+   jtemp       
  real(pReal),   dimension(:,:),               allocatable                :: &
    jacobian, &
    cauchy 
@@ -746,9 +858,9 @@ function homogenization_multiphase_updateState(P,dPdF,F,F0,iter,ip,el)
    offset, &
    xioffsetI, &
    xioffsetJ, &
-   xioffsetN, &
+   xioffsetIN, &
    xisize, &
-   grI, grJ, &
+   grI, grJ, ii, jj, &
    Nactive, &
    ierr
  real(pReal) :: &
@@ -796,7 +908,7 @@ function homogenization_multiphase_updateState(P,dPdF,F,F0,iter,ip,el)
                          .or. Nactive         < 2_pInt) then
        homogenization_multiphase_updateState = [.true., .true.]
      elseif (     iter == 1_pInt &
-             .or. norm2(residual) < param(instance)%residual(offset)) then convergencefPK              ! not converged, but improved norm of residuum (always proceed in first iteration)...
+             .or. norm2(residual) < param(instance)%residual(offset)) then convergencefPK           ! not converged, but improved norm of residuum (always proceed in first iteration)...
        homogenization_multiphase_updateState = [.false., .true.]
        param(instance)%residual  (offset) = norm2(residual)                                         ! ...remember old values and...
        param(instance)%stepLength(offset) = &
@@ -821,16 +933,16 @@ function homogenization_multiphase_updateState(P,dPdF,F,F0,iter,ip,el)
        if (ierr == 0_pInt) then
          param(instance)%searchDir(:,offset) = 0.0_pReal
          do grI = 1_pInt, Nactive-1_pInt
-           xioffsetN = 9_pInt*((active(grI)-1_pInt)*(2_pInt*Nactive-active(grI))/2_pInt + &
+           xioffsetIN = 9_pInt*((active(grI)-1_pInt)*(2_pInt*homogenization_Ngrains(homog)-active(grI))/2_pInt + &
                                active(Nactive) - active(grI) - 1_pInt)
            xioffsetI = 9_pInt*(grI - 1_pInt)
-           param(instance)%searchDir(xioffsetN+1_pInt:xioffsetN+9_pInt,offset) = &
+           param(instance)%searchDir(xioffsetIN+1_pInt:xioffsetIN+9_pInt,offset) = &
              residual(xioffsetI+1_pInt:xioffsetI+9_pInt)
            do grJ = grI+1_pInt, Nactive-1_pInt
-             xioffsetN = 9_pInt*((active(grI)-1_pInt)*(2_pInt*Nactive-active(grI))/2_pInt + &
+             xioffsetIN = 9_pInt*((active(grI)-1_pInt)*(2_pInt*homogenization_Ngrains(homog)-active(grI))/2_pInt + &
                                  active(grJ) - active(grI) - 1_pInt)
              xioffsetJ = 9_pInt*(grJ - 1_pInt)
-             param(instance)%searchDir(xioffsetN+1_pInt:xioffsetN+9_pInt,offset) = &
+             param(instance)%searchDir(xioffsetIN+1_pInt:xioffsetIN+9_pInt,offset) = &
                residual(xioffsetI+1_pInt:xioffsetI+9_pInt) - &
                residual(xioffsetJ+1_pInt:xioffsetJ+9_pInt)               
            enddo
@@ -842,14 +954,14 @@ function homogenization_multiphase_updateState(P,dPdF,F,F0,iter,ip,el)
        else
         call IO_error(400_pInt,el=el,ip=ip,ext_msg='homogenization multiphase')
        endif        
-     else convergencefPK                                                                               ! not converged and residuum not improved...
+     else convergencefPK                                                                            ! not converged and residuum not improved...
        homogenization_multiphase_updateState = [.false., .true.]
        param(instance)%stepLength(offset) = &
-         param(instance)%stepLength(offset)/2.0_pReal                                      ! ...try with smaller step length in same direction
-         param(instance)%newIter  (:,offset) = &
-           param(instance)%oldIter  (:,offset) - &
-           param(instance)%stepLength(offset)* &
-           param(instance)%searchDir(:,offset)
+         param(instance)%stepLength(offset)/2.0_pReal                                               ! ...try with smaller step length in same direction
+       param(instance)%newIter  (:,offset) = &
+         param(instance)%oldIter  (:,offset) - &
+         param(instance)%stepLength(offset)* &
+         param(instance)%searchDir(:,offset)
      endif convergencefPK    
      
    case(isoCauchystress_ID) myMixRule
@@ -890,7 +1002,7 @@ function homogenization_multiphase_updateState(P,dPdF,F,F0,iter,ip,el)
                             .or. Nactive         < 2_pInt) then
        homogenization_multiphase_updateState = [.true., .true.]
      elseif (     iter == 1_pInt &
-             .or. norm2(residual) < param(instance)%residual(offset)) then convergenceCauchy              ! not converged, but improved norm of residuum (always proceed in first iteration)...
+             .or. norm2(residual) < param(instance)%residual(offset)) then convergenceCauchy        ! not converged, but improved norm of residuum (always proceed in first iteration)...
        homogenization_multiphase_updateState = [.false., .true.]
        param(instance)%residual  (offset) = norm2(residual)                                         ! ...remember old values and...
        param(instance)%stepLength(offset) = &
@@ -952,16 +1064,16 @@ function homogenization_multiphase_updateState(P,dPdF,F,F0,iter,ip,el)
        if (ierr == 0_pInt) then
          param(instance)%searchDir(:,offset) = 0.0_pReal
          do grI = 1_pInt, Nactive-1_pInt
-           xioffsetN = 6_pInt*((active(grI)-1_pInt)*(2_pInt*Nactive-active(grI))/2_pInt + &
+           xioffsetIN = 6_pInt*((active(grI)-1_pInt)*(2_pInt*homogenization_Ngrains(homog)-active(grI))/2_pInt + &
                                active(Nactive) - active(grI) - 1_pInt)
            xioffsetI = 6_pInt*(grI - 1_pInt)
-           param(instance)%searchDir(xioffsetN+1_pInt:xioffsetN+6_pInt,offset) = &
+           param(instance)%searchDir(xioffsetIN+1_pInt:xioffsetIN+6_pInt,offset) = &
              residual(xioffsetI+1_pInt:xioffsetI+6_pInt)
            do grJ = grI+1_pInt, Nactive-1_pInt
-             xioffsetN = 6_pInt*((active(grI)-1_pInt)*(2_pInt*Nactive-active(grI))/2_pInt + &
+             xioffsetIN = 6_pInt*((active(grI)-1_pInt)*(2_pInt*homogenization_Ngrains(homog)-active(grI))/2_pInt + &
                                  active(grJ) - active(grI) - 1_pInt)
              xioffsetJ = 6_pInt*(grJ - 1_pInt)
-             param(instance)%searchDir(xioffsetN+1_pInt:xioffsetN+6_pInt,offset) = &
+             param(instance)%searchDir(xioffsetIN+1_pInt:xioffsetIN+6_pInt,offset) = &
                residual(xioffsetI+1_pInt:xioffsetI+6_pInt) - &
                residual(xioffsetJ+1_pInt:xioffsetJ+6_pInt)               
            enddo
@@ -973,19 +1085,119 @@ function homogenization_multiphase_updateState(P,dPdF,F,F0,iter,ip,el)
        else
         call IO_error(400_pInt,el=el,ip=ip,ext_msg='homogenization multiphase')
        endif        
-     else convergenceCauchy                                                                               ! not converged and residuum not improved...
+     else convergenceCauchy                                                                         ! not converged and residuum not improved...
        homogenization_multiphase_updateState = [.false., .true.]
        param(instance)%stepLength(offset) = &
-         param(instance)%stepLength(offset)/2.0_pReal                                      ! ...try with smaller step length in same direction
+         param(instance)%stepLength(offset)/2.0_pReal                                               ! ...try with smaller step length in same direction
+       param(instance)%newIter  (:,offset) = &
+         param(instance)%oldIter  (:,offset) - &
+         param(instance)%stepLength(offset)* &
+         param(instance)%searchDir(:,offset)
+     endif convergenceCauchy    
+     
+
+   case(partialrankone_ID) myMixRule    
+     Nactive = 0_pInt
+     do grI = 1_pInt, homogenization_Ngrains(homog)
+       if (phasefrac(grI,homog)%p(offset) > err_phasefr_tolabs) Nactive = Nactive + 1_pInt
+     enddo
+     allocate(active(Nactive), source = 0_pInt)
+    
+     avgR = 0.0_pReal
+     Nactive = 0_pInt
+     do grI = 1_pInt, homogenization_Ngrains(homog)
+       if (phasefrac(grI,homog)%p(offset) > err_phasefr_tolabs) then
+         Nactive = Nactive + 1_pInt 
+         active(Nactive) = grI  
+         avgR = avgR + phasefrac(grI,homog)%p(offset)*P(1:3,1:3,grI)
+       endif
+     enddo     
+     
+     xisize = 3_pInt*(Nactive-1_pInt)
+     allocate(residual(xisize       ), source=0.0_pReal)
+     allocate(jacobian(xisize,xisize), source=0.0_pReal)      
+     allocate(jtemp(3,3,3,3,(Nactive-1_pInt),(Nactive-1_pInt)), source=0.0_pReal)     
+     do grI = 1_pInt, Nactive-1_pInt
+       xioffsetI = 3_pInt*(grI-1_pInt)                                      
+       residual(xioffsetI+1_pInt:xioffsetI+3_pInt) = &                      
+         math_mul33x3(P(1:3,1:3,active(grI)) - P(1:3,1:3,active(Nactive)), &
+                      param(instance)%interfaceNormal(1:3,active(grI),active(Nactive)))     
+     enddo 
+     
+     stressTol = max(            param(instance)%absTol, &
+                     norm2(avgR)*param(instance)%relTol)
+     convergencefRankone: if (     norm2(residual) < stressTol &
+                         .or. Nactive         < 2_pInt) then
+       homogenization_multiphase_updateState = [.true., .true.]  
+     elseif (     iter == 1_pInt &
+             .or. norm2(residual) < param(instance)%residual(offset)) then convergencefRankone      ! not converged, but improved norm of residuum (always proceed in first iteration)...
+       homogenization_multiphase_updateState = [.false., .true.]
+       
+       param(instance)%residual  (offset) = norm2(residual)                                         ! ...remember old values and...
+       param(instance)%stepLength(offset) = &
+        min(1.0_pReal,2.0_pReal*param(instance)%stepLength(offset))                                 ! ...proceed with normal step length (calculate new search direction)
+       param(instance)%oldIter(:,offset) = param(instance)%newIter(:,offset)
+       
+       do grI = 1_pInt,  Nactive-1                                                                  ! Jacobian calculations for residual Ri = (Pi - Pn) 
+          jtemp(1:3,1:3,1:3,1:3,active(grI),active(grI)) = &
+                  dPdF(1:3,1:3,1:3,1:3,active(grI))
+         do grJ = 1_pInt,  Nactive-1
+          jtemp(1:3,1:3,1:3,1:3,active(grI),active(grJ)) = &
+                 jtemp(1:3,1:3,1:3,1:3,active(grI),active(grJ)) + &
+             phasefrac(active(grJ),homog)%p(offset)* &
+             ( dPdF(1:3,1:3,1:3,1:3,active(grI))  - &
+               dPdF(1:3,1:3,1:3,1:3,active(Nactive))  )
+         enddo      
+       enddo           
+       do grI = 1_pInt,  Nactive-1                                                                  ! Jacobian calculations for residual Ri = (Pi - Pn).Nin
+         xioffsetI = 3_pInt*(grI - 1_pInt)
+         do grJ = 1_pInt,  Nactive-1
+           xioffsetJ = 3_pInt*(grJ - 1_pInt)
+           forall (ii = 1_pInt:3_pInt,jj = 1_pInt:3_pInt) &                 
+               jacobian(xioffsetI+ii,xioffsetJ+jj) = &
+                 sum(jtemp(ii,1:3,jj,1:3,active(grI),active(grJ))* &
+                     math_tensorproduct33(param(instance)%interfaceNormal(1:3,active(grJ),active(Nactive)), &
+                                          param(instance)%interfaceNormal(1:3,active(grI),active(Nactive))))                            
+         enddo    
+       enddo            
+       
+       allocate(ipiv(xisize))
+       call dgesv(xisize,1,jacobian,xisize,ipiv,residual,xisize,ierr)                               !< solve Jacobian * delta state = -residual for delta state
+       if (ierr == 0_pInt) then
+         param(instance)%searchDir(:,offset) = 0.0_pReal
+         do grI = 1_pInt, Nactive-1_pInt
+           xioffsetIN = 3_pInt*((active(grI)-1_pInt)*(2_pInt*homogenization_Ngrains(homog)-active(grI))/2_pInt + &
+                                active(Nactive) - active(grI) - 1_pInt)
+           xioffsetI = 3_pInt*(grI - 1_pInt)
+           param(instance)%searchDir(xioffsetIN+1_pInt:xioffsetIN+3_pInt,offset) = &
+             residual(xioffsetI+1_pInt:xioffsetI+3_pInt)
+           do grJ = grI+1_pInt, Nactive-1_pInt
+             xioffsetIN = 3_pInt*((active(grI)-1_pInt)*(2_pInt*homogenization_Ngrains(homog)-active(grI))/2_pInt + &
+                                  active(grJ) - active(grI) - 1_pInt)
+             xioffsetJ = 3_pInt*(grJ - 1_pInt)
+             param(instance)%searchDir(xioffsetIN+1_pInt:xioffsetIN+3_pInt,offset) = &
+               residual(xioffsetI+1_pInt:xioffsetI+3_pInt) - &
+               residual(xioffsetJ+1_pInt:xioffsetJ+3_pInt)               
+           enddo
+         enddo
          param(instance)%newIter  (:,offset) = &
            param(instance)%oldIter  (:,offset) - &
            param(instance)%stepLength(offset)* &
            param(instance)%searchDir(:,offset)
-     endif convergenceCauchy    
-     
-   case(rankone_ID) myMixRule
+       else
+        call IO_error(400_pInt,el=el,ip=ip,ext_msg='homogenization multiphase')
+       endif        
+     else convergencefRankone                                                                       ! not converged and residuum not improved...
+       homogenization_multiphase_updateState = [.false., .true.]
+       param(instance)%stepLength(offset) = &
+         param(instance)%stepLength(offset)/2.0_pReal                                               ! ...try with smaller step length in same direction
+       param(instance)%newIter  (:,offset) = &
+         param(instance)%oldIter  (:,offset) - &
+         param(instance)%stepLength(offset)* &
+         param(instance)%searchDir(:,offset)
+     endif convergencefRankone
 
-   case(laminate_ID) myMixRule
+   case(fullrankone_ID) myMixRule
 
  end select myMixRule
 
