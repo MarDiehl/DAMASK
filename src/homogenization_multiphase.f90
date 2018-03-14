@@ -45,8 +45,6 @@ module homogenization_multiphase
    real(pReal), dimension(:,:), allocatable :: &
      interfaceMobility, &
      interfaceEnergy
-   real(pReal), dimension(:,:,:), allocatable :: &
-     interfaceNormal
    real(pReal) :: &
      interfaceWidth = 0.0_pReal, &
      absTol= 0.0_pReal , &
@@ -54,7 +52,8 @@ module homogenization_multiphase
    real(pReal), pointer, dimension(:,:) :: &                                                        ! scalars along NipcMyInstance
      newIter, &
      oldIter, &
-     searchDir
+     searchDir, &
+     interfaceNormal
    real(pReal), pointer, dimension(:)   :: &                                                        ! scalars along NipcMyInstance
      residual, &
      stepLength
@@ -72,6 +71,7 @@ module homogenization_multiphase
    homogenization_multiphase_getPhaseSource, &
    homogenization_multiphase_getPhaseSourceTangent, &
    homogenization_multiphase_putPhaseFrac, &
+   homogenization_multiphase_putInterfaceNormals, &
    homogenization_multiphase_getComponentConc, &
    homogenization_multiphase_getComponentConcTangent, &
    homogenization_multiphase_getComponentMobility, &
@@ -173,9 +173,6 @@ subroutine homogenization_multiphase_init(fileUnit)
                                            homogenization_Ngrains(section)), source = 0.0_pReal)
        allocate(param(i)%interfaceEnergy  (homogenization_Ngrains(section), &
                                            homogenization_Ngrains(section)), source = 0.0_pReal)
-       allocate(param(i)%interfaceNormal  (3, &
-                                           homogenization_Ngrains(section), &
-                                           homogenization_Ngrains(section)), source = 0.0_pReal)
      endif
      cycle
    endif
@@ -262,29 +259,6 @@ subroutine homogenization_multiphase_init(fileUnit)
              enddo
            enddo
 
-         case ('interface_normal')
-           Ninterface = homogenization_Ngrains(section)*(homogenization_Ngrains(section) - 1_pInt)/2_pInt
-           if (chunkPos(1) /= 3_pInt*Ninterface + 1_pInt) &
-             call IO_error(150_pInt,ext_msg=trim(tag)//' ('//HOMOGENIZATION_multiphase_label//')')
-           o = 1_pInt
-           do grI = 1_pInt, homogenization_Ngrains(section)
-             do grJ = grI+1_pInt, homogenization_Ngrains(section)
-               param(i)%interfaceNormal(1,grI,grJ) = &
-                 IO_floatValue(line,chunkPos,1_pInt+o)
-               param(i)%interfaceNormal(1,grJ,grI) = &
-                 IO_floatValue(line,chunkPos,1_pInt+o)
-               param(i)%interfaceNormal(2,grI,grJ) = &
-                 IO_floatValue(line,chunkPos,2_pInt+o)
-               param(i)%interfaceNormal(2,grJ,grI) = &
-                 IO_floatValue(line,chunkPos,2_pInt+o)
-               param(i)%interfaceNormal(3,grI,grJ) = &
-                 IO_floatValue(line,chunkPos,3_pInt+o)
-               param(i)%interfaceNormal(3,grJ,grI) = &
-                 IO_floatValue(line,chunkPos,3_pInt+o)
-               o = o + 3_pInt
-             enddo
-           enddo
-
          case ('interface_width')
            param(i)%InterfaceWidth = IO_floatValue(line,chunkPos,2_pInt)
 
@@ -356,7 +330,7 @@ subroutine homogenization_multiphase_init(fileUnit)
          
        case(partialrankone_ID)
          homogState(homog)%sizeState = &    
-           9*homogenization_Ngrains(homog)*(homogenization_Ngrains(homog) - 1_pInt)/2_pInt + 2_pInt
+           9 *homogenization_Ngrains(homog)*(homogenization_Ngrains(homog) - 1_pInt)/2_pInt + 2_pInt
 
        case(fullrankone_ID)
          homogState(homog)%sizeState = 0_pInt
@@ -400,8 +374,9 @@ subroutine homogenization_multiphase_init(fileUnit)
                                         state(xioffset* 3_pInt + 1_pInt:xioffset* 6_pInt,1:NofMyHomog)
          param(instance)%searchDir => homogState(homog)% &
                                         state(xioffset* 6_pInt + 1_pInt:xioffset* 9_pInt,1:NofMyHomog)
-         param(instance)%residual  => homogState(homog)%state(xioffset*9_pInt + 1_pInt,1:NofMyHomog)
-         param(instance)%stepLength=> homogState(homog)%state(xioffset*9_pInt + 2_pInt,1:NofMyHomog)
+         allocate(param(instance)%interfaceNormal(3*xioffset,NofMyHomog), source = 0.0_pReal)
+         param(instance)%residual  => homogState(homog)%state(xioffset* 9_pInt + 1_pInt,1:NofMyHomog)
+         param(instance)%stepLength=> homogState(homog)%state(xioffset* 9_pInt + 2_pInt,1:NofMyHomog)
 
        case(fullrankone_ID)
 
@@ -510,10 +485,10 @@ subroutine homogenization_multiphase_init(fileUnit)
                param(instance)%newIter(xioffset+1:xioffset+3,offset) = &
                 math_mul33x3(crystallite_F0(1:3,1:3,grI,ip,el) - &
                              crystallite_F0(1:3,1:3,grJ,ip,el), &
-                             param(instance)%interfaceNormal(1:3,grI,grJ)) 
+                             param(instance)%interfaceNormal(xioffset+1_pInt:xioffset+3_pInt,offset)) 
                param(instance)%oldIter(xioffset+1:xioffset+3,offset) = &
                 math_mul33x3(crystallite_F0(1:3,1:3,grI,ip,el) - crystallite_F0(1:3,1:3,grJ,ip,el), &
-                             param(instance)%interfaceNormal(1:3,grI,grJ)) 
+                             param(instance)%interfaceNormal(xioffset+1_pInt:xioffset+3_pInt,offset)) 
              enddo
            enddo
            
@@ -640,12 +615,12 @@ subroutine homogenization_multiphase_partitionDeformation(F,F0,avgF,avgF0,ip,el)
              F(1:3,1:3,grI) + &
              phasefrac(grJ,homog)%p(offset)* &
              math_tensorproduct33(param(instance)%newIter(xioffset+1:xioffset+3,offset), &
-                                  param(instance)%interfaceNormal(1:3,grI,grJ))
+                                  param(instance)%interfaceNormal(xioffset+1_pInt:xioffset+3_pInt,offset))
            F(1:3,1:3,grJ) = &
              F(1:3,1:3,grJ) - &
              phasefrac(grI,homog)%p(offset)* &
              math_tensorproduct33(param(instance)%newIter(xioffset+1:xioffset+3,offset), &
-                                  param(instance)%interfaceNormal(1:3,grI,grJ))
+                                  param(instance)%interfaceNormal(xioffset+1_pInt:xioffset+3_pInt,offset))
          endif
        enddo
      enddo
@@ -862,6 +837,8 @@ function homogenization_multiphase_updateState(P,dPdF,F,F0,iter,ip,el)
    xioffsetI, &
    xioffsetJ, &
    xioffsetIN, &
+   xioffsetJN, &
+   xioffsetIJ, &
    xisize, &
    grI, grJ, ii, jj, &
    Nactive, &
@@ -1121,16 +1098,19 @@ function homogenization_multiphase_updateState(P,dPdF,F,F0,iter,ip,el)
      allocate(jacobian(xisize,xisize), source=0.0_pReal)      
      allocate(jtemp(3,3,3,3,(Nactive-1_pInt),(Nactive-1_pInt)), source=0.0_pReal)     
      do grI = 1_pInt, Nactive-1_pInt
+       xioffsetIN = 3_pInt*((active(grI)-1_pInt)*(2_pInt*homogenization_Ngrains(homog)-active(grI))/2_pInt + &
+                            active(Nactive) - active(grI) - 1_pInt)
        xioffsetI = 3_pInt*(grI-1_pInt)                                      
        residual(xioffsetI+1_pInt:xioffsetI+3_pInt) = &                      
          math_mul33x3(P(1:3,1:3,active(grI)) - P(1:3,1:3,active(Nactive)), &
-                      param(instance)%interfaceNormal(1:3,active(grI),active(Nactive)))     
+                      param(instance)%interfaceNormal(xioffsetIN+1_pInt:xioffsetIN+3_pInt,offset))    
      enddo 
      
      stressTol = max(            param(instance)%absTol, &
                      norm2(avgR)*param(instance)%relTol)
+     if (el == 389) write(*,*) norm2(residual), stressTol, Nactive, el
      convergencefRankone: if (     norm2(residual) < stressTol &
-                         .or. Nactive         < 2_pInt) then
+                              .or. Nactive         < 2_pInt) then
        homogenization_multiphase_updateState = [.true., .true.]  
      elseif (     iter == 1_pInt &
              .or. norm2(residual) < param(instance)%residual(offset)) then convergencefRankone      ! not converged, but improved norm of residuum (always proceed in first iteration)...
@@ -1142,25 +1122,27 @@ function homogenization_multiphase_updateState(P,dPdF,F,F0,iter,ip,el)
        param(instance)%oldIter(:,offset) = param(instance)%newIter(:,offset)
        
        do grI = 1_pInt,  Nactive-1                                                                  ! Jacobian calculations for residual Ri = (Pi - Pn) 
-          jtemp(1:3,1:3,1:3,1:3,active(grI),active(grI)) = &
-                  dPdF(1:3,1:3,1:3,1:3,active(grI))
+          jtemp(1:3,1:3,1:3,1:3,grI,grI) = dPdF(1:3,1:3,1:3,1:3,active(grI))
          do grJ = 1_pInt,  Nactive-1
-          jtemp(1:3,1:3,1:3,1:3,active(grI),active(grJ)) = &
-                 jtemp(1:3,1:3,1:3,1:3,active(grI),active(grJ)) + &
+          jtemp(1:3,1:3,1:3,1:3,grI,grJ) = jtemp(1:3,1:3,1:3,1:3,grI,grJ) + &
              phasefrac(active(grJ),homog)%p(offset)* &
              ( dPdF(1:3,1:3,1:3,1:3,active(grI))  - &
                dPdF(1:3,1:3,1:3,1:3,active(Nactive))  )
          enddo      
        enddo           
        do grI = 1_pInt,  Nactive-1                                                                  ! Jacobian calculations for residual Ri = (Pi - Pn).Nin
+         xioffsetIN = 3_pInt*((active(grI)-1_pInt)*(2_pInt*homogenization_Ngrains(homog)-active(grI))/2_pInt + &
+                              active(Nactive) - active(grI) - 1_pInt)
          xioffsetI = 3_pInt*(grI - 1_pInt)
          do grJ = 1_pInt,  Nactive-1
+           xioffsetJN = 3_pInt*((active(grJ)-1_pInt)*(2_pInt*homogenization_Ngrains(homog)-active(grJ))/2_pInt + &
+                                active(Nactive) - active(grJ) - 1_pInt)
            xioffsetJ = 3_pInt*(grJ - 1_pInt)
            forall (ii = 1_pInt:3_pInt,jj = 1_pInt:3_pInt) &                 
                jacobian(xioffsetI+ii,xioffsetJ+jj) = &
-                 sum(jtemp(ii,1:3,jj,1:3,active(grI),active(grJ))* &
-                     math_tensorproduct33(param(instance)%interfaceNormal(1:3,active(grJ),active(Nactive)), &
-                                          param(instance)%interfaceNormal(1:3,active(grI),active(Nactive))))                            
+                 sum(jtemp(ii,1:3,jj,1:3,grI,grJ)* &
+                     math_tensorproduct33(param(instance)%interfaceNormal(xioffsetIN+1_pInt:xioffsetIN+3_pInt,offset), &
+                                          param(instance)%interfaceNormal(xioffsetJN+1_pInt:xioffsetJN+3_pInt,offset)))                            
          enddo    
        enddo            
        
@@ -1175,12 +1157,18 @@ function homogenization_multiphase_updateState(P,dPdF,F,F0,iter,ip,el)
            param(instance)%searchDir(xioffsetIN+1_pInt:xioffsetIN+3_pInt,offset) = &
              residual(xioffsetI+1_pInt:xioffsetI+3_pInt)
            do grJ = grI+1_pInt, Nactive-1_pInt
-             xioffsetIN = 3_pInt*((active(grI)-1_pInt)*(2_pInt*homogenization_Ngrains(homog)-active(grI))/2_pInt + &
+             xioffsetJN = 3_pInt*((active(grJ)-1_pInt)*(2_pInt*homogenization_Ngrains(homog)-active(grJ))/2_pInt + &
+                                  active(Nactive) - active(grJ) - 1_pInt)
+             xioffsetIJ = 3_pInt*((active(grI)-1_pInt)*(2_pInt*homogenization_Ngrains(homog)-active(grI))/2_pInt + &
                                   active(grJ) - active(grI) - 1_pInt)
              xioffsetJ = 3_pInt*(grJ - 1_pInt)
-             param(instance)%searchDir(xioffsetIN+1_pInt:xioffsetIN+3_pInt,offset) = &
-               residual(xioffsetI+1_pInt:xioffsetI+3_pInt) - &
-               residual(xioffsetJ+1_pInt:xioffsetJ+3_pInt)               
+             param(instance)%searchDir(xioffsetIJ+1_pInt:xioffsetIJ+3_pInt,offset) = &
+               residual(xioffsetI+1_pInt:xioffsetI+3_pInt)* &
+               sum(param(instance)%interfaceNormal(xioffsetIN+1_pInt:xioffsetIN+3_pInt,offset)* &
+                   param(instance)%interfaceNormal(xioffsetIJ+1_pInt:xioffsetIJ+3_pInt,offset)) - &
+               residual(xioffsetJ+1_pInt:xioffsetJ+3_pInt)* &               
+               sum(param(instance)%interfaceNormal(xioffsetJN+1_pInt:xioffsetJN+3_pInt,offset)* &
+                   param(instance)%interfaceNormal(xioffsetIJ+1_pInt:xioffsetIJ+3_pInt,offset))
            enddo
          enddo
          param(instance)%newIter  (:,offset) = &
@@ -1373,9 +1361,9 @@ function homogenization_multiphase_getPhaseSource(phi,ip,el)
          tripleJunctionEnergy*phi(grI)*phi(grJ)
      enddo
    enddo
-   if (phi(grI) < sqrt(err_phasefr_tolAbs)) &
+   if (phi(grI) < err_phasefr_tolAbs) &
      selfSource(grI) = selfSource(grI) + &
-       ((phi(grI) - sqrt(err_phasefr_tolAbs))**2.0_pReal)/err_phasefr_tolAbs
+       ((phi(grI) - err_phasefr_tolAbs)/err_phasefr_tolAbs)**2.0_pReal
  enddo
 
  homogenization_multiphase_getPhaseSource = 0.0_pReal
@@ -1447,9 +1435,9 @@ function homogenization_multiphase_getPhaseSourceTangent(phi,ip,el)
          tripleJunctionEnergy*phi(grI)
      enddo
    enddo  
-   if (phi(grI) < sqrt(err_phasefr_tolAbs)) &
+   if (phi(grI) < err_phasefr_tolAbs) &
      selfSourceTangent(grI,grI) = selfSourceTangent(grI,grI) + &
-       2.0_pReal*((phi(grI) - sqrt(err_phasefr_tolAbs))**1.0_pReal)/err_phasefr_tolAbs
+       2.0_pReal*(phi(grI) - err_phasefr_tolAbs)/err_phasefr_tolAbs/err_phasefr_tolAbs
  enddo
  
  homogenization_multiphase_getPhaseSourceTangent = 0.0_pReal
@@ -1499,6 +1487,36 @@ subroutine homogenization_multiphase_putPhaseFrac(frac,ip,el)
  enddo
 
 end subroutine homogenization_multiphase_putPhaseFrac
+
+
+!--------------------------------------------------------------------------------------------------
+!> @brief set interface normal 
+!--------------------------------------------------------------------------------------------------
+subroutine homogenization_multiphase_putInterfaceNormals(interfaceNormal,grI,grJ,ip,el)
+ use material, only: &
+   material_homog, &
+   homogenization_Ngrains, &
+   homogenization_typeInstance, &
+   phasefracMapping
+ 
+ implicit none
+ integer(pInt),                                                intent(in)  :: ip, el                !< element number
+ integer(pInt),                                                intent(in)  :: grI, grJ              !< interface between grain I and J
+ real(pReal),   dimension (3),                                 intent(in)  :: interfaceNormal       !< interface normal
+ integer(pInt) :: &
+   homog, & 
+   instance, &
+   offset, &
+   xioffset
+
+ homog = material_homog(ip,el)
+ instance = homogenization_typeInstance(homog)
+ offset = phasefracMapping(homog)%p(ip,el)
+ xioffset = 3_pInt*((grI-1_pInt)*(2_pInt*homogenization_Ngrains(homog)-grI)/2_pInt + grJ - grI - 1_pInt)
+ if (param(instance)%mixtureID == partialrankone_ID) &
+   param(instance)%interfaceNormal(xioffset+1:xioffset+3,offset) = interfaceNormal
+
+end subroutine homogenization_multiphase_putInterfaceNormals
 
 
 !--------------------------------------------------------------------------------------------------

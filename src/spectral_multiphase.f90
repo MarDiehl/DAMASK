@@ -199,7 +199,8 @@ type(tSolutionState) function spectral_multiphase_solution(timeinc,timeinc_old)
    tBoundaryCondition, &
    wgt
  use homogenization_multiphase, only: &
-   homogenization_multiphase_putPhaseFrac
+   homogenization_multiphase_putPhaseFrac, &
+   homogenization_multiphase_putInterfaceNormals
 
  implicit none
 
@@ -209,10 +210,12 @@ type(tSolutionState) function spectral_multiphase_solution(timeinc,timeinc_old)
    timeinc, &                                                                                       !< increment in time for current solution
    timeinc_old                                                                                      !< increment in time of last increment
  DM :: da_local
+ Vec :: solution_current_local
  PetscScalar, pointer :: x_scal_current(:,:,:,:), x_scal_lastInc(:,:,:,:)
  real(pReal), dimension(NActivePhases) :: phi_current, phi_lastInc, phi_stagInc
  real(pReal), dimension(NActivePhases) :: stagNorm, minPhi, maxPhi, avgPhi
- integer(pInt) :: i, j, k, cell, phase, homog
+ integer(pInt) :: i, j, k, cell, phase, phaseI, phaseJ, homog
+ real(pReal) :: interfaceNormal(3)
 
 !--------------------------------------------------------------------------------------------------
 ! PETSc Data
@@ -234,7 +237,12 @@ type(tSolutionState) function spectral_multiphase_solution(timeinc,timeinc_old)
 !--------------------------------------------------------------------------------------------------
 ! get local fields 
  call SNESGetDM(multiphase_snes,da_local,ierr); CHKERRQ(ierr)
- call DMDAVecGetArrayF90(da_local,solution_current,x_scal_current,ierr)
+ call DMGetLocalVector(da_local,solution_current_local,ierr); CHKERRQ(ierr)
+ call DMGlobalToLocalBegin(da_local,solution_current,INSERT_VALUES,solution_current_local,ierr)                       !< retrieve my partition of global solution vector
+ CHKERRQ(ierr)
+ call DMGlobalToLocalEnd(da_local,solution_current,INSERT_VALUES,solution_current_local,ierr)
+ CHKERRQ(ierr)
+ call DMDAVecGetArrayF90(da_local,solution_current_local,x_scal_current,ierr)
  CHKERRQ(ierr)
  call DMDAVecGetArrayF90(da_local,solution_lastInc,x_scal_lastInc,ierr)
  CHKERRQ(ierr)
@@ -260,6 +268,28 @@ type(tSolutionState) function spectral_multiphase_solution(timeinc,timeinc_old)
      avgPhi(phase) = avgPhi(phase) + phi_current(phase)
      stagNorm(phase) = max(stagNorm(phase),abs(phi_current(phase) - phi_stagInc(phase)))
    enddo
+   do phaseI = 1, NActivePhases-1
+     do phaseJ = phaseI+1, NActivePhases
+       interfaceNormal(1) = (x_scal_current(phaseI-1,i+1,j  ,k  ) - &
+                             x_scal_current(phaseI-1,i-1,j  ,k  ))/delta(1) - &
+                            (x_scal_current(phaseJ-1,i+1,j  ,k  ) - &
+                             x_scal_current(phaseJ-1,i-1,j  ,k  ))/delta(1)
+       interfaceNormal(2) = (x_scal_current(phaseI-1,i  ,j+1,k  ) - &
+                             x_scal_current(phaseI-1,i  ,j-1,k  ))/delta(2) - &
+                            (x_scal_current(phaseJ-1,i  ,j+1,k  ) - &
+                             x_scal_current(phaseJ-1,i  ,j-1,k  ))/delta(2)
+       interfaceNormal(3) = (x_scal_current(phaseI-1,i  ,j  ,k+1) - &
+                             x_scal_current(phaseI-1,i  ,j  ,k-1))/delta(3) - &
+                            (x_scal_current(phaseJ-1,i  ,j  ,k+1) - &
+                             x_scal_current(phaseJ-1,i  ,j  ,k-1))/delta(3)
+       if (norm2(interfaceNormal) > 0.0_pReal) then
+         interfaceNormal = interfaceNormal/norm2(interfaceNormal)
+       else
+         interfaceNormal = 0.0_pReal
+       endif
+       call homogenization_multiphase_putInterfaceNormals(interfaceNormal,phaseI,phaseJ,1,cell)
+     enddo
+   enddo    
    call homogenization_multiphase_putPhaseFrac(phi_current,1,cell)
  enddo; enddo; enddo
  call MPI_Allreduce(MPI_IN_PLACE,minPhi    ,NActivePhases,MPI_DOUBLE,MPI_MIN,PETSC_COMM_WORLD,ierr)
@@ -271,8 +301,9 @@ type(tSolutionState) function spectral_multiphase_solution(timeinc,timeinc_old)
 ! restore local fields 
  call DMDAVecRestoreArrayF90(da_local,solution_lastInc,x_scal_lastInc,ierr)
  CHKERRQ(ierr)
- call DMDAVecRestoreArrayF90(da_local,solution_current,x_scal_current,ierr)
+ call DMDAVecRestoreArrayF90(da_local,solution_current_local,x_scal_current,ierr)
  CHKERRQ(ierr)
+ call DMRestoreLocalVector(da_local,solution_current_local,ierr); CHKERRQ(ierr)
  
 !--------------------------------------------------------------------------------------------------
 ! reporting 
@@ -461,12 +492,14 @@ subroutine spectral_multiphase_forward()
  use spectral_utilities, only: &
    cutBack
  use homogenization_multiphase, only: &
-   homogenization_multiphase_putPhaseFrac
+   homogenization_multiphase_putPhaseFrac, &
+   homogenization_multiphase_putInterfaceNormals
 
  implicit none
  DM :: da_local
  PetscScalar, pointer :: solution_current_scal(:,:,:,:)
- integer(pInt) :: i, j, k, cell
+ integer(pInt) :: i, j, k, cell, phaseI, phaseJ
+ real(pReal) :: interfaceNormal(3)
  PetscErrorCode :: ierr
 
  call SNESGetDM(multiphase_snes,da_local,ierr); CHKERRQ(ierr)
@@ -477,6 +510,28 @@ subroutine spectral_multiphase_forward()
    cell = 0
    do k = zstart, zend; do j = ystart, yend; do i = xstart, xend                                    ! walk through my (sub)domain
      cell = cell + 1
+     do phaseI = 1, NActivePhases-1
+       do phaseJ = phaseI+1, NActivePhases
+         interfaceNormal(1) = (solution_current_scal(phaseI-1,i+1,j  ,k  ) - &
+                               solution_current_scal(phaseI-1,i-1,j  ,k  ))/delta(1) - &
+                              (solution_current_scal(phaseJ-1,i+1,j  ,k  ) - &
+                               solution_current_scal(phaseJ-1,i-1,j  ,k  ))/delta(1)
+         interfaceNormal(2) = (solution_current_scal(phaseI-1,i  ,j+1,k  ) - &
+                               solution_current_scal(phaseI-1,i  ,j-1,k  ))/delta(2) - &
+                              (solution_current_scal(phaseJ-1,i  ,j+1,k  ) - &
+                               solution_current_scal(phaseJ-1,i  ,j-1,k  ))/delta(2)
+         interfaceNormal(3) = (solution_current_scal(phaseI-1,i  ,j  ,k+1) - &
+                               solution_current_scal(phaseI-1,i  ,j  ,k-1))/delta(3) - &
+                              (solution_current_scal(phaseJ-1,i  ,j  ,k+1) - &
+                               solution_current_scal(phaseJ-1,i  ,j  ,k-1))/delta(3)
+         if (norm2(interfaceNormal) > 0.0_pReal) then
+           interfaceNormal = interfaceNormal/norm2(interfaceNormal)
+         else
+           interfaceNormal = 0.0_pReal  
+         endif  
+         call homogenization_multiphase_putInterfaceNormals(interfaceNormal,phaseI,phaseJ,1,cell)
+       enddo
+     enddo    
      call homogenization_multiphase_putPhaseFrac(solution_current_scal(0:NActivePhases-1,i,j,k),1,cell)
    enddo; enddo; enddo
    call DMDAVecRestoreArrayF90(da_local,solution_current,solution_current_scal,ierr)
