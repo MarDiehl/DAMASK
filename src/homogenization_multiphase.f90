@@ -223,10 +223,13 @@ subroutine homogenization_multiphase_init(fileUnit)
                param(i)%mixtureID = isofPKstress_ID
              case('isocauchystress')
                param(i)%mixtureID = isoCauchystress_ID
-             case('rankone')
+             case('partialrankone')
                param(i)%mixtureID = partialrankone_ID
-             case('laminate')
+             case('fullrankone')
                param(i)%mixtureID = fullrankone_ID
+             case default
+               call IO_error(211_pInt,el=i, &
+                             ext_msg='mixture_rule ('//HOMOGENIZATION_multiphase_label//')')
            end select
 
          case ('interface_mobility')
@@ -270,13 +273,13 @@ subroutine homogenization_multiphase_init(fileUnit)
                  IO_floatValue(line,chunkPos,1_pInt+o)
                param(i)%interfaceNormal(1,grJ,grI) = &
                  IO_floatValue(line,chunkPos,1_pInt+o)
-               param(i)%interfaceNormal(1,grI,grJ) = &
+               param(i)%interfaceNormal(2,grI,grJ) = &
                  IO_floatValue(line,chunkPos,2_pInt+o)
-               param(i)%interfaceNormal(1,grJ,grI) = &
+               param(i)%interfaceNormal(2,grJ,grI) = &
                  IO_floatValue(line,chunkPos,2_pInt+o)
-               param(i)%interfaceNormal(1,grI,grJ) = &
+               param(i)%interfaceNormal(3,grI,grJ) = &
                  IO_floatValue(line,chunkPos,3_pInt+o)
-               param(i)%interfaceNormal(1,grJ,grI) = &
+               param(i)%interfaceNormal(3,grJ,grI) = &
                  IO_floatValue(line,chunkPos,3_pInt+o)
                o = o + 3_pInt
              enddo
