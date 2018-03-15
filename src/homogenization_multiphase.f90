@@ -1330,7 +1330,20 @@ function homogenization_multiphase_getPhaseSource(phi,ip,el)
    phase_Nsources, &
    homogenization_Ngrains, &
    homogenization_maxNgrains, &
-   homogenization_typeInstance
+   homogenization_typeInstance, &
+   SOURCE_elastic_energy_ID, &
+   SOURCE_plastic_energy_ID, &
+   SOURCE_chemical_energy_ID
+ use crystallite, only: &
+   crystallite_Tstar_v
+ use constitutive, only: &
+   constitutive_homogenizedC
+ use source_elastic_energy, only: &
+   source_elastic_energy_getRateAndItsTangent
+ use source_plastic_energy, only: &
+   source_plastic_energy_getRateAndItsTangent
+ use source_chemical_energy, only: &
+   source_chemical_energy_getRateAndItsTangent
  
  implicit none
  real(pReal),   dimension(homogenization_maxNgrains) :: &
@@ -1345,7 +1358,8 @@ function homogenization_multiphase_getPhaseSource(phi,ip,el)
    source, &
    phase
  real(pReal) :: &
-   tripleJunctionEnergy  
+   tripleJunctionEnergy, &
+   localSource, localSourceTangent  
 
  homog = material_homog(ip,el)
  instance = homogenization_typeInstance(homog)
@@ -1354,9 +1368,25 @@ function homogenization_multiphase_getPhaseSource(phi,ip,el)
  do grI = 1_pInt, homogenization_Ngrains(homog)
    phase = phaseAt(grI,ip,el)
    do source = 1_pInt, phase_Nsources(phase)
-     select case(phase_source(source,phase))                                                   
-
+     select case(phase_source(source,phase)) 
+       case (SOURCE_elastic_energy_ID)
+         call source_elastic_energy_getRateAndItsTangent(localSource, localSourceTangent, &
+                                                         crystallite_Tstar_v(1:6,grI,ip,el), &
+                                                         constitutive_homogenizedC(grI,ip,el))
+       
+       case (SOURCE_plastic_energy_ID)
+         call source_plastic_energy_getRateAndItsTangent(localSource, localSourceTangent, &
+                                                         grI,ip,el)
+       
+       case (SOURCE_chemical_energy_ID)                                                  
+         call source_chemical_energy_getRateAndItsTangent(localSource, localSourceTangent, &
+                                                          grI,ip,el)
+       
+       case default
+         localSource = 0.0_pReal
+       
      end select
+     selfSource(grI) = selfSource(grI) + localSource
    enddo  
  enddo
  

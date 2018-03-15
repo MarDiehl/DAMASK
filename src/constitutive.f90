@@ -86,6 +86,9 @@ subroutine constitutive_init()
    CHEMICALFE_thermodynamic_ID, &
    SOURCE_thermal_dissipation_ID, &
    SOURCE_thermal_externalheat_ID, &
+   SOURCE_elastic_energy_ID, &
+   SOURCE_plastic_energy_ID, &
+   SOURCE_chemical_energy_ID, &
    KINEMATICS_cleavage_opening_ID, &
    KINEMATICS_slipplane_opening_ID, &
    KINEMATICS_thermal_expansion_ID, &
@@ -101,6 +104,9 @@ subroutine constitutive_init()
    CHEMICALFE_thermodynamic_label, &
    SOURCE_thermal_dissipation_label, &
    SOURCE_thermal_externalheat_label, &
+   SOURCE_elastic_energy_label, &
+   SOURCE_plastic_energy_label, &
+   SOURCE_chemical_energy_label, &
    plasticState, &
    chemicalState, &
    sourceState
@@ -116,6 +122,9 @@ subroutine constitutive_init()
  use chemicalFE_thermodynamic
  use source_thermal_dissipation
  use source_thermal_externalheat
+ use source_elastic_energy
+ use source_plastic_energy
+ use source_chemical_energy
  use kinematics_cleavage_opening
  use kinematics_slipplane_opening
  use kinematics_thermal_expansion
@@ -163,6 +172,9 @@ subroutine constitutive_init()
  call IO_checkAndRewind(FILEUNIT)
  if (any(phase_source == SOURCE_thermal_dissipation_ID))     call source_thermal_dissipation_init(FILEUNIT)
  if (any(phase_source == SOURCE_thermal_externalheat_ID))    call source_thermal_externalheat_init(FILEUNIT)
+ if (any(phase_source == SOURCE_elastic_energy_ID))          call source_elastic_energy_init
+ if (any(phase_source == SOURCE_plastic_energy_ID))          call source_plastic_energy_init
+ if (any(phase_source == SOURCE_chemical_energy_ID))         call source_chemical_energy_init
 
 !--------------------------------------------------------------------------------------------------
 ! parse kinematic mechanisms from config file
@@ -271,6 +283,24 @@ subroutine constitutive_init()
              thisNoutput => source_thermal_externalheat_Noutput
              thisOutput => source_thermal_externalheat_output
              thisSize   => source_thermal_externalheat_sizePostResult
+           case (SOURCE_elastic_energy_ID) sourceType
+             ins = source_elastic_energy_instance(p)
+             outputName = SOURCE_elastic_energy_label
+             thisNoutput => source_elastic_energy_Noutput
+             thisOutput => source_elastic_energy_output
+             thisSize   => source_elastic_energy_sizePostResult
+           case (SOURCE_plastic_energy_ID) sourceType
+             ins = source_plastic_energy_instance(p)
+             outputName = SOURCE_plastic_energy_label
+             thisNoutput => source_plastic_energy_Noutput
+             thisOutput => source_plastic_energy_output
+             thisSize   => source_plastic_energy_sizePostResult
+           case (SOURCE_chemical_energy_ID) sourceType
+             ins = source_chemical_energy_instance(p)
+             outputName = SOURCE_chemical_energy_label
+             thisNoutput => source_chemical_energy_Noutput
+             thisOutput => source_chemical_energy_output
+             thisSize   => source_chemical_energy_sizePostResult
            case default sourceType
              knownSource = .false.
          end select sourceType

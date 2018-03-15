@@ -95,12 +95,15 @@ list(APPEND OBJECTFILES $<TARGET_OBJECTS:KINEMATICS>)
 
 add_library (SOURCE OBJECT
   "source_thermal_dissipation.f90"
-  "source_thermal_externalheat.f90")
-add_dependencies(SOURCE DAMASK_HELPERS)
+  "source_thermal_externalheat.f90"
+  "source_elastic_energy.f90"
+  "source_plastic_energy.f90"
+  "source_chemical_energy.f90")
+add_dependencies(SOURCE PLASTIC CHEMICAL KINEMATICS)
 list(APPEND OBJECTFILES $<TARGET_OBJECTS:SOURCE>)
 
 add_library(CONSTITUTIVE OBJECT "constitutive.f90")
-add_dependencies(CONSTITUTIVE PLASTIC CHEMICAL KINEMATICS SOURCE)
+add_dependencies(CONSTITUTIVE SOURCE)
 list(APPEND OBJECTFILES $<TARGET_OBJECTS:CONSTITUTIVE>)
 
 add_library(CRYSTALLITE OBJECT "crystallite.f90")

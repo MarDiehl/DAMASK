@@ -33,6 +33,9 @@ module material
    CHEMICALFE_thermodynamic_label       = 'thermodynamic', &
    SOURCE_thermal_dissipation_label     = 'thermal_dissipation', &
    SOURCE_thermal_externalheat_label    = 'thermal_externalheat', &
+   SOURCE_elastic_energy_label          = 'elastic_energy', &
+   SOURCE_plastic_energy_label          = 'plastic_energy', &
+   SOURCE_chemical_energy_label         = 'chemical_energy', &
    KINEMATICS_thermal_expansion_label   = 'thermal_expansion', &
    KINEMATICS_cleavage_opening_label    = 'cleavage_opening', &
    KINEMATICS_slipplane_opening_label   = 'slipplane_opening', &
@@ -67,7 +70,10 @@ module material
  enum, bind(c)
    enumerator :: SOURCE_undefined_ID, &
                  SOURCE_thermal_dissipation_ID, &
-                 SOURCE_thermal_externalheat_ID
+                 SOURCE_thermal_externalheat_ID, &
+                 SOURCE_elastic_energy_ID, &
+                 SOURCE_plastic_energy_ID, &
+                 SOURCE_chemical_energy_ID
  end enum
 
  enum, bind(c)
@@ -264,6 +270,9 @@ module material
    CHEMICALFE_thermodynamic_ID, &
    SOURCE_thermal_dissipation_ID, &
    SOURCE_thermal_externalheat_ID, &
+   SOURCE_elastic_energy_ID, &
+   SOURCE_plastic_energy_ID, &
+   SOURCE_chemical_energy_ID, &
    KINEMATICS_cleavage_opening_ID, &
    KINEMATICS_slipplane_opening_ID, &
    KINEMATICS_thermal_expansion_ID, &
@@ -847,6 +856,12 @@ subroutine material_parsePhase(fileUnit,myPart)
              phase_source(sourceCtr,section) = SOURCE_thermal_dissipation_ID
            case (SOURCE_thermal_externalheat_label)
              phase_source(sourceCtr,section) = SOURCE_thermal_externalheat_ID
+           case (SOURCE_elastic_energy_label)
+             phase_source(sourceCtr,section) = SOURCE_elastic_energy_ID
+           case (SOURCE_plastic_energy_label)
+             phase_source(sourceCtr,section) = SOURCE_plastic_energy_ID
+           case (SOURCE_chemical_energy_label)
+             phase_source(sourceCtr,section) = SOURCE_chemical_energy_ID
          end select
        case ('(kinematics)')
          kinematicsCtr = kinematicsCtr + 1_pInt
