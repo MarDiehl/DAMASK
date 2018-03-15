@@ -497,6 +497,7 @@ subroutine spectral_multiphase_forward()
 
  implicit none
  DM :: da_local
+ Vec :: solution_current_local
  PetscScalar, pointer :: solution_current_scal(:,:,:,:)
  integer(pInt) :: i, j, k, cell, phaseI, phaseJ
  real(pReal) :: interfaceNormal(3)
@@ -505,7 +506,12 @@ subroutine spectral_multiphase_forward()
  call SNESGetDM(multiphase_snes,da_local,ierr); CHKERRQ(ierr)
  if (cutBack) then 
    call VecCopy(solution_lastInc,solution_current,ierr); CHKERRQ(ierr)
-   call DMDAVecGetArrayF90(da_local,solution_current,solution_current_scal,ierr)
+   call DMGetLocalVector(da_local,solution_current_local,ierr); CHKERRQ(ierr)
+   call DMGlobalToLocalBegin(da_local,solution_current,INSERT_VALUES,solution_current_local,ierr)                       !< retrieve my partition of global solution vector
+   CHKERRQ(ierr)
+   call DMGlobalToLocalEnd(da_local,solution_current,INSERT_VALUES,solution_current_local,ierr)
+   CHKERRQ(ierr)
+   call DMDAVecGetArrayF90(da_local,solution_current_local,solution_current_scal,ierr)
    CHKERRQ(ierr)
    cell = 0
    do k = zstart, zend; do j = ystart, yend; do i = xstart, xend                                    ! walk through my (sub)domain
@@ -534,8 +540,9 @@ subroutine spectral_multiphase_forward()
      enddo    
      call homogenization_multiphase_putPhaseFrac(solution_current_scal(0:NActivePhases-1,i,j,k),1,cell)
    enddo; enddo; enddo
-   call DMDAVecRestoreArrayF90(da_local,solution_current,solution_current_scal,ierr)
+   call DMDAVecRestoreArrayF90(da_local,solution_current_local,solution_current_scal,ierr)
    CHKERRQ(ierr)
+   call DMRestoreLocalVector(da_local,solution_current_local,ierr); CHKERRQ(ierr)
  else
    call VecCopy(solution_current,solution_lastInc,ierr); CHKERRQ(ierr)                              ! also store current rate in rate_lastInc to recover upon cutback!!
  endif
