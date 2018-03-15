@@ -47,8 +47,9 @@ module homogenization_multiphase
      interfaceEnergy
    real(pReal) :: &
      interfaceWidth = 0.0_pReal, &
-     absTol= 0.0_pReal , &
-     relTol= 0.0_pReal
+     absTol= 0.0_pReal, &
+     relTol= 0.0_pReal, &
+     phaseFracTol = 1e-4_pReal
    real(pReal), pointer, dimension(:,:) :: &                                                        ! scalars along NipcMyInstance
      newIter, &
      oldIter, &
@@ -267,6 +268,9 @@ subroutine homogenization_multiphase_init(fileUnit)
 
          case ('rel_tol')
            param(i)%relTol = IO_floatValue(line,chunkPos,2_pInt)
+
+         case ('phasefrac_tol')
+           param(i)%phasefracTol = IO_floatValue(line,chunkPos,2_pInt)
 
        end select
      endif
@@ -820,8 +824,6 @@ function homogenization_multiphase_updateState(P,dPdF,F,F0,iter,ip,el)
  real(pReal),   dimension(:),                 allocatable                :: &
    residual, &
    detFiInv
- real(pReal),   dimension(:,:,:,:,:,:),       allocatable                :: &
-   jtemp       
  real(pReal),   dimension(:,:),               allocatable                :: &
    jacobian, &
    cauchy 
@@ -838,9 +840,8 @@ function homogenization_multiphase_updateState(P,dPdF,F,F0,iter,ip,el)
    xioffsetJ, &
    xioffsetIN, &
    xioffsetJN, &
-   xioffsetIJ, &
    xisize, &
-   grI, grJ, ii, jj, &
+   grI, grJ, grII, grIJ, grJI, grJJ, ii, jj, &
    Nactive, &
    ierr
  real(pReal) :: &
@@ -1093,22 +1094,25 @@ function homogenization_multiphase_updateState(P,dPdF,F,F0,iter,ip,el)
        endif
      enddo     
      
-     xisize = 3_pInt*(Nactive-1_pInt)
+     xisize = 3_pInt*Nactive*(Nactive-1_pInt)/2_pInt
      allocate(residual(xisize       ), source=0.0_pReal)
      allocate(jacobian(xisize,xisize), source=0.0_pReal)      
-     allocate(jtemp(3,3,3,3,(Nactive-1_pInt),(Nactive-1_pInt)), source=0.0_pReal)     
      do grI = 1_pInt, Nactive-1_pInt
-       xioffsetIN = 3_pInt*((active(grI)-1_pInt)*(2_pInt*homogenization_Ngrains(homog)-active(grI))/2_pInt + &
-                            active(Nactive) - active(grI) - 1_pInt)
-       xioffsetI = 3_pInt*(grI-1_pInt)                                      
-       residual(xioffsetI+1_pInt:xioffsetI+3_pInt) = &                      
-         math_mul33x3(P(1:3,1:3,active(grI)) - P(1:3,1:3,active(Nactive)), &
-                      param(instance)%interfaceNormal(xioffsetIN+1_pInt:xioffsetIN+3_pInt,offset))    
+       do grJ = grI+1_pInt, Nactive
+         xioffsetIN = 3_pInt*((active(grI)-1_pInt)* &
+                              (2_pInt*homogenization_Ngrains(homog)-active(grI))/2_pInt + &
+                              active(grJ) - active(grI) - 1_pInt)
+         xioffsetI  = 3_pInt*((grI-1_pInt)*(2_pInt*Nactive-grI)/2_pInt + grJ - grI - 1_pInt)                                      
+         residual(xioffsetI+1_pInt:xioffsetI+3_pInt) = &                      
+           phasefrac(active(grI),homog)%p(offset)* &
+           phasefrac(active(grJ),homog)%p(offset)* &
+           math_mul33x3(P(1:3,1:3,active(grI)) - P(1:3,1:3,active(grJ)), &
+                        param(instance)%interfaceNormal(xioffsetIN+1_pInt:xioffsetIN+3_pInt,offset))    
+       enddo
      enddo 
      
      stressTol = max(            param(instance)%absTol, &
                      norm2(avgR)*param(instance)%relTol)
-     if (el == 389) write(*,*) norm2(residual), stressTol, Nactive, el
      convergencefRankone: if (     norm2(residual) < stressTol &
                               .or. Nactive         < 2_pInt) then
        homogenization_multiphase_updateState = [.true., .true.]  
@@ -1121,54 +1125,70 @@ function homogenization_multiphase_updateState(P,dPdF,F,F0,iter,ip,el)
         min(1.0_pReal,2.0_pReal*param(instance)%stepLength(offset))                                 ! ...proceed with normal step length (calculate new search direction)
        param(instance)%oldIter(:,offset) = param(instance)%newIter(:,offset)
        
-       do grI = 1_pInt,  Nactive-1                                                                  ! Jacobian calculations for residual Ri = (Pi - Pn) 
-          jtemp(1:3,1:3,1:3,1:3,grI,grI) = dPdF(1:3,1:3,1:3,1:3,active(grI))
-         do grJ = 1_pInt,  Nactive-1
-          jtemp(1:3,1:3,1:3,1:3,grI,grJ) = jtemp(1:3,1:3,1:3,1:3,grI,grJ) + &
-             phasefrac(active(grJ),homog)%p(offset)* &
-             ( dPdF(1:3,1:3,1:3,1:3,active(grI))  - &
-               dPdF(1:3,1:3,1:3,1:3,active(Nactive))  )
-         enddo      
-       enddo           
-       do grI = 1_pInt,  Nactive-1                                                                  ! Jacobian calculations for residual Ri = (Pi - Pn).Nin
-         xioffsetIN = 3_pInt*((active(grI)-1_pInt)*(2_pInt*homogenization_Ngrains(homog)-active(grI))/2_pInt + &
-                              active(Nactive) - active(grI) - 1_pInt)
-         xioffsetI = 3_pInt*(grI - 1_pInt)
-         do grJ = 1_pInt,  Nactive-1
-           xioffsetJN = 3_pInt*((active(grJ)-1_pInt)*(2_pInt*homogenization_Ngrains(homog)-active(grJ))/2_pInt + &
-                                active(Nactive) - active(grJ) - 1_pInt)
-           xioffsetJ = 3_pInt*(grJ - 1_pInt)
-           forall (ii = 1_pInt:3_pInt,jj = 1_pInt:3_pInt) &                 
-               jacobian(xioffsetI+ii,xioffsetJ+jj) = &
-                 sum(jtemp(ii,1:3,jj,1:3,grI,grJ)* &
-                     math_tensorproduct33(param(instance)%interfaceNormal(xioffsetIN+1_pInt:xioffsetIN+3_pInt,offset), &
-                                          param(instance)%interfaceNormal(xioffsetJN+1_pInt:xioffsetJN+3_pInt,offset)))                            
-         enddo    
-       enddo            
-       
+       do grII = 1_pInt,  Nactive-1; do grIJ = grII+1_pInt, Nactive
+         xioffsetIN = 3_pInt*((active(grII)-1_pInt)* &
+                              (2_pInt*homogenization_Ngrains(homog)-active(grII))/2_pInt + &
+                              active(grIJ) - active(grII) - 1_pInt)
+         xioffsetI  = 3_pInt*((grII-1_pInt)*(2_pInt*Nactive-grII)/2_pInt + grIJ - grII - 1_pInt)                                      
+         do grJI = 1_pInt,  Nactive-1; do grJJ = grJI+1_pInt, Nactive
+           xioffsetJN = 3_pInt*((active(grJI)-1_pInt)* &
+                                (2_pInt*homogenization_Ngrains(homog)-active(grJI))/2_pInt + &
+                                active(grJJ) - active(grJI) - 1_pInt)
+           xioffsetJ  = 3_pInt*((grJI-1_pInt)*(2_pInt*Nactive-grJI)/2_pInt + grJJ - grJI - 1_pInt)                                      
+           if (grII == grJI) &
+             forall (ii = 1_pInt:3_pInt,jj = 1_pInt:3_pInt) &                 
+                 jacobian(xioffsetI+ii,xioffsetJ+jj) = &
+                   jacobian(xioffsetI+ii,xioffsetJ+jj) +  &
+                   phasefrac(active(grII),homog)%p(offset)* &
+                   phasefrac(active(grIJ),homog)%p(offset)* &
+                   phasefrac(active(grJJ),homog)%p(offset)* &
+                   sum(dPdF(ii,1:3,jj,1:3,active(grII))* &
+                       math_tensorproduct33(param(instance)%interfaceNormal(xioffsetIN+1_pInt:xioffsetIN+3_pInt,offset), &
+                                            param(instance)%interfaceNormal(xioffsetJN+1_pInt:xioffsetJN+3_pInt,offset)))                            
+           if (grII == grJJ) &
+             forall (ii = 1_pInt:3_pInt,jj = 1_pInt:3_pInt) &                 
+                 jacobian(xioffsetI+ii,xioffsetJ+jj) = &
+                   jacobian(xioffsetI+ii,xioffsetJ+jj) -  &
+                   phasefrac(active(grII),homog)%p(offset)* &
+                   phasefrac(active(grIJ),homog)%p(offset)* &
+                   phasefrac(active(grJI),homog)%p(offset)* &
+                   sum(dPdF(ii,1:3,jj,1:3,active(grII))* &
+                       math_tensorproduct33(param(instance)%interfaceNormal(xioffsetIN+1_pInt:xioffsetIN+3_pInt,offset), &
+                                            param(instance)%interfaceNormal(xioffsetJN+1_pInt:xioffsetJN+3_pInt,offset)))                            
+           if (grIJ == grJI) &
+             forall (ii = 1_pInt:3_pInt,jj = 1_pInt:3_pInt) &                 
+                 jacobian(xioffsetI+ii,xioffsetJ+jj) = &
+                   jacobian(xioffsetI+ii,xioffsetJ+jj) -  &
+                   phasefrac(active(grII),homog)%p(offset)* &
+                   phasefrac(active(grIJ),homog)%p(offset)* &
+                   phasefrac(active(grJJ),homog)%p(offset)* &
+                   sum(dPdF(ii,1:3,jj,1:3,active(grIJ))* &
+                       math_tensorproduct33(param(instance)%interfaceNormal(xioffsetIN+1_pInt:xioffsetIN+3_pInt,offset), &
+                                            param(instance)%interfaceNormal(xioffsetJN+1_pInt:xioffsetJN+3_pInt,offset)))                            
+           if (grIJ == grJJ) &
+             forall (ii = 1_pInt:3_pInt,jj = 1_pInt:3_pInt) &                 
+                 jacobian(xioffsetI+ii,xioffsetJ+jj) = &
+                   jacobian(xioffsetI+ii,xioffsetJ+jj) +  &
+                   phasefrac(active(grII),homog)%p(offset)* &
+                   phasefrac(active(grIJ),homog)%p(offset)* &
+                   phasefrac(active(grJI),homog)%p(offset)* &
+                   sum(dPdF(ii,1:3,jj,1:3,active(grIJ))* &
+                       math_tensorproduct33(param(instance)%interfaceNormal(xioffsetIN+1_pInt:xioffsetIN+3_pInt,offset), &
+                                            param(instance)%interfaceNormal(xioffsetJN+1_pInt:xioffsetJN+3_pInt,offset)))                            
+         enddo; enddo
+       enddo; enddo  
+
        allocate(ipiv(xisize))
        call dgesv(xisize,1,jacobian,xisize,ipiv,residual,xisize,ierr)                               !< solve Jacobian * delta state = -residual for delta state
        if (ierr == 0_pInt) then
          param(instance)%searchDir(:,offset) = 0.0_pReal
          do grI = 1_pInt, Nactive-1_pInt
-           xioffsetIN = 3_pInt*((active(grI)-1_pInt)*(2_pInt*homogenization_Ngrains(homog)-active(grI))/2_pInt + &
-                                active(Nactive) - active(grI) - 1_pInt)
-           xioffsetI = 3_pInt*(grI - 1_pInt)
-           param(instance)%searchDir(xioffsetIN+1_pInt:xioffsetIN+3_pInt,offset) = &
-             residual(xioffsetI+1_pInt:xioffsetI+3_pInt)
-           do grJ = grI+1_pInt, Nactive-1_pInt
-             xioffsetJN = 3_pInt*((active(grJ)-1_pInt)*(2_pInt*homogenization_Ngrains(homog)-active(grJ))/2_pInt + &
-                                  active(Nactive) - active(grJ) - 1_pInt)
-             xioffsetIJ = 3_pInt*((active(grI)-1_pInt)*(2_pInt*homogenization_Ngrains(homog)-active(grI))/2_pInt + &
+           do grJ = grI+1_pInt, Nactive
+             xioffsetIN = 3_pInt*((active(grI)-1_pInt)*(2_pInt*homogenization_Ngrains(homog)-active(grI))/2_pInt + &
                                   active(grJ) - active(grI) - 1_pInt)
-             xioffsetJ = 3_pInt*(grJ - 1_pInt)
-             param(instance)%searchDir(xioffsetIJ+1_pInt:xioffsetIJ+3_pInt,offset) = &
-               residual(xioffsetI+1_pInt:xioffsetI+3_pInt)* &
-               sum(param(instance)%interfaceNormal(xioffsetIN+1_pInt:xioffsetIN+3_pInt,offset)* &
-                   param(instance)%interfaceNormal(xioffsetIJ+1_pInt:xioffsetIJ+3_pInt,offset)) - &
-               residual(xioffsetJ+1_pInt:xioffsetJ+3_pInt)* &               
-               sum(param(instance)%interfaceNormal(xioffsetJN+1_pInt:xioffsetJN+3_pInt,offset)* &
-                   param(instance)%interfaceNormal(xioffsetIJ+1_pInt:xioffsetIJ+3_pInt,offset))
+             xioffsetI = 3_pInt*((grI-1_pInt)*(2_pInt*Nactive-grI)/2_pInt + grJ - grI - 1_pInt) 
+             param(instance)%searchDir(xioffsetIN+1_pInt:xioffsetIN+3_pInt,offset) = &
+               residual(xioffsetI+1_pInt:xioffsetI+3_pInt)
            enddo
          enddo
          param(instance)%newIter  (:,offset) = &
@@ -1303,8 +1323,6 @@ end function homogenization_multiphase_getPhaseFluxTangent
 !> @brief source function for each phase 
 !--------------------------------------------------------------------------------------------------
 function homogenization_multiphase_getPhaseSource(phi,ip,el)
- use numerics, only: &
-   err_phasefr_tolAbs
  use material, only: &
    material_homog, &
    phaseAt, &
@@ -1361,9 +1379,9 @@ function homogenization_multiphase_getPhaseSource(phi,ip,el)
          tripleJunctionEnergy*phi(grI)*phi(grJ)
      enddo
    enddo
-   if (phi(grI) < err_phasefr_tolAbs) &
+   if (phi(grI) < param(instance)%phasefracTol) &
      selfSource(grI) = selfSource(grI) + &
-       ((phi(grI) - err_phasefr_tolAbs)/err_phasefr_tolAbs)**2.0_pReal
+       ((phi(grI) - param(instance)%phasefracTol)/param(instance)%phasefracTol)**2.0_pReal
  enddo
 
  homogenization_multiphase_getPhaseSource = 0.0_pReal
@@ -1386,8 +1404,6 @@ end function homogenization_multiphase_getPhaseSource
 !> @brief source tangent function for each phase 
 !--------------------------------------------------------------------------------------------------
 function homogenization_multiphase_getPhaseSourceTangent(phi,ip,el)
- use numerics, only: &
-   err_phasefr_tolAbs
  use material, only: &
    material_homog, &
    homogenization_Ngrains, &
@@ -1435,9 +1451,9 @@ function homogenization_multiphase_getPhaseSourceTangent(phi,ip,el)
          tripleJunctionEnergy*phi(grI)
      enddo
    enddo  
-   if (phi(grI) < err_phasefr_tolAbs) &
+   if (phi(grI) < param(instance)%phasefracTol) &
      selfSourceTangent(grI,grI) = selfSourceTangent(grI,grI) + &
-       2.0_pReal*(phi(grI) - err_phasefr_tolAbs)/err_phasefr_tolAbs/err_phasefr_tolAbs
+       2.0_pReal*(phi(grI) - param(instance)%phasefracTol)/param(instance)%phasefracTol/param(instance)%phasefracTol
  enddo
  
  homogenization_multiphase_getPhaseSourceTangent = 0.0_pReal
