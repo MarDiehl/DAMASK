@@ -309,8 +309,10 @@ end subroutine chemicalFE_thermodynamic_init
 !--------------------------------------------------------------------------------------------------
 !> @brief returns the chemical energy for a given instance of this model
 !--------------------------------------------------------------------------------------------------
-function chemicalFE_thermodynamic_getEnergy(conc,T,ipc,ip,el)
+function chemicalFE_thermodynamic_getEnergy(T,ipc,ip,el)
  use material, only: &
+   chemicalConc, &
+   chemicalMapping, &
    material_phase, &
    phase_chemicalFEInstance, &
    material_maxNcomponents
@@ -318,12 +320,12 @@ function chemicalFE_thermodynamic_getEnergy(conc,T,ipc,ip,el)
  implicit none
  integer(pInt), intent(in) :: &
    ipc, ip, el
- real(pReal), dimension(material_maxNcomponents), intent(in) :: &
-   conc
  real(pReal), intent(in) :: &
    T
  real(pReal) :: &
    chemicalFE_thermodynamic_getEnergy
+ real(pReal), dimension(material_maxNcomponents) :: &
+   conc
  integer(pInt) :: &
    cpI, cpJ, &
    phase, &
@@ -331,6 +333,10 @@ function chemicalFE_thermodynamic_getEnergy(conc,T,ipc,ip,el)
 
  phase = material_phase(ipc,ip,el)
  instance = phase_chemicalFEInstance(phase)
+ conc = 0.0_pReal
+ do cpI = 1_pInt, param(instance)%Ncomponents
+   conc(cpI) = chemicalConc(cpI,phase)%p(chemicalMapping(phase)%p(ipc, ip, el))
+ enddo
  chemicalFE_thermodynamic_getEnergy = &
    kB*T*(1.0_pReal - sum(conc(1:param(instance)%Ncomponents)))* &
    log(1.0_pReal - sum(conc(1:param(instance)%Ncomponents)))
@@ -576,7 +582,7 @@ function chemicalFE_thermodynamic_postResults(conc,T,ipc,ip,el)
  outputsLoop: do o = 1_pInt,chemicalFE_thermodynamic_Noutput(instance)
    select case(param(instance)%outputID(o))
      case (chemicalFE_ID)
-       chemicalFE_thermodynamic_postResults(c+1_pInt) = chemicalFE_thermodynamic_getEnergy(conc,T,ipc,ip,el)
+       chemicalFE_thermodynamic_postResults(c+1_pInt) = chemicalFE_thermodynamic_getEnergy(T,ipc,ip,el)
        c = c + 1_pInt
 
      case (chemicalPot_ID)

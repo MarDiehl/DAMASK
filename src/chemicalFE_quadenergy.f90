@@ -354,8 +354,10 @@ end subroutine chemicalFE_quadenergy_init
 !--------------------------------------------------------------------------------------------------
 !> @brief returns the chemical energy for a given instance of this model
 !--------------------------------------------------------------------------------------------------
-function chemicalFE_quadenergy_getEnergy(conc,ipc,ip,el)
+function chemicalFE_quadenergy_getEnergy(ipc,ip,el)
  use material, only: &
+   chemicalConc, &
+   chemicalMapping, &
    material_phase, &
    phase_chemicalFEInstance, &
    material_maxNcomponents
@@ -363,7 +365,7 @@ function chemicalFE_quadenergy_getEnergy(conc,ipc,ip,el)
  implicit none
  integer(pInt), intent(in) :: &
    ipc, ip, el
- real(pReal), dimension(material_maxNcomponents), intent(in) :: &
+ real(pReal), dimension(material_maxNcomponents) :: &
    conc
  real(pReal) :: &
    chemicalFE_quadenergy_getEnergy
@@ -374,6 +376,10 @@ function chemicalFE_quadenergy_getEnergy(conc,ipc,ip,el)
 
  phase = material_phase(ipc,ip,el)
  instance = phase_chemicalFEInstance(phase)
+ conc = 0.0_pReal
+ do cpI = 1_pInt, param(instance)%Ncomponents
+   conc(cpI) = chemicalConc(cpI,phase)%p(chemicalMapping(phase)%p(ipc, ip, el))
+ enddo
  chemicalFE_quadenergy_getEnergy = &
    param(instance)%ConstantCoeff
  do cpI = 1_pInt, param(instance)%Ncomponents
@@ -598,7 +604,7 @@ function chemicalFE_quadenergy_postResults(conc,ipc,ip,el)
  outputsLoop: do o = 1_pInt,chemicalFE_quadenergy_Noutput(instance)
    select case(param(instance)%outputID(o))
      case (chemicalFE_ID)
-       chemicalFE_quadenergy_postResults(c+1_pInt) = chemicalFE_quadenergy_getEnergy(conc,ipc,ip,el)
+       chemicalFE_quadenergy_postResults(c+1_pInt) = chemicalFE_quadenergy_getEnergy(ipc,ip,el)
        c = c + 1_pInt
 
      case (chemicalPot_ID)
