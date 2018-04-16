@@ -127,6 +127,7 @@ module spectral_utilities
    utilities_FFTscalarForward, &
    utilities_FFTscalarBackward, &
    utilities_fourierGammaConvolution, &
+   utilities_fourierVectorGreenConvolution, &
    utilities_fourierGreenConvolution, &
    utilities_divergenceRMS, &
    utilities_curlRMS, &
@@ -582,6 +583,51 @@ subroutine utilities_fourierGammaConvolution(fieldAim)
    tensorField_fourier(1:3,1:3,1,1,1) = cmplx(fieldAim/wgt,0.0_pReal,pReal)
 
 end subroutine utilities_fourierGammaConvolution
+
+
+!--------------------------------------------------------------------------------------------------
+!> @brief doing convolution MechGreenOp_hat * field_real
+!--------------------------------------------------------------------------------------------------
+subroutine utilities_fourierVectorGreenConvolution
+ use math, only: &
+   math_det33, &
+   math_invert
+ use mesh, only: &
+   grid, &
+   grid3, &
+   grid3Offset
+
+ implicit none
+ complex(pReal),          dimension(3,3) :: temp33_complex, xiDyad_cmplx
+ complex(pReal),          dimension(3  ) :: temp3_complex
+ real(pReal)                             :: matA(6,6), matInvA(6,6) 
+
+ integer(pInt) :: &
+   i, j, k, l, m
+ logical :: err
+
+!--------------------------------------------------------------------------------------------------
+! do the actual spectral method calculation
+ do k = 1_pInt, grid3; do j = 1_pInt, grid(2) ;do i = 1_pInt, grid1Red
+   if (any([i,j,k+grid3Offset] /= 1_pInt)) then                                                                ! singular point at xi=(0.0,0.0,0.0) i.e. i=j=k=1
+     forall(l = 1_pInt:3_pInt, m = 1_pInt:3_pInt) &
+       xiDyad_cmplx(l,m) = conjg(-xi1st(l,i,j,k))*xi1st(m,i,j,k)
+     forall(l = 1_pInt:3_pInt, m = 1_pInt:3_pInt) &
+       temp33_complex(l,m) = sum(cmplx(C_ref(l,1:3,m,1:3),0.0_pReal)*xiDyad_cmplx)
+     matA(1:3,1:3) = real(temp33_complex); matA(4:6,4:6) = real(temp33_complex)
+     matA(1:3,4:6) = aimag(temp33_complex); matA(4:6,1:3) = -aimag(temp33_complex)
+     if (abs(math_det33(matA(1:3,1:3))) > 1e-16) then
+       call math_invert(6_pInt, matA, matInvA, err)
+       temp33_complex = cmplx(matInvA(1:3,1:3),matInvA(1:3,4:6),pReal)
+       forall(l=1_pInt:3_pInt) temp3_complex(l) = sum(temp33_complex(l,1:3)*vectorField_fourier(1:3,i,j,k))
+     else  
+       temp3_complex(1:3) = cmplx(0.0_pReal,0.0_pReal,pReal)
+     endif
+     vectorField_fourier(1:3,i,j,k) = temp3_complex(1:3)
+   endif
+ enddo; enddo; enddo
+
+end subroutine utilities_fourierVectorGreenConvolution
 
 
 !--------------------------------------------------------------------------------------------------

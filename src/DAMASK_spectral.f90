@@ -539,7 +539,7 @@ program DAMASK_spectral
                        guess,timeinc,timeIncOld,remainingLoadCaseTime, &
                        deformation_BC     = loadCases(currentLoadCase)%deformation, &
                        stress_BC          = loadCases(currentLoadCase)%stress, &
-                       rotation_BC        = loadCases(currentLoadCase)%rotation)
+                       rotation           = loadCases(currentLoadCase)%rotation)
                  case (DAMASK_spectral_SolverAL_label)
                    call AL_forward (&
                        guess,timeinc,timeIncOld,remainingLoadCaseTime, &
@@ -578,9 +578,9 @@ program DAMASK_spectral
                  select case (spectral_solver)
                    case (DAMASK_spectral_SolverBasicPETSc_label)
                      solres(field) = BasicPETSC_solution (&
-                         incInfo,timeinc,timeIncOld, &
+                         incInfo,timeinc,timeIncOld,remainingLoadCaseTime, &
                          stress_BC          = loadCases(currentLoadCase)%stress, &
-                         rotation_BC        = loadCases(currentLoadCase)%rotation)
+                         rotation           = loadCases(currentLoadCase)%rotation)
 
                    case (DAMASK_spectral_SolverAL_label)
                      solres(field) = AL_solution (&
