@@ -1451,60 +1451,60 @@ function homogenization_multiphase_updateState(P,dPdF,F,F0,iter,ip,el)
                               0.0_pReal]      ))
          forall (ii = 1_pInt:3_pInt) &                                                                                                
            jacobian(xioffsetI+1,xioffsetI+2+ii) = &                                                 ! jacobian (alpha,H) RA_H   
-		           jacobian(xioffsetI+1,xioffsetI+2+ii) +  &
-		           phasefrac(active(grII),homog)%p(offset)* &
-		           phasefrac(active(grIJ),homog)%p(offset)* &
-		           sum((P(ii,1:3,active(grII)) - P(ii,1:3,active(grIJ)))* &
-		               [ cos(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
-		                 cos(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
-		                -sin(interfaceNormalAIJ)] )
-
+             jacobian(xioffsetI+1,xioffsetI+2+ii) +  &
+             phasefrac(active(grII),homog)%p(offset)* &
+             phasefrac(active(grIJ),homog)%p(offset)* &
+             sum((P(ii,1:3,active(grII)) - P(ii,1:3,active(grIJ)))* &
+                 [ cos(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
+                   cos(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
+                  -sin(interfaceNormalAIJ)] )
          jacobian(xioffsetI+2,xioffsetI+1) = &                                                      ! jacobian (beta,alpha) RB_A  
-		         jacobian(xioffsetI+2,xioffsetI+1) +  &
-		         phasefrac(active(grII),homog)%p(offset)* &
-		         phasefrac(active(grIJ),homog)%p(offset)* &
-		         math_mul33xx33(P(1:3,1:3,active(grII)) - P(1:3,1:3,active(grIJ)), &
-		                        math_tensorproduct33( &
-		                          param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
-		                          [-cos(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
-		                            cos(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
-		                            0.0_pReal]      ))
+           jacobian(xioffsetI+2,xioffsetI+1) +  &
+           phasefrac(active(grII),homog)%p(offset)* &
+           phasefrac(active(grIJ),homog)%p(offset)* &
+           math_mul33xx33(P(1:3,1:3,active(grII)) - P(1:3,1:3,active(grIJ)), &
+                          math_tensorproduct33( &
+                            param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
+                            [-cos(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
+                              cos(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
+                              0.0_pReal]      ))
          jacobian(xioffsetI+2,xioffsetI+2) = &                                                      ! jacobian (beta,beta) RB_B 
-				    jacobian(xioffsetI+2,xioffsetI+2) +  &
-				    phasefrac(active(grII),homog)%p(offset)* &
-				    phasefrac(active(grIJ),homog)%p(offset)* &
-				    math_mul33xx33(P(1:3,1:3,active(grII)) - P(1:3,1:3,active(grIJ)), &
-				       math_tensorproduct33(param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset) , &
-							  			         [ -sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
-										            -sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
-										             0.0_pReal]      )  )
+           jacobian(xioffsetI+2,xioffsetI+2) +  &
+           phasefrac(active(grII),homog)%p(offset)* &
+           phasefrac(active(grIJ),homog)%p(offset)* &
+           math_mul33xx33(P(1:3,1:3,active(grII)) - P(1:3,1:3,active(grIJ)), &
+                          math_tensorproduct33(param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset) , &
+                                               [-sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
+                                                -sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
+                                                 0.0_pReal]) &
+                          )
          forall (ii = 1_pInt:3_pInt) &                                                                                                
            jacobian(xioffsetI+2,xioffsetI+2+ii) = &                                                 ! jacobian (beta,H) RB_H   
-				     jacobian(xioffsetI+2,xioffsetI+2+ii) +  &
-						 phasefrac(active(grII),homog)%p(offset)* &
-						 phasefrac(active(grIJ),homog)%p(offset)* &
-						 sum(	(P(ii,1:3,active(grII)) - P(ii,1:3,active(grIJ)) )* &
-								   [-sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
-								    sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
-								    0.0_pReal] )                                  
+             jacobian(xioffsetI+2,xioffsetI+2+ii) +  &
+             phasefrac(active(grII),homog)%p(offset)* &
+             phasefrac(active(grIJ),homog)%p(offset)* &
+             sum((P(ii,1:3,active(grII)) - P(ii,1:3,active(grIJ)))* &
+                 [-sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
+                  sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
+                  0.0_pReal])                                  
          forall (ii = 1_pInt:3_pInt) &                                                                                                
-		      jacobian(xioffsetI+2+ii,xioffsetI+1) = &                                                  ! jacobian (H,alpha) RH_A 
-						 jacobian(xioffsetI+2+ii,xioffsetI+1) +  &
-						 phasefrac(active(grII),homog)%p(offset)* &
-						 phasefrac(active(grIJ),homog)%p(offset)* &
-						 sum( (P(ii,1:3,active(grII)) - P(ii,1:3,active(grIJ)) )* &
-						       [cos(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
-						        cos(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
-						        -sin(interfaceNormalAIJ)] )                        
+           jacobian(xioffsetI+2+ii,xioffsetI+1) = &                                                  ! jacobian (H,alpha) RH_A 
+             jacobian(xioffsetI+2+ii,xioffsetI+1) +  &
+             phasefrac(active(grII),homog)%p(offset)* &
+             phasefrac(active(grIJ),homog)%p(offset)* &
+             sum((P(ii,1:3,active(grII)) - P(ii,1:3,active(grIJ)))* &
+                 [ cos(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
+                   cos(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
+                  -sin(interfaceNormalAIJ)] )                        
          forall (ii = 1_pInt:3_pInt) &                                                                                                
-		      jacobian(xioffsetI+2+ii,xioffsetI+2) = &                                                  ! jacobian (H,beta) RH_B  
-						 jacobian(xioffsetI+2+ii,xioffsetI+2) +  &
-						 phasefrac(active(grII),homog)%p(offset)* &
-						 phasefrac(active(grIJ),homog)%p(offset)* &
-						 sum(  (P(ii,1:3,active(grII)) - P(ii,1:3,active(grIJ)) )* &
-						       [-sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
-						         sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
-						         0.0_pReal] )                                              
+           jacobian(xioffsetI+2+ii,xioffsetI+2) = &                                                  ! jacobian (H,beta) RH_B  
+             jacobian(xioffsetI+2+ii,xioffsetI+2) +  &
+             phasefrac(active(grII),homog)%p(offset)* &
+             phasefrac(active(grIJ),homog)%p(offset)* &
+             sum(  (P(ii,1:3,active(grII)) - P(ii,1:3,active(grIJ)) )* &
+                   [-sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
+                     sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
+                     0.0_pReal] )                                              
          do grJI = 1_pInt,  Nactive-1; do grJJ = grJI+1_pInt, Nactive
            xioffsetJN = 5_pInt*((active(grJI)-1_pInt)* &
                                 (2_pInt*homogenization_Ngrains(homog)-active(grJI))/2_pInt + &
@@ -1513,581 +1513,584 @@ function homogenization_multiphase_updateState(P,dPdF,F,F0,iter,ip,el)
            interfaceNormalAKL = param(instance)%newIter(xioffsetJN+1,offset)
            interfaceNormalBKL = param(instance)%newIter(xioffsetJN+2,offset)                  
            if (grII == grJI) then                                                                   ! terms when I=K        
-           jacobian(xioffsetI+1,xioffsetJ+1) = &                                                    ! jacobian (alpha,alpha) RA_A (1,1)
-		        jacobian(xioffsetI+1,xioffsetJ+1) +  &                        
-		        phasefrac(active(grII),homog)%p(offset)* &
-		        phasefrac(active(grIJ),homog)%p(offset)* &
-		        phasefrac(active(grJJ),homog)%p(offset)* &
-		        sum(  dPdF(1:3,1:3,1:3,1:3,active(grII))* &
-		            math_tensorproduct3333( &
-		                   math_tensorproduct33(param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
-		                                        [ cos(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
-		                                          cos(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
-		                                          -sin(interfaceNormalAIJ)] ), & 
-		                   math_tensorproduct33(param(instance)%newIter(xioffsetJN+3:xioffsetJN+5,offset), &
-		                                        [ cos(interfaceNormalAKL)*cos(interfaceNormalBKL), &
-		                                          cos(interfaceNormalAKL)*sin(interfaceNormalBKL), &
-		                                          -sin(interfaceNormalAKL)] ) &
-		                                  )   &
-		           )         
-           jacobian(xioffsetI+1,xioffsetJ+2) = &                                                    ! jacobian (alpha,beta) RA_B  (1,2)
-		        jacobian(xioffsetI+1,xioffsetJ+2) +  &                        
-		        phasefrac(active(grII),homog)%p(offset)* &
-		        phasefrac(active(grIJ),homog)%p(offset)* &
-		        phasefrac(active(grJJ),homog)%p(offset)* &
-		        sum( dPdF(1:3,1:3,1:3,1:3,active(grII))* &
-		             math_tensorproduct3333( &
-		                  math_tensorproduct33(param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
-		                                       [cos(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
-		                                        cos(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
-                                             -sin(interfaceNormalAIJ)] ), & 
-		                   math_tensorproduct33(param(instance)%newIter(xioffsetJN+3:xioffsetJN+5,offset), &
-		                                        [-sin(interfaceNormalAKL)*sin(interfaceNormalBKL), &
-		                                         sin(interfaceNormalAKL)*cos(interfaceNormalBKL), &
-		                                         0.0_pReal]              ) &
-		                                   )   &
-		           )                                 
-           forall (ii = 1_pInt:3_pInt,jj = 1_pInt:3_pInt) &                                         ! jacobian (alpha,H) RA_H  (1,3:5)         
-               avgR(ii,jj) =sum( dPdF(1:3,1:3,ii,jj,active(grII))* &
-                               math_tensorproduct33(&
-                                  param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
-                                  [cos(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
-                                   cos(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
-                                  -sin(interfaceNormalAIJ)])  )
-           forall (ii = 1_pInt:3_pInt) &                                                              
-               jacobian(xioffsetI+1,xioffsetJ+2+ii) = &                                             
-									 jacobian(xioffsetI+1,xioffsetJ+2+ii) +  &                        
-									 phasefrac(active(grII),homog)%p(offset)* &
-									 phasefrac(active(grIJ),homog)%p(offset)* &
-									 phasefrac(active(grJJ),homog)%p(offset)* &
-										    sum(avgR(ii,1:3)*[sin(interfaceNormalAKL)*cos(interfaceNormalBKL), &
-										                      sin(interfaceNormalAKL)*sin(interfaceNormalBKL), &
-										                      cos(interfaceNormalAKL)] ) 
-           jacobian(xioffsetI+2,xioffsetJ+1) = &                                                    ! jacobian (beta,alpha) RB_A  (2,1)
-				      jacobian(xioffsetI+2,xioffsetJ+1) +  &                        
-				      phasefrac(active(grII),homog)%p(offset)* &
-				      phasefrac(active(grIJ),homog)%p(offset)* &
-				      phasefrac(active(grJJ),homog)%p(offset)* &
-				      sum( dPdF(1:3,1:3,1:3,1:3,active(grII))* &
-				         math_tensorproduct3333( &
-				               math_tensorproduct33(param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
-				                                    [-sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
-				                                      sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
-				                                      0.0_Preal] ), & 
-				               math_tensorproduct33(param(instance)%newIter(xioffsetJN+3:xioffsetJN+5,offset), &
-				                                    [cos(interfaceNormalAKL)*cos(interfaceNormalBKL), &
-				                                     cos(interfaceNormalAKL)*sin(interfaceNormalBKL), &
-				                                     -sin(interfaceNormalAKL)] ) &
-				                               )   &
-				         )
-           jacobian(xioffsetI+2,xioffsetJ+2) = &                                                    ! jacobian (beta,beta) RB_B (2,2)
-				      jacobian(xioffsetI+2,xioffsetJ+2) +  &                        
-				      phasefrac(active(grII),homog)%p(offset)* &
-				      phasefrac(active(grIJ),homog)%p(offset)* &
-				      phasefrac(active(grJJ),homog)%p(offset)* &
-				      sum(dPdF(1:3,1:3,1:3,1:3,active(grII))* &
-				          math_tensorproduct3333( &
-				               math_tensorproduct33(param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
-				                                    [-sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
-				                                     sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
-				                                     0.0_Preal] ), & 
-				               math_tensorproduct33(param(instance)%newIter(xioffsetJN+3:xioffsetJN+5,offset), &
-				                                    [-sin(interfaceNormalAKL)*sin(interfaceNormalBKL), &
-				                                    sin(interfaceNormalAKL)*cos(interfaceNormalBKL), &
-				                                    0.0_pReal] ) &
-				                                )   &
-				         )		                                                                    
-           forall (ii = 1_pInt:3_pInt,jj = 1_pInt:3_pInt) &                                          ! jacobian (beta,H) RB_H (2,3:5)
-							 avgR(ii,jj) =sum(dPdF(1:3,1:3,ii,jj,active(grII))* &
-						        math_tensorproduct33(param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
-		 	 	                                 [-sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
-								                         sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
-								                       0.0_Preal] ) )
-           forall (ii = 1_pInt:3_pInt) &                                                              
-							jacobian(xioffsetI+2,xioffsetJ+2+ii) = &          
-								 jacobian(xioffsetI+2,xioffsetJ+2+ii) +  &                        
-								 phasefrac(active(grII),homog)%p(offset)* &
-								 phasefrac(active(grIJ),homog)%p(offset)* &
-								 phasefrac(active(grJJ),homog)%p(offset)* &
-								 sum(avgR(ii,1:3)*[sin(interfaceNormalAKL)*cos(interfaceNormalBKL), &
-								                    sin(interfaceNormalAKL)*sin(interfaceNormalBKL), &
-								                    cos(interfaceNormalAKL)])                                                                 
-           forall (ii = 1_pInt:3_pInt,jj = 1_pInt:3_pInt) &                                         ! jacobian (H,alpha) RH1_A (3:5,1) 
-						   avgR(ii,jj) =sum(dPdF(ii,jj,1:3,1:3,active(grII))* &
-								       math_tensorproduct33(param(instance)%newIter(xioffsetJN+3:xioffsetJN+5,offset), &
-								                           [cos(interfaceNormalAKL)*cos(interfaceNormalBKL), &
-								                            cos(interfaceNormalAKL)*sin(interfaceNormalBKL), &
-								                           -sin(interfaceNormalAKL)] ))
-           forall (ii = 1_pInt:3_pInt) &                                                              
-						 jacobian(xioffsetI+2+ii,xioffsetJ+1) = &                                          
-								 jacobian(xioffsetI+2+ii,xioffsetJ+1) +  &                        
-								 phasefrac(active(grII),homog)%p(offset)* &
-								 phasefrac(active(grIJ),homog)%p(offset)* &
-								 phasefrac(active(grJJ),homog)%p(offset)* &
-								 sum(avgR(ii,1:3)*[sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
-								                   sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
-								                   cos(interfaceNormalAIJ)]) 
-           forall (ii = 1_pInt:3_pInt,jj = 1_pInt:3_pInt) &                                                           
-						   avgR(ii,jj) =sum(dPdF(ii,jj,1:3,1:3,active(grII))* &
-								          math_tensorproduct33(param(instance)%newIter(xioffsetJN+3:xioffsetJN+5,offset) , &
-								                              [-sin(interfaceNormalAKL)*sin(interfaceNormalBKL), &
-								                               sin(interfaceNormalAKL)*cos(interfaceNormalBKL), &
-								                               0.0_pReal] ) )
-           forall (ii = 1_pInt:3_pInt) &                                                              
-							 jacobian(xioffsetI+2+ii,xioffsetJ+2) = &                                      ! jacobian (H,beta) RH2_B (3:5,2)
-									 jacobian(xioffsetI+2+ii,xioffsetJ+2) +  &                        
-									 phasefrac(active(grII),homog)%p(offset)* &
-									 phasefrac(active(grIJ),homog)%p(offset)* &
-									 phasefrac(active(grJJ),homog)%p(offset)* &
-									 sum(avgR(ii,1:3)*[sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
-										                 sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
-										                 cos(interfaceNormalAIJ)]) 
-           forall (ii = 1_pInt:3_pInt,jj = 1_pInt:3_pInt) &                                         ! jacobian (H,H) RH_H (3:5,3:5)
-             jacobian(xioffsetI+2+ii,xioffsetJ+2+jj) = &
-                   jacobian(xioffsetI+2+ii,xioffsetJ+2+jj) +  &
-                   phasefrac(active(grII),homog)%p(offset)* &
-                   phasefrac(active(grIJ),homog)%p(offset)* &
-                   phasefrac(active(grJJ),homog)%p(offset)* &
-                   sum(dPdF(ii,1:3,jj,1:3,active(grII))* &
-                       math_tensorproduct33( &
-                                  [sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
-                                  sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
-                                  cos(interfaceNormalAIJ)], &
-                                  [sin(interfaceNormalAKL)*cos(interfaceNormalBKL), &
-                                  sin(interfaceNormalAKL)*sin(interfaceNormalBKL), &
-                                  cos(interfaceNormalAKL)]) )                                                                   
-           end if
-!-------------------------------------------------------------------------------------
-           if (grII == grJJ) then                                                                   ! subtracting contribution from L 
-           jacobian(xioffsetI+1,xioffsetJ+1) = &                                                    ! jacobian (A,A) RA_A (1,1)
-						    jacobian(xioffsetI+1,xioffsetJ+1) -  &                        
-						    phasefrac(active(grII),homog)%p(offset)* &
-						    phasefrac(active(grIJ),homog)%p(offset)* &
-						    phasefrac(active(grJI),homog)%p(offset)* &
-						    sum(dPdF(1:3,1:3,1:3,1:3,active(grII))* &
-						        math_tensorproduct3333( &
-						          math_tensorproduct33(param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
-						                               [ cos(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
-						                                 cos(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
-						                                -sin(interfaceNormalAIJ)]), & 
-						          math_tensorproduct33(param(instance)%newIter(xioffsetJN+3:xioffsetJN+5,offset), &
-						                              [cos(interfaceNormalAKL)*cos(interfaceNormalBKL), &
-						                              cos(interfaceNormalAKL)*sin(interfaceNormalBKL), &
-						                              -sin(interfaceNormalAKL)] ) & 
-						                              )   &
-						       )
-           jacobian(xioffsetI+1,xioffsetJ+2) = &                                                    ! jacobian (A,B) RA_B (1,2)
-						    jacobian(xioffsetI+1,xioffsetJ+2)  -  &                        
-						    phasefrac(active(grII),homog)%p(offset)* &
-						    phasefrac(active(grIJ),homog)%p(offset)* &
-						    phasefrac(active(grJI),homog)%p(offset)* &
-						    sum(dPdF(1:3,1:3,1:3,1:3,active(grII))* &
-						        math_tensorproduct3333( &
-						          math_tensorproduct33(param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
-						                              [cos(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
-						                               cos(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
-						                               -sin(interfaceNormalAIJ)] ), & 
-						          math_tensorproduct33(param(instance)%newIter(xioffsetJN+3:xioffsetJN+5,offset), &
-						                              [-sin(interfaceNormalAKL)*sin(interfaceNormalBKL), &
-						                                sin(interfaceNormalAKL)*cos(interfaceNormalBKL), &
-						                                0.0_pReal] ) &
-						                              )   &
-						       )
-           forall (ii = 1_pInt:3_pInt,jj = 1_pInt:3_pInt) &                                         ! jacobian (A,H) RA_H (1,3:5)
-						 avgR(ii,jj) =sum(dPdF(1:3,1:3,ii,jj,active(grII))* &
-								              math_tensorproduct33(param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
-								                                  [cos(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
-								                                   cos(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
-								                                   -sin(interfaceNormalAIJ)]) )
-           forall (ii = 1_pInt:3_pInt) &                                                              
-		       jacobian(xioffsetI+1,xioffsetJ+2+ii) = &        
-						   jacobian(xioffsetI+1,xioffsetJ+2+ii) -  &                        
-						   phasefrac(active(grII),homog)%p(offset)* &
-						   phasefrac(active(grIJ),homog)%p(offset)* &
-						   phasefrac(active(grJI),homog)%p(offset)* &
-						   sum(avgR(ii,1:3)*[sin(interfaceNormalAKL)*cos(interfaceNormalBKL), &
-						                     sin(interfaceNormalAKL)*sin(interfaceNormalBKL), &
-						                     cos(interfaceNormalAKL)])                                    
-           jacobian(xioffsetI+2,xioffsetJ+1) = &                                                    ! jacobian (B,A) RB_A (2,1)
-				      jacobian(xioffsetI+2,xioffsetJ+1) -  &                        
-				      phasefrac(active(grII),homog)%p(offset)* &
-				      phasefrac(active(grIJ),homog)%p(offset)* &
-				      phasefrac(active(grJI),homog)%p(offset)* &
-				      sum(dPdF(1:3,1:3,1:3,1:3,active(grII))* &
-				          math_tensorproduct3333( &
-				               math_tensorproduct33(param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
-				                                    [-sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
-				                                     sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
-				                                     0.0_Preal]), & 
-				               math_tensorproduct33(param(instance)%newIter(xioffsetJN+3:xioffsetJN+5,offset), &
-				                                    [cos(interfaceNormalAKL)*cos(interfaceNormalBKL), &
-				                                     cos(interfaceNormalAKL)*sin(interfaceNormalBKL), &
-				                                     -sin(interfaceNormalAKL)] ) &
-				                                )   &
-				         )
-           jacobian(xioffsetI+2,xioffsetJ+2) = &                                                    ! jacobian (B,B) RB_B (2,2)
-				      jacobian(xioffsetI+2,xioffsetJ+2) -  &                        
-				      phasefrac(active(grII),homog)%p(offset)* &
-				      phasefrac(active(grIJ),homog)%p(offset)* &
-				      phasefrac(active(grJI),homog)%p(offset)* &
-				      sum(dPdF(1:3,1:3,1:3,1:3,active(grII))* &
-				           math_tensorproduct3333( &
-				               math_tensorproduct33(param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
-				                                   [-sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
-				                                   sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
-				                                   0.0_Preal] ), & 
-				               math_tensorproduct33(param(instance)%newIter(xioffsetJN+3:xioffsetJN+5,offset), &
-				                                    [-sin(interfaceNormalAKL)*sin(interfaceNormalBKL), &
-				                                    sin(interfaceNormalAKL)*cos(interfaceNormalBKL), &
-				                                    0.0_pReal] ) &
-				                                )   &
-				         )
-           forall (ii = 1_pInt:3_pInt,jj = 1_pInt:3_pInt) &                                         ! jacobian (B,H) RB_H (2,3:5)
-						  avgR(ii,jj) =sum(dPdF(1:3,1:3,ii,jj,active(grII))* &
-								              math_tensorproduct33(param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
-								                                   [-sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
-								                                    sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), 
-								                                     0.0_Preal]) )
-           forall (ii = 1_pInt:3_pInt) &                                                              
-							jacobian(xioffsetI+2,xioffsetJ+2+ii) = &                                       
-									jacobian(xioffsetI+2,xioffsetJ+2+ii) - &                        
-									phasefrac(active(grII),homog)%p(offset)* &
-									phasefrac(active(grIJ),homog)%p(offset)* &
-									phasefrac(active(grJI),homog)%p(offset)* &
-									sum(avgR(ii,1:3)*[sin(interfaceNormalAKL)*cos(interfaceNormalBKL), &
-										                sin(interfaceNormalAKL)*sin(interfaceNormalBKL), &
-										                cos(interfaceNormalAKL)])                                  
-           forall (ii = 1_pInt:3_pInt,jj = 1_pInt:3_pInt) &                                         ! jacobian (H,A) RH_A (3:5,1)   
-				     avgR(ii,jj) =sum(dPdF(ii,jj,1:3,1:3,active(grII))* &
-				                 math_tensorproduct33(param(instance)%newIter(xioffsetJN+3:xioffsetJN+5,offset), &
-				                                      [cos(interfaceNormalAKL)*cos(interfaceNormalBKL), &
-				                                       cos(interfaceNormalAKL)*sin(interfaceNormalBKL), &
-				                                       sin(interfaceNormalAKL)])  )
-           forall (ii = 1_pInt:3_pInt) &                                                              
-				      jacobian(xioffsetI+2+ii,xioffsetJ+1) = &        
-								jacobian(xioffsetI+2+ii,xioffsetJ+1) -  &                        
-								phasefrac(active(grII),homog)%p(offset)* &
-								phasefrac(active(grIJ),homog)%p(offset)* &
-								phasefrac(active(grJI),homog)%p(offset)* &
-								sum(avgR(ii,1:3)*[sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
-								                  sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
-								                  cos(interfaceNormalAIJ)]) 
-             forall (ii = 1_pInt:3_pInt,jj = 1_pInt:3_pInt) &                                       ! jacobian (H,B) RH_B (3:5,2) 
-								 avgR(ii,jj) =sum(dPdF(ii,jj,1:3,1:3,active(grII))* &
-								             math_tensorproduct33(param(instance)%newIter(xioffsetJN+3:xioffsetJN+5,offset) , &
-								                                 [-sin(interfaceNormalAKL)*sin(interfaceNormalBKL), &
-								                                  sin(interfaceNormalAKL)*cos(interfaceNormalBKL), &
-								                                  0.0_pReal] ) )
-             forall (ii = 1_pInt:3_pInt) &                                                                         
-						   jacobian(xioffsetI+2+ii,xioffsetJ+2) = &                          
-										jacobian(xioffsetI+2+ii,xioffsetJ+2) -  &                        
-										phasefrac(active(grII),homog)%p(offset)* &
-										phasefrac(active(grIJ),homog)%p(offset)* &
-										phasefrac(active(grJI),homog)%p(offset)* &
-										sum(avgR(ii,1:3)*[sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
-												              sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
-												              cos(interfaceNormalAIJ)]) 
-             forall (ii = 1_pInt:3_pInt,jj = 1_pInt:3_pInt) &                                       ! jacobian (H,H) RH_H (3:5,3:5)
-                 jacobian(xioffsetI+2+ii,xioffsetJ+2+jj) = &
-		                 jacobian(xioffsetI+2+ii,xioffsetJ+2+jj) -  &
-		                 phasefrac(active(grII),homog)%p(offset)* &
-		                 phasefrac(active(grIJ),homog)%p(offset)* &
-		                 phasefrac(active(grJI),homog)%p(offset)* &
-		                 sum(dPdF(ii,1:3,jj,1:3,active(grII))* &
-		                    math_tensorproduct33([sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
-		                                         sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
-		                                         cos(interfaceNormalAIJ)], &
-		                                         [sin(interfaceNormalAKL)*cos(interfaceNormalBKL), &
-		                                         sin(interfaceNormalAKL)*sin(interfaceNormalBKL), &
-		                                         cos(interfaceNormalAKL)])  )                                                                   
-           end if
-           if (grIJ == grJI) then                                                                   ! KL terms 
-           jacobian(xioffsetI+1,xioffsetJ+1) = &                                                    ! jacobian (A,A) RA_A (1,1)
-				     jacobian(xioffsetI+1,xioffsetJ+1) -  &                        
-				     phasefrac(active(grII),homog)%p(offset)* &
-				     phasefrac(active(grIJ),homog)%p(offset)* &
-				     phasefrac(active(grJJ),homog)%p(offset)* &
-				     sum(dPdF(1:3,1:3,1:3,1:3,active(grIJ))* &
-				         math_tensorproduct3333( &
-				             math_tensorproduct33(param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
-				                                 [cos(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
-				                                  cos(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
-				                                 -sin(interfaceNormalAIJ)]), & 
-				             math_tensorproduct33(param(instance)%newIter(xioffsetJN+3:xioffsetJN+5,offset), &
-				                                  [cos(interfaceNormalAKL)*cos(interfaceNormalBKL), &
-				                                   cos(interfaceNormalAKL)*sin(interfaceNormalBKL), &
-				                                  -sin(interfaceNormalAKL)]) &
-				                               )   &
-				         )
-           jacobian(xioffsetI+1,xioffsetJ+2) = &                                                    ! jacobian (A,B) RA_B (1,2)
-				      jacobian(xioffsetI+1,xioffsetJ+2) -  &                        
-				      phasefrac(active(grII),homog)%p(offset)* &
-				      phasefrac(active(grIJ),homog)%p(offset)* &
-				      phasefrac(active(grJJ),homog)%p(offset)* &
-				      sum(dPdF(1:3,1:3,1:3,1:3,active(grIJ))* &
-				          math_tensorproduct3333( &
-				             math_tensorproduct33(param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
-				                                  [cos(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
-				                                   cos(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
-				                                   -sin(interfaceNormalAIJ)] ), & 
-				             math_tensorproduct33(param(instance)%newIter(xioffsetJN+3:xioffsetJN+5,offset), &
-				                                 [-sin(interfaceNormalAKL)*sin(interfaceNormalBKL), &
-				                                   sin(interfaceNormalAKL)*cos(interfaceNormalBKL), &
-				                                   0.0_pReal]) &
-				                                )   &
-				         )		                                     
-           forall (ii = 1_pInt:3_pInt,jj = 1_pInt:3_pInt) &                                         ! jacobian (A,H) RA_H (1,3:5)
-				      avgR(ii,jj) =sum(dPdF(1:3,1:3,ii,jj,active(grIJ))* &
-				            math_tensorproduct33(param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
-				                                 [cos(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
-				                                  cos(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
-				                                 -sin(interfaceNormalAIJ)]) )
-           forall (ii = 1_pInt:3_pInt) &                                                              
-				     jacobian(xioffsetI+1,xioffsetJ+2+ii) = &        !  
-								jacobian(xioffsetI+1,xioffsetJ+2+ii) -  &                         
-								phasefrac(active(grII),homog)%p(offset)* &
-								phasefrac(active(grIJ),homog)%p(offset)* &
-								phasefrac(active(grJJ),homog)%p(offset)* &
-								sum(avgR(ii,1:3)*[sin(interfaceNormalAKL)*cos(interfaceNormalBKL), &
-												         sin(interfaceNormalAKL)*sin(interfaceNormalBKL), &
-												         cos(interfaceNormalAKL)])                   
-           jacobian(xioffsetI+2,xioffsetJ+1) = &                                                    ! jacobian (B,A) RB_A (2,1)
-				      jacobian(xioffsetI+2,xioffsetJ+1) -  &                       
-				      phasefrac(active(grII),homog)%p(offset)* &
-				      phasefrac(active(grIJ),homog)%p(offset)* &
-				      phasefrac(active(grJJ),homog)%p(offset)* &
-				      sum(dPdF(1:3,1:3,1:3,1:3,active(grIJ))* &
-				         math_tensorproduct3333( &
-				             math_tensorproduct33(param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
-				                                 [-sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
-				                                   sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
-				                                   0.0_Preal] ), & 
-				             math_tensorproduct33(param(instance)%newIter(xioffsetJN+3:xioffsetJN+5,offset), &
-				                                 [cos(interfaceNormalAKL)*cos(interfaceNormalBKL), &
-				                                  cos(interfaceNormalAKL)*sin(interfaceNormalBKL), &
-				                                 -sin(interfaceNormalAKL)] ) &
-				                                )   &
-				         )
-           jacobian(xioffsetI+2,xioffsetJ+2) = &                                                    ! jacobian (B,B) RB_B (2,2)
-				      jacobian(xioffsetI+2,xioffsetJ+2) -  &                        
-				      phasefrac(active(grII),homog)%p(offset)* &
-				      phasefrac(active(grIJ),homog)%p(offset)* &
-				      phasefrac(active(grJJ),homog)%p(offset)* &
-				      sum(dPdF(1:3,1:3,1:3,1:3,active(grIJ))* &
-				          math_tensorproduct3333( &
-						            math_tensorproduct33(param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
-						                                [-sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
-						                                sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
-						                                0.0_Preal] ), & 
-						            math_tensorproduct33(param(instance)%newIter(xioffsetJN+3:xioffsetJN+5,offset), &
-						                                [-sin(interfaceNormalAKL)*sin(interfaceNormalBKL), &
-						                                  sin(interfaceNormalAKL)*cos(interfaceNormalBKL), &
-						                                  0.0_pReal] ) &
-				                                )   &
-				         )
-           forall (ii = 1_pInt:3_pInt,jj = 1_pInt:3_pInt) &                                         ! jacobian (B,H) RB_H (2,3:5)
-						 avgR(ii,jj) =sum(dPdF(1:3,1:3,ii,jj,active(grIJ))* &
-								           math_tensorproduct33(param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
-								                                [-sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
-								                                  sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
-								                                  0.0_Preal] ) )
-           forall (ii = 1_pInt:3_pInt) &                                                              
-             jacobian(xioffsetI+2,xioffsetJ+2+ii) = &        
-						    jacobian(xioffsetI+2,xioffsetJ+2+ii) -  &                       
-						    phasefrac(active(grII),homog)%p(offset)* &
-						    phasefrac(active(grIJ),homog)%p(offset)* &
-						    phasefrac(active(grJJ),homog)%p(offset)* &
-						    sum(avgR(ii,1:3)*[sin(interfaceNormalAKL)*cos(interfaceNormalBKL), &
-						                      sin(interfaceNormalAKL)*sin(interfaceNormalBKL), &
-						                      cos(interfaceNormalAKL)])                                  
-           forall (ii = 1_pInt:3_pInt,jj = 1_pInt:3_pInt) &                                         ! jacobian (H,A) RH_A (3:5,1)
-				     avgR(ii,jj) =sum(dPdF(ii,jj,1:3,1:3,active(grIJ))* &
-				              math_tensorproduct33(param(instance)%newIter(xioffsetJN+3:xioffsetJN+5,offset), &
-				                                   [  cos(interfaceNormalAKL)*cos(interfaceNormalBKL), &
-				                                      cos(interfaceNormalAKL)*sin(interfaceNormalBKL), &
-				                                      -sin(interfaceNormalAKL)]) )
-           forall (ii = 1_pInt:3_pInt) &                                                              
-		         jacobian(xioffsetI+2+ii,xioffsetJ+1) = &        !  
-				       jacobian(xioffsetI+2+ii,xioffsetJ+1) -  &                         
-				       phasefrac(active(grII),homog)%p(offset)* &
-				       phasefrac(active(grIJ),homog)%p(offset)* &
-				       phasefrac(active(grJJ),homog)%p(offset)* &
-				       sum(avgR(ii,1:3)*[sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
-				                         sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
-				                         cos(interfaceNormalAIJ)]) 
-           forall (ii = 1_pInt:3_pInt,jj = 1_pInt:3_pInt) &                                         ! jacobian (H,B) RH_B (3:5,2)     
-             avgR(ii,jj) =sum(dPdF(ii,jj,1:3,1:3,active(grIJ))* &
-                 math_tensorproduct33(param(instance)%newIter(xioffsetJN+3:xioffsetJN+5,offset) , &
-                                      [ -sin(interfaceNormalAKL)*sin(interfaceNormalBKL), &
-                                         sin(interfaceNormalAKL)*cos(interfaceNormalBKL), &
-                                         0.0_pReal] ) )
-           forall (ii = 1_pInt:3_pInt) &                                                              
-		         jacobian(xioffsetI+2+ii,xioffsetJ+2) = &        !  
-				       jacobian(xioffsetI+2+ii,xioffsetJ+2) -  &                         
-				       phasefrac(active(grII),homog)%p(offset)* &
-				       phasefrac(active(grIJ),homog)%p(offset)* &
-				       phasefrac(active(grJJ),homog)%p(offset)* &
-				       sum(avgR(ii,1:3)*[ sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
-				                          sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
-				                          cos(interfaceNormalAIJ)]) 
-           forall (ii = 1_pInt:3_pInt,jj = 1_pInt:3_pInt) &                 
-             jacobian(xioffsetI+2+ii,xioffsetJ+2+jj) = &                                            ! jacobian (H,H) RH_H (3:5,3:5)
-               jacobian(xioffsetI+2+ii,xioffsetJ+2+jj) -  &
+             jacobian(xioffsetI+1,xioffsetJ+1) = &                                                  ! jacobian (alpha,alpha) RA_A (1,1)
+               jacobian(xioffsetI+1,xioffsetJ+1) +  &                        
                phasefrac(active(grII),homog)%p(offset)* &
                phasefrac(active(grIJ),homog)%p(offset)* &
                phasefrac(active(grJJ),homog)%p(offset)* &
-               sum(dPdF(ii,1:3,jj,1:3,active(grIJ))* &
-                   math_tensorproduct33([ sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
-                                          sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
-                                          cos(interfaceNormalAIJ)], &
-                                        [ sin(interfaceNormalAKL)*cos(interfaceNormalBKL), &
-                                          sin(interfaceNormalAKL)*sin(interfaceNormalBKL), &
-                                          cos(interfaceNormalAKL)] ) ) 
-           end if
-           if (grIJ == grJJ) then                                                                   ! adding contributions from JJ
-           jacobian(xioffsetI+1,xioffsetJ+1) = &                                                    ! jacobian (A,A) RA_A (1,1)
-		         jacobian(xioffsetI+1,xioffsetJ+1) +  &                        
-		         phasefrac(active(grII),homog)%p(offset)* &
-		         phasefrac(active(grIJ),homog)%p(offset)* &
-		         phasefrac(active(grJI),homog)%p(offset)* &
-		         sum(dPdF(1:3,1:3,1:3,1:3,active(grIJ))* &
-		              math_tensorproduct3333( &
-		                 math_tensorproduct33(param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
-		                                      [cos(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
-		                                       cos(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
-		                                       -sin(interfaceNormalAIJ)] ), & 
-		                 math_tensorproduct33(param(instance)%newIter(xioffsetJN+3:xioffsetJN+5,offset), &
-		                                     [cos(interfaceNormalAKL)*cos(interfaceNormalBKL), &
-		                                     cos(interfaceNormalAKL)*sin(interfaceNormalBKL), &
-		                                    -sin(interfaceNormalAKL)] ) &
-		                                     )   &
-		            )
-           jacobian(xioffsetI+1,xioffsetJ+2) = &                                                    ! jacobian (A,B) RA_B (1,2)
-		         jacobian(xioffsetI+1,xioffsetJ+2) +  &                        
-		         phasefrac(active(grII),homog)%p(offset)* &
-		         phasefrac(active(grIJ),homog)%p(offset)* &
-		         phasefrac(active(grJI),homog)%p(offset)* &
-		         sum(dPdF(1:3,1:3,1:3,1:3,active(grIJ))* &
-		              math_tensorproduct3333( &
-		                   math_tensorproduct33(param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
-		                                        [cos(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
-		                                         cos(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
-		                                         -sin(interfaceNormalAIJ)] ), & 
-		                   math_tensorproduct33(param(instance)%newIter(xioffsetJN+3:xioffsetJN+5,offset), &
-		                                        [-sin(interfaceNormalAKL)*sin(interfaceNormalBKL), &
-		                                          sin(interfaceNormalAKL)*cos(interfaceNormalBKL), &
-		                                          0.0_pReal] ) &
-				                                )   &
-				         )                                                 
+               sum(dPdF(1:3,1:3,1:3,1:3,active(grII))* &
+                   math_tensorproduct3333( &
+                          math_tensorproduct33(param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
+                                               [ cos(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
+                                                 cos(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
+                                                 -sin(interfaceNormalAIJ)] ), & 
+                          math_tensorproduct33(param(instance)%newIter(xioffsetJN+3:xioffsetJN+5,offset), &
+                                               [ cos(interfaceNormalAKL)*cos(interfaceNormalBKL), &
+                                                 cos(interfaceNormalAKL)*sin(interfaceNormalBKL), &
+                                                 -sin(interfaceNormalAKL)] ) &
+                                         )   &
+                  )         
+             jacobian(xioffsetI+1,xioffsetJ+2) = &                                                  ! jacobian (alpha,beta) RA_B  (1,2)
+               jacobian(xioffsetI+1,xioffsetJ+2) +  &                        
+               phasefrac(active(grII),homog)%p(offset)* &
+               phasefrac(active(grIJ),homog)%p(offset)* &
+               phasefrac(active(grJJ),homog)%p(offset)* &
+               sum( dPdF(1:3,1:3,1:3,1:3,active(grII))* &
+                    math_tensorproduct3333( &
+                         math_tensorproduct33(param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
+                                              [cos(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
+                                               cos(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
+                                            -sin(interfaceNormalAIJ)] ), & 
+                          math_tensorproduct33(param(instance)%newIter(xioffsetJN+3:xioffsetJN+5,offset), &
+                                               [-sin(interfaceNormalAKL)*sin(interfaceNormalBKL), &
+                                                sin(interfaceNormalAKL)*cos(interfaceNormalBKL), &
+                                                0.0_pReal]              ) &
+                                          )   &
+                  )                                 
+             forall (ii = 1_pInt:3_pInt,jj = 1_pInt:3_pInt) &                                       ! jacobian (alpha,H) RA_H  (1,3:5)         
+               avgR(ii,jj) =sum(dPdF(1:3,1:3,ii,jj,active(grII))* &
+                                math_tensorproduct33( &
+                                   param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
+                                   [cos(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
+                                    cos(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
+                                   -sin(interfaceNormalAIJ)] &
+                                                    ))
+             forall (ii = 1_pInt:3_pInt) &                                                              
+                 jacobian(xioffsetI+1,xioffsetJ+2+ii) = &                                             
+                   jacobian(xioffsetI+1,xioffsetJ+2+ii) +  &                        
+                   phasefrac(active(grII),homog)%p(offset)* &
+                   phasefrac(active(grIJ),homog)%p(offset)* &
+                   phasefrac(active(grJJ),homog)%p(offset)* &
+                   sum(avgR(ii,1:3)*[sin(interfaceNormalAKL)*cos(interfaceNormalBKL), &
+                                     sin(interfaceNormalAKL)*sin(interfaceNormalBKL), &
+                                     cos(interfaceNormalAKL)] ) 
+             jacobian(xioffsetI+2,xioffsetJ+1) = &                                                  ! jacobian (beta,alpha) RB_A  (2,1)
+               jacobian(xioffsetI+2,xioffsetJ+1) +  &                        
+               phasefrac(active(grII),homog)%p(offset)* &
+               phasefrac(active(grIJ),homog)%p(offset)* &
+               phasefrac(active(grJJ),homog)%p(offset)* &
+               sum(dPdF(1:3,1:3,1:3,1:3,active(grII))* &
+                   math_tensorproduct3333( &
+                         math_tensorproduct33(param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
+                                              [-sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
+                                                sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
+                                                0.0_Preal] ), & 
+                         math_tensorproduct33(param(instance)%newIter(xioffsetJN+3:xioffsetJN+5,offset), &
+                                              [cos(interfaceNormalAKL)*cos(interfaceNormalBKL), &
+                                               cos(interfaceNormalAKL)*sin(interfaceNormalBKL), &
+                                               -sin(interfaceNormalAKL)] ) &
+                                         )   &
+                  )
+             jacobian(xioffsetI+2,xioffsetJ+2) = &                                                  ! jacobian (beta,beta) RB_B (2,2)
+               jacobian(xioffsetI+2,xioffsetJ+2) +  &                        
+               phasefrac(active(grII),homog)%p(offset)* &
+               phasefrac(active(grIJ),homog)%p(offset)* &
+               phasefrac(active(grJJ),homog)%p(offset)* &
+               sum(dPdF(1:3,1:3,1:3,1:3,active(grII))* &
+                   math_tensorproduct3333( &
+                        math_tensorproduct33(param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
+                                             [-sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
+                                              sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
+                                              0.0_Preal] ), & 
+                        math_tensorproduct33(param(instance)%newIter(xioffsetJN+3:xioffsetJN+5,offset), &
+                                             [-sin(interfaceNormalAKL)*sin(interfaceNormalBKL), &
+                                             sin(interfaceNormalAKL)*cos(interfaceNormalBKL), &
+                                             0.0_pReal] ) &
+                                         )   &
+                  )		                                                                    
+             forall (ii = 1_pInt:3_pInt,jj = 1_pInt:3_pInt) &                                        ! jacobian (beta,H) RB_H (2,3:5)
+               avgR(ii,jj) = sum(dPdF(1:3,1:3,ii,jj,active(grII))* &
+                                 math_tensorproduct33(param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
+                                                      [-sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
+                                                        sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
+                                                        0.0_Preal] ) )
+             forall (ii = 1_pInt:3_pInt) &                                                              
+               jacobian(xioffsetI+2,xioffsetJ+2+ii) = &          
+                 jacobian(xioffsetI+2,xioffsetJ+2+ii) +  &                        
+                 phasefrac(active(grII),homog)%p(offset)* &
+                 phasefrac(active(grIJ),homog)%p(offset)* &
+                 phasefrac(active(grJJ),homog)%p(offset)* &
+                 sum(avgR(ii,1:3)*[sin(interfaceNormalAKL)*cos(interfaceNormalBKL), &
+                                   sin(interfaceNormalAKL)*sin(interfaceNormalBKL), &
+                                   cos(interfaceNormalAKL)])                                                                 
+             forall (ii = 1_pInt:3_pInt,jj = 1_pInt:3_pInt) &                                       ! jacobian (H,alpha) RH1_A (3:5,1) 
+               avgR(ii,jj) = sum(dPdF(ii,jj,1:3,1:3,active(grII))* &
+                                 math_tensorproduct33(param(instance)%newIter(xioffsetJN+3:xioffsetJN+5,offset), &
+                                                      [ cos(interfaceNormalAKL)*cos(interfaceNormalBKL), &
+                                                        cos(interfaceNormalAKL)*sin(interfaceNormalBKL), &
+                                                       -sin(interfaceNormalAKL)] ))
+             forall (ii = 1_pInt:3_pInt) &                                                              
+               jacobian(xioffsetI+2+ii,xioffsetJ+1) = &                                          
+                 jacobian(xioffsetI+2+ii,xioffsetJ+1) +  &                        
+                 phasefrac(active(grII),homog)%p(offset)* &
+                 phasefrac(active(grIJ),homog)%p(offset)* &
+                 phasefrac(active(grJJ),homog)%p(offset)* &
+                 sum(avgR(ii,1:3)*[sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
+                                   sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
+                                   cos(interfaceNormalAIJ)]) 
+             forall (ii = 1_pInt:3_pInt,jj = 1_pInt:3_pInt) &                                                           
+               avgR(ii,jj) = sum(dPdF(ii,jj,1:3,1:3,active(grII))* &
+                                 math_tensorproduct33(param(instance)%newIter(xioffsetJN+3:xioffsetJN+5,offset) , &
+                                                      [-sin(interfaceNormalAKL)*sin(interfaceNormalBKL), &
+                                                        sin(interfaceNormalAKL)*cos(interfaceNormalBKL), &
+                                                        0.0_pReal] ) )
+             forall (ii = 1_pInt:3_pInt) &                                                              
+               jacobian(xioffsetI+2+ii,xioffsetJ+2) = &                                             ! jacobian (H,beta) RH2_B (3:5,2)
+                 jacobian(xioffsetI+2+ii,xioffsetJ+2) +  &                        
+                 phasefrac(active(grII),homog)%p(offset)* &
+                 phasefrac(active(grIJ),homog)%p(offset)* &
+                 phasefrac(active(grJJ),homog)%p(offset)* &
+                 sum(avgR(ii,1:3)*[sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
+                                   sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
+                                   cos(interfaceNormalAIJ)]) 
+             forall (ii = 1_pInt:3_pInt,jj = 1_pInt:3_pInt) &                                       ! jacobian (H,H) RH_H (3:5,3:5)
+               jacobian(xioffsetI+2+ii,xioffsetJ+2+jj) = &
+                 jacobian(xioffsetI+2+ii,xioffsetJ+2+jj) +  &
+                 phasefrac(active(grII),homog)%p(offset)* &
+                 phasefrac(active(grIJ),homog)%p(offset)* &
+                 phasefrac(active(grJJ),homog)%p(offset)* &
+                 sum(dPdF(ii,1:3,jj,1:3,active(grII))* &
+                     math_tensorproduct33( &
+                                [sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
+                                sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
+                                cos(interfaceNormalAIJ)], &
+                                [sin(interfaceNormalAKL)*cos(interfaceNormalBKL), &
+                                sin(interfaceNormalAKL)*sin(interfaceNormalBKL), &
+                                cos(interfaceNormalAKL)] &
+                                         ) &
+                    )                                                                   
+           endif
+!-------------------------------------------------------------------------------------
+           if (grII == grJJ) then                                                                   ! subtracting contribution from L 
+             jacobian(xioffsetI+1,xioffsetJ+1) = &                                                  ! jacobian (A,A) RA_A (1,1)
+               jacobian(xioffsetI+1,xioffsetJ+1) -  &                        
+               phasefrac(active(grII),homog)%p(offset)* &
+               phasefrac(active(grIJ),homog)%p(offset)* &
+               phasefrac(active(grJI),homog)%p(offset)* &
+               sum(dPdF(1:3,1:3,1:3,1:3,active(grII))* &
+                   math_tensorproduct3333( &
+                     math_tensorproduct33(param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
+                                          [ cos(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
+                                            cos(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
+                                           -sin(interfaceNormalAIJ)]), & 
+                     math_tensorproduct33(param(instance)%newIter(xioffsetJN+3:xioffsetJN+5,offset), &
+                                          [ cos(interfaceNormalAKL)*cos(interfaceNormalBKL), &
+                                            cos(interfaceNormalAKL)*sin(interfaceNormalBKL), &
+                                           -sin(interfaceNormalAKL)] ) & 
+                                         )   &
+                  )
+             jacobian(xioffsetI+1,xioffsetJ+2) = &                                                  ! jacobian (A,B) RA_B (1,2)
+               jacobian(xioffsetI+1,xioffsetJ+2)  -  &                        
+               phasefrac(active(grII),homog)%p(offset)* &
+               phasefrac(active(grIJ),homog)%p(offset)* &
+               phasefrac(active(grJI),homog)%p(offset)* &
+               sum(dPdF(1:3,1:3,1:3,1:3,active(grII))* &
+                   math_tensorproduct3333( &
+                     math_tensorproduct33(param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
+                                          [ cos(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
+                                            cos(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
+                                           -sin(interfaceNormalAIJ)] ), & 
+                     math_tensorproduct33(param(instance)%newIter(xioffsetJN+3:xioffsetJN+5,offset), &
+                                          [-sin(interfaceNormalAKL)*sin(interfaceNormalBKL), &
+                                            sin(interfaceNormalAKL)*cos(interfaceNormalBKL), &
+                                            0.0_pReal] ) &
+                                         )   &
+                  )
              forall (ii = 1_pInt:3_pInt,jj = 1_pInt:3_pInt) &                                       ! jacobian (A,H) RA_H (1,3:5)
-						     avgR(ii,jj) =sum(dPdF(1:3,1:3,ii,jj,active(grIJ))* &
-												    math_tensorproduct33(param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
-											 	                        [cos(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
-								   			                         cos(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
-												                         -sin(interfaceNormalAIJ)] ))
+               avgR(ii,jj) = sum(dPdF(1:3,1:3,ii,jj,active(grII))* &
+                                 math_tensorproduct33(param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
+                                                      [ cos(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
+                                                        cos(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
+                                                       -sin(interfaceNormalAIJ)]) )
              forall (ii = 1_pInt:3_pInt) &                                                              
-						     jacobian(xioffsetI+1,xioffsetJ+2+ii) = &        !  
-								   jacobian(xioffsetI+1,xioffsetJ+2+ii) +  &                         
-								   phasefrac(active(grII),homog)%p(offset)* &
-								   phasefrac(active(grIJ),homog)%p(offset)* &
-								   phasefrac(active(grJI),homog)%p(offset)* &
-								   sum(avgR(ii,1:3)*[sin(interfaceNormalAKL)*cos(interfaceNormalBKL), &
-								                     sin(interfaceNormalAKL)*sin(interfaceNormalBKL), &
-								                     cos(interfaceNormalAKL)])             
-           jacobian(xioffsetI+2,xioffsetJ+1) = &                                                    ! jacobian (B,A) RB_A (2,1)
-		         jacobian(xioffsetI+2,xioffsetJ+1) +  &                       
-		         phasefrac(active(grII),homog)%p(offset)* &
-		         phasefrac(active(grIJ),homog)%p(offset)* &
-		         phasefrac(active(grJI),homog)%p(offset)* &
-		         sum(dPdF(1:3,1:3,1:3,1:3,active(grIJ))* &
-		            math_tensorproduct3333( &
-		                math_tensorproduct33(param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
-		                                    [-sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
-		                                      sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
-		                                      0.0_Preal] ), & 
-		                math_tensorproduct33(param(instance)%newIter(xioffsetJN+3:xioffsetJN+5,offset), &
-		                                     [cos(interfaceNormalAKL)*cos(interfaceNormalBKL), &
-		                                      cos(interfaceNormalAKL)*sin(interfaceNormalBKL), &
-		                                      -sin(interfaceNormalAKL)] )  &
-		                                  )   &
-		           )		                                       
-           jacobian(xioffsetI+2,xioffsetJ+2) = &                                                    ! jacobian (B,B) RB_B (2,2)
-		         jacobian(xioffsetI+2,xioffsetJ+2) +  &                        
-		         phasefrac(active(grII),homog)%p(offset)* &
-		         phasefrac(active(grIJ),homog)%p(offset)* &
-		         phasefrac(active(grJI),homog)%p(offset)* &
-		         sum(dPdF(1:3,1:3,1:3,1:3,active(grIJ))* &
-		              math_tensorproduct3333( &
-		                  math_tensorproduct33(param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
-		                                       [-sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
-		                                        sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
-		                                        0.0_Preal] ), & 
-		                  math_tensorproduct33(param(instance)%newIter(xioffsetJN+3:xioffsetJN+5,offset), &
-		                                      [-sin(interfaceNormalAKL)*sin(interfaceNormalBKL), &
-		                                        sin(interfaceNormalAKL)*cos(interfaceNormalBKL), &
-		                                        0.0_pReal] ) 
-		                                    )   &
-		           )                
+                 jacobian(xioffsetI+1,xioffsetJ+2+ii) = &        
+                   jacobian(xioffsetI+1,xioffsetJ+2+ii) -  &                        
+                   phasefrac(active(grII),homog)%p(offset)* &
+                   phasefrac(active(grIJ),homog)%p(offset)* &
+                   phasefrac(active(grJI),homog)%p(offset)* &
+                   sum(avgR(ii,1:3)*[sin(interfaceNormalAKL)*cos(interfaceNormalBKL), &
+                                     sin(interfaceNormalAKL)*sin(interfaceNormalBKL), &
+                                     cos(interfaceNormalAKL)])                                    
+             jacobian(xioffsetI+2,xioffsetJ+1) = &                                                  ! jacobian (B,A) RB_A (2,1)
+               jacobian(xioffsetI+2,xioffsetJ+1) -  &                        
+               phasefrac(active(grII),homog)%p(offset)* &
+               phasefrac(active(grIJ),homog)%p(offset)* &
+               phasefrac(active(grJI),homog)%p(offset)* &
+               sum(dPdF(1:3,1:3,1:3,1:3,active(grII))* &
+                   math_tensorproduct3333( &
+                        math_tensorproduct33(param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
+                                             [-sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
+                                               sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
+                                               0.0_Preal]), & 
+                        math_tensorproduct33(param(instance)%newIter(xioffsetJN+3:xioffsetJN+5,offset), &
+                                             [ cos(interfaceNormalAKL)*cos(interfaceNormalBKL), &
+                                               cos(interfaceNormalAKL)*sin(interfaceNormalBKL), &
+                                              -sin(interfaceNormalAKL)] ) &
+                                         )   &
+                  )
+             jacobian(xioffsetI+2,xioffsetJ+2) = &                                                  ! jacobian (B,B) RB_B (2,2)
+               jacobian(xioffsetI+2,xioffsetJ+2) -  &                        
+               phasefrac(active(grII),homog)%p(offset)* &
+               phasefrac(active(grIJ),homog)%p(offset)* &
+               phasefrac(active(grJI),homog)%p(offset)* &
+               sum(dPdF(1:3,1:3,1:3,1:3,active(grII))* &
+                   math_tensorproduct3333( &
+                       math_tensorproduct33(param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
+                                            [-sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
+                                              sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
+                                              0.0_Preal] ), & 
+                       math_tensorproduct33(param(instance)%newIter(xioffsetJN+3:xioffsetJN+5,offset), &
+                                            [-sin(interfaceNormalAKL)*sin(interfaceNormalBKL), &
+                                              sin(interfaceNormalAKL)*cos(interfaceNormalBKL), &
+                                              0.0_pReal] ) &
+                                        )   &
+                 )
              forall (ii = 1_pInt:3_pInt,jj = 1_pInt:3_pInt) &                                       ! jacobian (B,H) RB_H (2,3:5)
-						     avgR(ii,jj) =sum(dPdF(1:3,1:3,ii,jj,active(grIJ))* &
-						           math_tensorproduct33(param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
-						                                [-sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
-						                                  sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
-						                                  0.0_Preal] ) )
+               avgR(ii,jj) = sum(dPdF(1:3,1:3,ii,jj,active(grII))* &
+                                 math_tensorproduct33(param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
+                                                      [-sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
+                                                        sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), 
+                                                        0.0_Preal]) )
              forall (ii = 1_pInt:3_pInt) &                                                              
-				       jacobian(xioffsetI+2,xioffsetJ+2+ii) = &         
-								   jacobian(xioffsetI+2,xioffsetJ+2+ii) +  &                       
-								   phasefrac(active(grII),homog)%p(offset)* &
-								   phasefrac(active(grIJ),homog)%p(offset)* &
-								   phasefrac(active(grJI),homog)%p(offset)* &
-								        sum(avgR(ii,1:3)*[sin(interfaceNormalAKL)*cos(interfaceNormalBKL), &
-								                          sin(interfaceNormalAKL)*sin(interfaceNormalBKL), &
-								                          cos(interfaceNormalAKL)])                                  
+               jacobian(xioffsetI+2,xioffsetJ+2+ii) = &                                       
+                 jacobian(xioffsetI+2,xioffsetJ+2+ii) - &                        
+                 phasefrac(active(grII),homog)%p(offset)* &
+                 phasefrac(active(grIJ),homog)%p(offset)* &
+                 phasefrac(active(grJI),homog)%p(offset)* &
+                 sum(avgR(ii,1:3)*[sin(interfaceNormalAKL)*cos(interfaceNormalBKL), &
+                                   sin(interfaceNormalAKL)*sin(interfaceNormalBKL), &
+                                   cos(interfaceNormalAKL)])                                  
+             forall (ii = 1_pInt:3_pInt,jj = 1_pInt:3_pInt) &                                       ! jacobian (H,A) RH_A (3:5,1)   
+               avgR(ii,jj) = sum(dPdF(ii,jj,1:3,1:3,active(grII))* &
+                                 math_tensorproduct33(param(instance)%newIter(xioffsetJN+3:xioffsetJN+5,offset), &
+                                                      [cos(interfaceNormalAKL)*cos(interfaceNormalBKL), &
+                                                       cos(interfaceNormalAKL)*sin(interfaceNormalBKL), &
+                                                       sin(interfaceNormalAKL)])  )
+             forall (ii = 1_pInt:3_pInt) &                                                              
+               jacobian(xioffsetI+2+ii,xioffsetJ+1) = &        
+                 jacobian(xioffsetI+2+ii,xioffsetJ+1) -  &                        
+                 phasefrac(active(grII),homog)%p(offset)* &
+                 phasefrac(active(grIJ),homog)%p(offset)* &
+                 phasefrac(active(grJI),homog)%p(offset)* &
+                 sum(avgR(ii,1:3)*[sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
+                                   sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
+                                   cos(interfaceNormalAIJ)]) 
+             forall (ii = 1_pInt:3_pInt,jj = 1_pInt:3_pInt) &                                       ! jacobian (H,B) RH_B (3:5,2) 
+               avgR(ii,jj) = sum(dPdF(ii,jj,1:3,1:3,active(grII))* &
+                                 math_tensorproduct33(param(instance)%newIter(xioffsetJN+3:xioffsetJN+5,offset) , &
+                                                      [-sin(interfaceNormalAKL)*sin(interfaceNormalBKL), &
+                                                        sin(interfaceNormalAKL)*cos(interfaceNormalBKL), &
+                                                        0.0_pReal] ) )
+             forall (ii = 1_pInt:3_pInt) &                                                                         
+               jacobian(xioffsetI+2+ii,xioffsetJ+2) = &                          
+                 jacobian(xioffsetI+2+ii,xioffsetJ+2) -  &                        
+                 phasefrac(active(grII),homog)%p(offset)* &
+                 phasefrac(active(grIJ),homog)%p(offset)* &
+                 phasefrac(active(grJI),homog)%p(offset)* &
+                 sum(avgR(ii,1:3)*[sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
+                                   sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
+                                   cos(interfaceNormalAIJ)]) 
+             forall (ii = 1_pInt:3_pInt,jj = 1_pInt:3_pInt) &                                       ! jacobian (H,H) RH_H (3:5,3:5)
+               jacobian(xioffsetI+2+ii,xioffsetJ+2+jj) = &
+                 jacobian(xioffsetI+2+ii,xioffsetJ+2+jj) -  &
+                 phasefrac(active(grII),homog)%p(offset)* &
+                 phasefrac(active(grIJ),homog)%p(offset)* &
+                 phasefrac(active(grJI),homog)%p(offset)* &
+                 sum(dPdF(ii,1:3,jj,1:3,active(grII))* &
+                     math_tensorproduct33([sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
+                                           sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
+                                           cos(interfaceNormalAIJ)], &
+                                          [sin(interfaceNormalAKL)*cos(interfaceNormalBKL), &
+                                           sin(interfaceNormalAKL)*sin(interfaceNormalBKL), &
+                                           cos(interfaceNormalAKL)])  )                                                                   
+           endif
+           if (grIJ == grJI) then                                                                   ! KL terms 
+             jacobian(xioffsetI+1,xioffsetJ+1) = &                                                  ! jacobian (A,A) RA_A (1,1)
+               jacobian(xioffsetI+1,xioffsetJ+1) -  &                        
+               phasefrac(active(grII),homog)%p(offset)* &
+               phasefrac(active(grIJ),homog)%p(offset)* &
+               phasefrac(active(grJJ),homog)%p(offset)* &
+               sum(dPdF(1:3,1:3,1:3,1:3,active(grIJ))* &
+                   math_tensorproduct3333( &
+                       math_tensorproduct33(param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
+                                            [ cos(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
+                                              cos(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
+                                             -sin(interfaceNormalAIJ)]), & 
+                       math_tensorproduct33(param(instance)%newIter(xioffsetJN+3:xioffsetJN+5,offset), &
+                                            [ cos(interfaceNormalAKL)*cos(interfaceNormalBKL), &
+                                              cos(interfaceNormalAKL)*sin(interfaceNormalBKL), &
+                                             -sin(interfaceNormalAKL)]) &
+                                         )   &
+                   )
+             jacobian(xioffsetI+1,xioffsetJ+2) = &                                                  ! jacobian (A,B) RA_B (1,2)
+               jacobian(xioffsetI+1,xioffsetJ+2) -  &                        
+               phasefrac(active(grII),homog)%p(offset)* &
+               phasefrac(active(grIJ),homog)%p(offset)* &
+               phasefrac(active(grJJ),homog)%p(offset)* &
+               sum(dPdF(1:3,1:3,1:3,1:3,active(grIJ))* &
+                   math_tensorproduct3333( &
+                      math_tensorproduct33(param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
+                                           [ cos(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
+                                             cos(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
+                                            -sin(interfaceNormalAIJ)] ), & 
+                      math_tensorproduct33(param(instance)%newIter(xioffsetJN+3:xioffsetJN+5,offset), &
+                                           [-sin(interfaceNormalAKL)*sin(interfaceNormalBKL), &
+                                             sin(interfaceNormalAKL)*cos(interfaceNormalBKL), &
+                                             0.0_pReal]) &
+                                         )   &
+                  )		                                     
+             forall (ii = 1_pInt:3_pInt,jj = 1_pInt:3_pInt) &                                       ! jacobian (A,H) RA_H (1,3:5)
+               avgR(ii,jj) = sum(dPdF(1:3,1:3,ii,jj,active(grIJ))* &
+                                 math_tensorproduct33(param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
+                                                      [ cos(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
+                                                        cos(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
+                                                       -sin(interfaceNormalAIJ)]) )
+             forall (ii = 1_pInt:3_pInt) &                                                              
+               jacobian(xioffsetI+1,xioffsetJ+2+ii) = &        !  
+                 jacobian(xioffsetI+1,xioffsetJ+2+ii) -  &                         
+                 phasefrac(active(grII),homog)%p(offset)* &
+                 phasefrac(active(grIJ),homog)%p(offset)* &
+                 phasefrac(active(grJJ),homog)%p(offset)* &
+                 sum(avgR(ii,1:3)*[sin(interfaceNormalAKL)*cos(interfaceNormalBKL), &
+                                   sin(interfaceNormalAKL)*sin(interfaceNormalBKL), &
+                                   cos(interfaceNormalAKL)])                   
+             jacobian(xioffsetI+2,xioffsetJ+1) = &                                                  ! jacobian (B,A) RB_A (2,1)
+               jacobian(xioffsetI+2,xioffsetJ+1) -  &                       
+               phasefrac(active(grII),homog)%p(offset)* &
+               phasefrac(active(grIJ),homog)%p(offset)* &
+               phasefrac(active(grJJ),homog)%p(offset)* &
+               sum(dPdF(1:3,1:3,1:3,1:3,active(grIJ))* &
+                   math_tensorproduct3333( &
+                       math_tensorproduct33(param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
+                                           [-sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
+                                             sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
+                                             0.0_Preal] ), & 
+                       math_tensorproduct33(param(instance)%newIter(xioffsetJN+3:xioffsetJN+5,offset), &
+                                           [ cos(interfaceNormalAKL)*cos(interfaceNormalBKL), &
+                                             cos(interfaceNormalAKL)*sin(interfaceNormalBKL), &
+                                            -sin(interfaceNormalAKL)] ) &
+                                          )   &
+                  )
+             jacobian(xioffsetI+2,xioffsetJ+2) = &                                                  ! jacobian (B,B) RB_B (2,2)
+               jacobian(xioffsetI+2,xioffsetJ+2) -  &                        
+               phasefrac(active(grII),homog)%p(offset)* &
+               phasefrac(active(grIJ),homog)%p(offset)* &
+               phasefrac(active(grJJ),homog)%p(offset)* &
+               sum(dPdF(1:3,1:3,1:3,1:3,active(grIJ))* &
+                   math_tensorproduct3333( &
+                             math_tensorproduct33(param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
+                                                 [-sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
+                                                   sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
+                                                   0.0_Preal] ), & 
+                             math_tensorproduct33(param(instance)%newIter(xioffsetJN+3:xioffsetJN+5,offset), &
+                                                 [-sin(interfaceNormalAKL)*sin(interfaceNormalBKL), &
+                                                   sin(interfaceNormalAKL)*cos(interfaceNormalBKL), &
+                                                   0.0_pReal] ) &
+                                         )   &
+                  )
+             forall (ii = 1_pInt:3_pInt,jj = 1_pInt:3_pInt) &                                       ! jacobian (B,H) RB_H (2,3:5)
+               avgR(ii,jj) = sum(dPdF(1:3,1:3,ii,jj,active(grIJ))* &
+                                 math_tensorproduct33(param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
+                                                      [-sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
+                                                        sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
+                                                        0.0_Preal] ) )
+             forall (ii = 1_pInt:3_pInt) &                                                              
+               jacobian(xioffsetI+2,xioffsetJ+2+ii) = &        
+                              jacobian(xioffsetI+2,xioffsetJ+2+ii) -  &                       
+                              phasefrac(active(grII),homog)%p(offset)* &
+                              phasefrac(active(grIJ),homog)%p(offset)* &
+                              phasefrac(active(grJJ),homog)%p(offset)* &
+                              sum(avgR(ii,1:3)*[sin(interfaceNormalAKL)*cos(interfaceNormalBKL), &
+                                                sin(interfaceNormalAKL)*sin(interfaceNormalBKL), &
+                                                cos(interfaceNormalAKL)])                                  
+             forall (ii = 1_pInt:3_pInt,jj = 1_pInt:3_pInt) &                                       ! jacobian (H,A) RH_A (3:5,1)
+               avgR(ii,jj) = sum(dPdF(ii,jj,1:3,1:3,active(grIJ))* &
+                                 math_tensorproduct33(param(instance)%newIter(xioffsetJN+3:xioffsetJN+5,offset), &
+                                                      [ cos(interfaceNormalAKL)*cos(interfaceNormalBKL), &
+                                                        cos(interfaceNormalAKL)*sin(interfaceNormalBKL), &
+                                                       -sin(interfaceNormalAKL)]) )
+             forall (ii = 1_pInt:3_pInt) &                                                              
+               jacobian(xioffsetI+2+ii,xioffsetJ+1) = &        !  
+                 jacobian(xioffsetI+2+ii,xioffsetJ+1) -  &                         
+                 phasefrac(active(grII),homog)%p(offset)* &
+                 phasefrac(active(grIJ),homog)%p(offset)* &
+                 phasefrac(active(grJJ),homog)%p(offset)* &
+                 sum(avgR(ii,1:3)*[sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
+                                   sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
+                                   cos(interfaceNormalAIJ)]) 
+             forall (ii = 1_pInt:3_pInt,jj = 1_pInt:3_pInt) &                                       ! jacobian (H,B) RH_B (3:5,2)     
+               avgR(ii,jj) = sum(dPdF(ii,jj,1:3,1:3,active(grIJ))* &
+                                 math_tensorproduct33(param(instance)%newIter(xioffsetJN+3:xioffsetJN+5,offset) , &
+                                                      [-sin(interfaceNormalAKL)*sin(interfaceNormalBKL), &
+                                                        sin(interfaceNormalAKL)*cos(interfaceNormalBKL), &
+                                                        0.0_pReal] ) )
+             forall (ii = 1_pInt:3_pInt) &                                                              
+               jacobian(xioffsetI+2+ii,xioffsetJ+2) = &        !  
+                 jacobian(xioffsetI+2+ii,xioffsetJ+2) -  &                         
+                 phasefrac(active(grII),homog)%p(offset)* &
+                 phasefrac(active(grIJ),homog)%p(offset)* &
+                 phasefrac(active(grJJ),homog)%p(offset)* &
+                 sum(avgR(ii,1:3)*[ sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
+                                    sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
+                                    cos(interfaceNormalAIJ)]) 
+             forall (ii = 1_pInt:3_pInt,jj = 1_pInt:3_pInt) &                 
+               jacobian(xioffsetI+2+ii,xioffsetJ+2+jj) = &                                          ! jacobian (H,H) RH_H (3:5,3:5)
+                 jacobian(xioffsetI+2+ii,xioffsetJ+2+jj) -  &
+                 phasefrac(active(grII),homog)%p(offset)* &
+                 phasefrac(active(grIJ),homog)%p(offset)* &
+                 phasefrac(active(grJJ),homog)%p(offset)* &
+                 sum(dPdF(ii,1:3,jj,1:3,active(grIJ))* &
+                     math_tensorproduct33([ sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
+                                            sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
+                                            cos(interfaceNormalAIJ)], &
+                                          [ sin(interfaceNormalAKL)*cos(interfaceNormalBKL), &
+                                            sin(interfaceNormalAKL)*sin(interfaceNormalBKL), &
+                                            cos(interfaceNormalAKL)] ) ) 
+           endif
+           if (grIJ == grJJ) then                                                                   ! adding contributions from JJ
+             jacobian(xioffsetI+1,xioffsetJ+1) = &                                                  ! jacobian (A,A) RA_A (1,1)
+               jacobian(xioffsetI+1,xioffsetJ+1) +  &                        
+               phasefrac(active(grII),homog)%p(offset)* &
+               phasefrac(active(grIJ),homog)%p(offset)* &
+               phasefrac(active(grJI),homog)%p(offset)* &
+               sum(dPdF(1:3,1:3,1:3,1:3,active(grIJ))* &
+                   math_tensorproduct3333( &
+                      math_tensorproduct33(param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
+                                           [ cos(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
+                                             cos(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
+                                            -sin(interfaceNormalAIJ)] ), & 
+                      math_tensorproduct33(param(instance)%newIter(xioffsetJN+3:xioffsetJN+5,offset), &
+                                           [ cos(interfaceNormalAKL)*cos(interfaceNormalBKL), &
+                                             cos(interfaceNormalAKL)*sin(interfaceNormalBKL), &
+                                            -sin(interfaceNormalAKL)] ) &
+                                          )   &
+                  )
+             jacobian(xioffsetI+1,xioffsetJ+2) = &                                                  ! jacobian (A,B) RA_B (1,2)
+               jacobian(xioffsetI+1,xioffsetJ+2) +  &                        
+               phasefrac(active(grII),homog)%p(offset)* &
+               phasefrac(active(grIJ),homog)%p(offset)* &
+               phasefrac(active(grJI),homog)%p(offset)* &
+               sum(dPdF(1:3,1:3,1:3,1:3,active(grIJ))* &
+                   math_tensorproduct3333( &
+                         math_tensorproduct33(param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
+                                              [ cos(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
+                                                cos(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
+                                               -sin(interfaceNormalAIJ)] ), & 
+                         math_tensorproduct33(param(instance)%newIter(xioffsetJN+3:xioffsetJN+5,offset), &
+                                              [-sin(interfaceNormalAKL)*sin(interfaceNormalBKL), &
+                                                sin(interfaceNormalAKL)*cos(interfaceNormalBKL), &
+                                                0.0_pReal] ) &
+                                              )   &
+                       )                                                 
+             forall (ii = 1_pInt:3_pInt,jj = 1_pInt:3_pInt) &                                       ! jacobian (A,H) RA_H (1,3:5)
+               avgR(ii,jj) = sum(dPdF(1:3,1:3,ii,jj,active(grIJ))* &
+                                 math_tensorproduct33(param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
+                                                      [ cos(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
+                                                        cos(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
+                                                       -sin(interfaceNormalAIJ)] ))
+             forall (ii = 1_pInt:3_pInt) &                                                              
+               jacobian(xioffsetI+1,xioffsetJ+2+ii) = &        !  
+                 jacobian(xioffsetI+1,xioffsetJ+2+ii) +  &                         
+                 phasefrac(active(grII),homog)%p(offset)* &
+                 phasefrac(active(grIJ),homog)%p(offset)* &
+                 phasefrac(active(grJI),homog)%p(offset)* &
+                 sum(avgR(ii,1:3)*[sin(interfaceNormalAKL)*cos(interfaceNormalBKL), &
+                                   sin(interfaceNormalAKL)*sin(interfaceNormalBKL), &
+                                   cos(interfaceNormalAKL)])             
+             jacobian(xioffsetI+2,xioffsetJ+1) = &                                                  ! jacobian (B,A) RB_A (2,1)
+               jacobian(xioffsetI+2,xioffsetJ+1) +  &                       
+               phasefrac(active(grII),homog)%p(offset)* &
+               phasefrac(active(grIJ),homog)%p(offset)* &
+               phasefrac(active(grJI),homog)%p(offset)* &
+               sum(dPdF(1:3,1:3,1:3,1:3,active(grIJ))* &
+                   math_tensorproduct3333( &
+                       math_tensorproduct33(param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
+                                            [-sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
+                                              sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
+                                              0.0_Preal] ), & 
+                       math_tensorproduct33(param(instance)%newIter(xioffsetJN+3:xioffsetJN+5,offset), &
+                                            [ cos(interfaceNormalAKL)*cos(interfaceNormalBKL), &
+                                              cos(interfaceNormalAKL)*sin(interfaceNormalBKL), &
+                                             -sin(interfaceNormalAKL)] )  &
+                                         )   &
+                  )		                                       
+             jacobian(xioffsetI+2,xioffsetJ+2) = &                                                  ! jacobian (B,B) RB_B (2,2)
+               jacobian(xioffsetI+2,xioffsetJ+2) +  &                        
+               phasefrac(active(grII),homog)%p(offset)* &
+               phasefrac(active(grIJ),homog)%p(offset)* &
+               phasefrac(active(grJI),homog)%p(offset)* &
+               sum(dPdF(1:3,1:3,1:3,1:3,active(grIJ))* &
+                   math_tensorproduct3333( &
+                       math_tensorproduct33(param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
+                                            [-sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
+                                              sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
+                                              0.0_Preal] ), & 
+                       math_tensorproduct33(param(instance)%newIter(xioffsetJN+3:xioffsetJN+5,offset), &
+                                           [-sin(interfaceNormalAKL)*sin(interfaceNormalBKL), &
+                                             sin(interfaceNormalAKL)*cos(interfaceNormalBKL), &
+                                             0.0_pReal] ) 
+                                         )   &
+                  )                
+             forall (ii = 1_pInt:3_pInt,jj = 1_pInt:3_pInt) &                                       ! jacobian (B,H) RB_H (2,3:5)
+               avgR(ii,jj) = sum(dPdF(1:3,1:3,ii,jj,active(grIJ))* &
+                                 math_tensorproduct33(param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
+                                                      [-sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
+                                                        sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
+                                                        0.0_Preal] ) )
+             forall (ii = 1_pInt:3_pInt) &                                                              
+               jacobian(xioffsetI+2,xioffsetJ+2+ii) = &         
+                 jacobian(xioffsetI+2,xioffsetJ+2+ii) +  &                       
+                 phasefrac(active(grII),homog)%p(offset)* &
+                 phasefrac(active(grIJ),homog)%p(offset)* &
+                 phasefrac(active(grJI),homog)%p(offset)* &
+                 sum(avgR(ii,1:3)*[sin(interfaceNormalAKL)*cos(interfaceNormalBKL), &
+                                   sin(interfaceNormalAKL)*sin(interfaceNormalBKL), &
+                                   cos(interfaceNormalAKL)])                                  
              forall (ii = 1_pInt:3_pInt,jj = 1_pInt:3_pInt) &                                       ! jacobian (H,A) RH_A (3:5,1)  
-						     avgR(ii,jj) =sum(dPdF(ii,jj,1:3,1:3,active(grIJ))* &
-						           math_tensorproduct33(param(instance)%newIter(xioffsetJN+3:xioffsetJN+5,offset), &
-						                                [cos(interfaceNormalAKL)*cos(interfaceNormalBKL), &
-						                                 cos(interfaceNormalAKL)*sin(interfaceNormalBKL), &
-						                                 -sin(interfaceNormalAKL)] ))
+               avgR(ii,jj) = sum(dPdF(ii,jj,1:3,1:3,active(grIJ))* &
+                                 math_tensorproduct33(param(instance)%newIter(xioffsetJN+3:xioffsetJN+5,offset), &
+                                                      [ cos(interfaceNormalAKL)*cos(interfaceNormalBKL), &
+                                                        cos(interfaceNormalAKL)*sin(interfaceNormalBKL), &
+                                                       -sin(interfaceNormalAKL)] ))
              forall (ii = 1_pInt:3_pInt) &                                                              
-						     jacobian(xioffsetI+2+ii,xioffsetJ+1) = &          
-										 jacobian(xioffsetI+2+ii,xioffsetJ+1) +  &                         
-										 phasefrac(active(grII),homog)%p(offset)* &
-										 phasefrac(active(grIJ),homog)%p(offset)* &
-										 phasefrac(active(grJI),homog)%p(offset)* &
-										 sum(avgR(ii,1:3)*[sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
-										                        sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
-										                        cos(interfaceNormalAIJ)]) 
+               jacobian(xioffsetI+2+ii,xioffsetJ+1) = &          
+                 jacobian(xioffsetI+2+ii,xioffsetJ+1) +  &                         
+                 phasefrac(active(grII),homog)%p(offset)* &
+                 phasefrac(active(grIJ),homog)%p(offset)* &
+                 phasefrac(active(grJI),homog)%p(offset)* &
+                 sum(avgR(ii,1:3)*[sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
+                                   sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
+                                   cos(interfaceNormalAIJ)]) 
              forall (ii = 1_pInt:3_pInt,jj = 1_pInt:3_pInt) &                           
-						     avgR(ii,jj) =sum(dPdF(ii,jj,1:3,1:3,active(grIJ))* &
-						           math_tensorproduct33(param(instance)%newIter(xioffsetJN+3:xioffsetJN+5,offset) , &
-						                               [-sin(interfaceNormalAKL)*sin(interfaceNormalBKL), &
-						                                 sin(interfaceNormalAKL)*cos(interfaceNormalBKL), &
-						                                 0.0_pReal] ) )
+               avgR(ii,jj) = sum(dPdF(ii,jj,1:3,1:3,active(grIJ))* &
+                             math_tensorproduct33(param(instance)%newIter(xioffsetJN+3:xioffsetJN+5,offset) , &
+                                                  [-sin(interfaceNormalAKL)*sin(interfaceNormalBKL), &
+                                                    sin(interfaceNormalAKL)*cos(interfaceNormalBKL), &
+                                                    0.0_pReal] ) )
              forall (ii = 1_pInt:3_pInt) &                                                              
-				       jacobian(xioffsetI+2+ii,xioffsetJ+2) = &                                         ! jacobian (H,B) RH_B (3:5,2)  
-								   jacobian(xioffsetI+2+ii,xioffsetJ+2) +  &                         
-								   phasefrac(active(grII),homog)%p(offset)* &
-								   phasefrac(active(grIJ),homog)%p(offset)* &
-								   phasefrac(active(grJI),homog)%p(offset)* &
-								   sum(avgR(ii,1:3)*[sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
-								                     sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
-								                     cos(interfaceNormalAIJ)]) 
+               jacobian(xioffsetI+2+ii,xioffsetJ+2) = &                                         ! jacobian (H,B) RH_B (3:5,2)  
+                 jacobian(xioffsetI+2+ii,xioffsetJ+2) +  &                         
+                 phasefrac(active(grII),homog)%p(offset)* &
+                 phasefrac(active(grIJ),homog)%p(offset)* &
+                 phasefrac(active(grJI),homog)%p(offset)* &
+                 sum(avgR(ii,1:3)*[sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
+                                   sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
+                                   cos(interfaceNormalAIJ)]) 
 
              forall (ii = 1_pInt:3_pInt,jj = 1_pInt:3_pInt) &                 
-                 jacobian(xioffsetI+2+ii,xioffsetJ+2+jj) = &                                        ! jacobian (H,H) RH_H (3:5,3:5)
-		                 jacobian(xioffsetI+2+ii,xioffsetJ+2+jj) +  &
-		                 phasefrac(active(grII),homog)%p(offset)* &
-		                 phasefrac(active(grIJ),homog)%p(offset)* &
-		                 phasefrac(active(grJI),homog)%p(offset)* &
-		                 sum(dPdF(ii,1:3,jj,1:3,active(grIJ))* &
-		                     math_tensorproduct33([sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
-		                                sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
-		                                cos(interfaceNormalAIJ)], &
-		                                [sin(interfaceNormalAKL)*cos(interfaceNormalBKL), &
-		                                sin(interfaceNormalAKL)*sin(interfaceNormalBKL), &
-		                                cos(interfaceNormalAKL)] ) )                                                                             
-           end if
+               jacobian(xioffsetI+2+ii,xioffsetJ+2+jj) = &                                        ! jacobian (H,H) RH_H (3:5,3:5)
+                 jacobian(xioffsetI+2+ii,xioffsetJ+2+jj) +  &
+                 phasefrac(active(grII),homog)%p(offset)* &
+                 phasefrac(active(grIJ),homog)%p(offset)* &
+                 phasefrac(active(grJI),homog)%p(offset)* &
+                 sum(dPdF(ii,1:3,jj,1:3,active(grIJ))* &
+                     math_tensorproduct33([sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
+                                           sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
+                                           cos(interfaceNormalAIJ)], &
+                                          [sin(interfaceNormalAKL)*cos(interfaceNormalBKL), &
+                                           sin(interfaceNormalAKL)*sin(interfaceNormalBKL), &
+                                           cos(interfaceNormalAKL)] ) )                                                                             
+           endif
          enddo; enddo
        enddo; enddo  
        jacobian = jacobian + stressTol*math_identity2nd(xisize)                                     ! perturbation by identity so that jacobian is invertible
