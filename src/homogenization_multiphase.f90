@@ -1408,12 +1408,12 @@ function homogenization_multiphase_updateState(P,dPdF,F,F0,iter,ip,el)
      
      stressTol = max(            param(instance)%absTol, &
                      norm2(avgR)*param(instance)%relTol)
-     convergencefFullRankOne: if (     norm2(residual) < stressTol &
-                                  .or. Nactive         < 2_pInt) then
+     convergenceFullRankOne: if (     norm2(residual) < stressTol &
+                                 .or. Nactive         < 2_pInt) then
        homogenization_multiphase_updateState = [.true., .true.]  
        
      elseif (     iter == 1_pInt &
-             .or. norm2(residual) < param(instance)%residual(offset)) then convergencefFullRankOne  ! not converged, but improved norm of residuum (always proceed in first iteration)...
+             .or. norm2(residual) < param(instance)%residual(offset)) then convergenceFullRankOne   ! not converged, but improved norm of residuum (always proceed in first iteration)...
        homogenization_multiphase_updateState = [.false., .true.]
        
        param(instance)%residual  (offset) = norm2(residual)                                         ! ...remember old values and...
@@ -2114,7 +2114,7 @@ function homogenization_multiphase_updateState(P,dPdF,F,F0,iter,ip,el)
        else
         call IO_error(400_pInt,el=el,ip=ip,ext_msg='homogenization multiphase')
        endif        
-     else convergencefFullRank                                                                      ! not converged and residuum not improved...
+     else convergenceFullRankOne                                                                    ! not converged and residuum not improved...
        homogenization_multiphase_updateState = [.false., .true.]
        param(instance)%stepLength(offset) = &
          param(instance)%stepLength(offset)/2.0_pReal                                               ! ...try with smaller step length in same direction
@@ -2122,7 +2122,7 @@ function homogenization_multiphase_updateState(P,dPdF,F,F0,iter,ip,el)
          param(instance)%oldIter  (:,offset) - &
          param(instance)%stepLength(offset)* &
          param(instance)%searchDir(:,offset)
-     endif convergencefFullRank
+     endif convergenceFullRankOne
  end select myMixRule
 end function homogenization_multiphase_updateState
 
