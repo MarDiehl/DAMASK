@@ -1597,7 +1597,7 @@ function homogenization_multiphase_updateState(P,dPdF,F,F0,iter,ip,el)
                                              sin(interfaceNormalAKL)*cos(interfaceNormalBKL), &
                                              0.0_pReal] ) &
                                          )   &
-                  )		                                                                    
+                  )                                                                         
              forall (ii = 1_pInt:3_pInt,jj = 1_pInt:3_pInt) &                                        ! jacobian (beta,H) RB_H (2,3:5)
                avgR(ii,jj) = sum(dPdF(1:3,1:3,ii,jj,active(grII))* &
                                  math_tensorproduct33(param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
@@ -1838,7 +1838,7 @@ function homogenization_multiphase_updateState(P,dPdF,F,F0,iter,ip,el)
                                              sin(interfaceNormalAKL)*cos(interfaceNormalBKL), &
                                              0.0_pReal]) &
                                          )   &
-                  )		                                     
+                  )                                          
              forall (ii = 1_pInt:3_pInt,jj = 1_pInt:3_pInt) &                                       ! jacobian (A,H) RA_H (1,3:5)
                avgR(ii,jj) = sum(dPdF(1:3,1:3,ii,jj,active(grIJ))* &
                                  math_tensorproduct33(param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
@@ -2013,7 +2013,7 @@ function homogenization_multiphase_updateState(P,dPdF,F,F0,iter,ip,el)
                                               cos(interfaceNormalAKL)*sin(interfaceNormalBKL), &
                                              -sin(interfaceNormalAKL)] )  &
                                          )   &
-                  )		                                       
+                  )                                            
              jacobian(xioffsetI+2,xioffsetJ+2) = &                                                  ! jacobian (B,B) RB_B (2,2)
                jacobian(xioffsetI+2,xioffsetJ+2) +  &                        
                phasefrac(active(grII),homog)%p(offset)* &
