@@ -2028,7 +2028,7 @@ function homogenization_multiphase_updateState(P,dPdF,F,F0,iter,ip,el)
                        math_tensorproduct33(param(instance)%newIter(xioffsetJN+3:xioffsetJN+5,offset), &
                                            [-sin(interfaceNormalAKL)*sin(interfaceNormalBKL), &
                                              sin(interfaceNormalAKL)*cos(interfaceNormalBKL), &
-                                             0.0_pReal] ) 
+                                             0.0_pReal] ) &
                                          )   &
                   )                
              forall (ii = 1_pInt:3_pInt,jj = 1_pInt:3_pInt) &                                       ! jacobian (B,H) RB_H (2,3:5)
