@@ -1749,7 +1749,7 @@ function homogenization_multiphase_updateState(P,dPdF,F,F0,iter,ip,el)
                avgR(ii,jj) = sum(dPdF(1:3,1:3,ii,jj,active(grII))* &
                                  math_tensorproduct33(param(instance)%newIter(xioffsetIN+3:xioffsetIN+5,offset), &
                                                       [-sin(interfaceNormalAIJ)*sin(interfaceNormalBIJ), &
-                                                        sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), 
+                                                        sin(interfaceNormalAIJ)*cos(interfaceNormalBIJ), &
                                                         0.0_Preal]) )
              forall (ii = 1_pInt:3_pInt) &                                                              
                jacobian(xioffsetI+2,xioffsetJ+2+ii) = &                                       
