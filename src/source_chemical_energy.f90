@@ -129,7 +129,6 @@ end subroutine source_chemical_energy_init
 !--------------------------------------------------------------------------------------------------
 subroutine source_chemical_energy_getRateAndItsTangent(TDot, dTDOT_dT, ipc, ip, el)
  use material, only: &
-   material_maxNcomponents, &
    phase_chemicalFE, &
    material_phase, &
    CHEMICALFE_none_ID, &
@@ -148,8 +147,6 @@ subroutine source_chemical_energy_getRateAndItsTangent(TDot, dTDOT_dT, ipc, ip, 
  real(pReal),  intent(out) :: &
    TDot, &
    dTDOT_dT
- real(pReal) :: &
-   T
 
  chemicalFEType: select case(phase_chemicalFE(material_phase(ipc, ip, el)))
    case (CHEMICALFE_none_ID) chemicalFEType
@@ -161,7 +158,7 @@ subroutine source_chemical_energy_getRateAndItsTangent(TDot, dTDOT_dT, ipc, ip, 
      dTDOT_dT = 0.0_pReal
 
    case (CHEMICALFE_thermodynamic_ID) chemicalFEType
-     TDot = chemicalFE_thermodynamic_getEnergy(T,ipc,ip,el)
+     TDot = chemicalFE_thermodynamic_getEnergy(ipc,ip,el)
      dTDOT_dT = 0.0_pReal
 
  end select chemicalFEType

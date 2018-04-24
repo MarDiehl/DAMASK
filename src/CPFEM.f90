@@ -295,9 +295,11 @@ subroutine CPFEM_general(mode, parallelExecution, ffn, ffn1, temperature_inp, dt
  use material, only: &
    microstructure_elemhomo, &
    plasticState, &
+   chemicalState, &
    sourceState, &
    homogState, &
    thermalState, &
+   soluteState, &
    phaseAt, phasememberAt, &
    material_phase, &
    phase_plasticity, &
@@ -394,7 +396,8 @@ subroutine CPFEM_general(mode, parallelExecution, ffn, ffn1, temperature_inp, dt
    crystallite_dPdF0 = crystallite_dPdF                                                        ! crystallite stiffness
    crystallite_Tstar0_v = crystallite_Tstar_v                                                  ! crystallite 2nd Piola Kirchhoff stress
 
-   forall ( i = 1:size(plasticState    )) plasticState(i)%state0     = plasticState(i)%state   ! copy state in this lenghty way because: A component cannot be an array if the encompassing structure is an array
+   forall ( i = 1:size(plasticState    )) plasticState (i)%state0    = plasticState (i)%state  ! copy state in this lenghty way because: A component cannot be an array if the encompassing structure is an array
+   forall ( i = 1:size(chemicalState   )) chemicalState(i)%state0    = chemicalState(i)%state  ! copy state in this lenghty way because: A component cannot be an array if the encompassing structure is an array
    do i = 1, size(sourceState)
      do mySource = 1,phase_Nsources(i)
        sourceState(i)%p(mySource)%state0 = sourceState(i)%p(mySource)%state                    ! copy state in this lenghty way because: A component cannot be an array if the encompassing structure is an array
@@ -411,6 +414,7 @@ subroutine CPFEM_general(mode, parallelExecution, ffn, ffn1, temperature_inp, dt
    do homog = 1_pInt, material_Nhomogenization
      homogState       (homog)%state0 =  homogState       (homog)%state
      thermalState     (homog)%state0 =  thermalState     (homog)%state
+     soluteState      (homog)%state0 =  soluteState      (homog)%state
    enddo
   
 

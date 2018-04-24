@@ -545,6 +545,7 @@ subroutine crystallite_stressAndItsTangent(updateJaco)
  use material, only: &
    homogenization_Ngrains, &
    plasticState, &
+   chemicalState, &
    sourceState, &
    phase_Nsources, &
    phaseAt, phasememberAt
@@ -623,6 +624,8 @@ subroutine crystallite_stressAndItsTangent(updateJaco)
        if (crystallite_requested(c,i,e)) then
          plasticState    (phaseAt(c,i,e))%subState0(      :,phasememberAt(c,i,e)) = &
          plasticState    (phaseAt(c,i,e))%partionedState0(:,phasememberAt(c,i,e))
+         chemicalState   (phaseAt(c,i,e))%subState0(      :,phasememberAt(c,i,e)) = &
+         chemicalState   (phaseAt(c,i,e))%partionedState0(:,phasememberAt(c,i,e))
          do mySource = 1_pInt, phase_Nsources(phaseAt(c,i,e))
            sourceState(phaseAt(c,i,e))%p(mySource)%subState0(      :,phasememberAt(c,i,e)) = &
            sourceState(phaseAt(c,i,e))%p(mySource)%partionedState0(:,phasememberAt(c,i,e))
@@ -905,6 +908,8 @@ subroutine crystallite_stressAndItsTangent(updateJaco)
                !if abbrevation, make c and p private in omp
                plasticState    (phaseAt(c,i,e))%subState0(:,phasememberAt(c,i,e)) = &
                plasticState    (phaseAt(c,i,e))%state(    :,phasememberAt(c,i,e))
+               chemicalState   (phaseAt(c,i,e))%subState0(:,phasememberAt(c,i,e)) = &
+               chemicalState   (phaseAt(c,i,e))%state(    :,phasememberAt(c,i,e))
                do mySource = 1_pInt, phase_Nsources(phaseAt(c,i,e))
                  sourceState(phaseAt(c,i,e))%p(mySource)%subState0(:,phasememberAt(c,i,e)) = &
                  sourceState(phaseAt(c,i,e))%p(mySource)%state(    :,phasememberAt(c,i,e))
@@ -959,6 +964,8 @@ subroutine crystallite_stressAndItsTangent(updateJaco)
              crystallite_Li(1:3,1:3,c,i,e)    = crystallite_subLi0(1:3,1:3,c,i,e)                    ! ...intermediate velocity grad
              plasticState    (phaseAt(c,i,e))%state(    :,phasememberAt(c,i,e)) = &
              plasticState    (phaseAt(c,i,e))%subState0(:,phasememberAt(c,i,e))
+             chemicalState   (phaseAt(c,i,e))%state(    :,phasememberAt(c,i,e)) = &
+             chemicalState   (phaseAt(c,i,e))%subState0(:,phasememberAt(c,i,e))
              do mySource = 1_pInt, phase_Nsources(phaseAt(c,i,e))
                sourceState(phaseAt(c,i,e))%p(mySource)%state(    :,phasememberAt(c,i,e)) = &
                sourceState(phaseAt(c,i,e))%p(mySource)%subState0(:,phasememberAt(c,i,e))
@@ -3790,6 +3797,7 @@ function crystallite_postResults(ipc, ip, el)
    FE_celltype
  use material, only: &
    plasticState, &
+   chemicalState, &
    sourceState, &
    microstructure_crystallite, &
    crystallite_Noutput, &
@@ -3808,6 +3816,7 @@ function crystallite_postResults(ipc, ip, el)
 
  real(pReal), dimension(1+crystallite_sizePostResults(microstructure_crystallite(mesh_element(4,el))) + &
                         1+plasticState(material_phase(ipc,ip,el))%sizePostResults + &
+                          chemicalState(material_phase(ipc,ip,el))%sizePostResults + &
                           sum(sourceState(material_phase(ipc,ip,el))%p(:)%sizePostResults)) :: &
    crystallite_postResults
  real(pReal), dimension(3,3) :: &
@@ -3932,7 +3941,9 @@ function crystallite_postResults(ipc, ip, el)
    c = c + mySize
  enddo
 
- crystallite_postResults(c+1) = real(plasticState(material_phase(ipc,ip,el))%sizePostResults,pReal)             ! size of constitutive results
+ crystallite_postResults(c+1) = real(plasticState(material_phase(ipc,ip,el))%sizePostResults + &
+                                     chemicalState(material_phase(ipc,ip,el))%sizePostResults + &
+                                     sum(sourceState(material_phase(ipc,ip,el))%p(:)%sizePostResults),pReal)             ! size of constitutive results
  c = c + 1_pInt
  if (size(crystallite_postResults)-c > 0_pInt) &
    crystallite_postResults(c+1:size(crystallite_postResults)) = &

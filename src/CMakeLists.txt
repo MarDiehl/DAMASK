@@ -125,8 +125,14 @@ add_library(THERMAL OBJECT
 add_dependencies(THERMAL CRYSTALLITE)
 list(APPEND OBJECTFILES $<TARGET_OBJECTS:THERMAL>)
 
+add_library(SOLUTE OBJECT
+  "solute_isoconc.f90"
+  "solute_flux.f90")
+add_dependencies(SOLUTE CRYSTALLITE)
+list(APPEND OBJECTFILES $<TARGET_OBJECTS:SOLUTE>)
+
 add_library(DAMASK_ENGINE OBJECT "homogenization.f90")
-add_dependencies(DAMASK_ENGINE THERMAL HOMOGENIZATION)
+add_dependencies(DAMASK_ENGINE THERMAL SOLUTE HOMOGENIZATION)
 list(APPEND OBJECTFILES $<TARGET_OBJECTS:DAMASK_ENGINE>)
 
 add_library(DAMASK_CPFE OBJECT "CPFEM2.f90")
@@ -141,6 +147,7 @@ if ("${PROJECT_NAME}" STREQUAL "DAMASK_spectral")
       add_library(SPECTRAL_SOLVER OBJECT
       "spectral_multiphase.f90"
       "spectral_thermal.f90"
+      "spectral_solute.f90"
       "spectral_mech_AL.f90"
       "spectral_mech_Polarisation.f90"
       "spectral_mech_Basic.f90"

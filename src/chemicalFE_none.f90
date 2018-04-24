@@ -41,9 +41,9 @@ subroutine chemicalFE_none_init
  use numerics, only: &
    numerics_integrator
  use material, only: &
-   chemicalMapping, &
+   chemConcMapping, &
    chemicalConc, &
-   material_maxNcomponents, &
+   phase_Ncomponents, &
    phaseconstmemberAt, &
    phase_chemicalFE, &
    CHEMICALFE_NONE_label, &
@@ -56,7 +56,7 @@ subroutine chemicalFE_none_init
  integer(pInt) :: &
    maxNinstance, &
    phase, &
-   cp, &
+   comp, &
    NofMyPhase, &
    sizeState, &
    sizeDotState, &
@@ -99,9 +99,9 @@ subroutine chemicalFE_none_init
        allocate(chemicalState(phase)%RK4dotState      (sizeDotState,NofMyPhase))
      if (any(numerics_integrator == 5_pInt)) &
        allocate(chemicalState(phase)%RKCK45dotState (6,sizeDotState,NofMyPhase))
-     chemicalMapping(phase)%p => phaseconstmemberAt
-     do cp = 1_pInt, material_maxNcomponents
-       allocate(chemicalConc(cp,phase)%p(1), source=0.0_pReal)
+     chemConcMapping(phase)%p => phaseconstmemberAt
+     do comp = 1_pInt, phase_Ncomponents(phase)
+       allocate(chemicalConc(comp,phase)%p(1), source=0.0_pReal)
      enddo
    endif
  enddo initializeInstances

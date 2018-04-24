@@ -42,6 +42,8 @@ module material
    THERMAL_isothermal_label             = 'isothermal', &
    THERMAL_adiabatic_label              = 'adiabatic', &
    THERMAL_conduction_label             = 'conduction', &
+   SOLUTE_isoconc_label                 = 'isoconc', &
+   SOLUTE_flux_label                    = 'flux', &
    HOMOGENIZATION_none_label            = 'none', &
    HOMOGENIZATION_isostrain_label       = 'isostrain', &
    HOMOGENIZATION_rgc_label             = 'rgc', &
@@ -94,15 +96,17 @@ module material
  end enum
 
  enum, bind(c)
+   enumerator :: SOLUTE_isoconc_ID, &
+                 SOLUTE_flux_ID
+ end enum
+
+ enum, bind(c)
    enumerator :: HOMOGENIZATION_undefined_ID, &
                  HOMOGENIZATION_none_ID, &
                  HOMOGENIZATION_isostrain_ID, &
                  HOMOGENIZATION_multiphase_ID, &
                  HOMOGENIZATION_rgc_ID
  end enum
-
- integer(pInt), parameter, public  :: &
-   material_maxNcomponents = 10_pInt
 
  character(len=*), parameter, public  :: &
    MATERIAL_configFile         = 'material.config', &                                               !< generic name for material configuration file
@@ -121,6 +125,8 @@ module material
    phase_chemicalFE                                                                                 !< plasticity of each phase
  integer(kind(THERMAL_isothermal_ID)),       dimension(:),   allocatable, public, protected :: &
    thermal_type                                                                                     !< thermal transport model
+ integer(kind(SOLUTE_isoconc_ID)),           dimension(:),   allocatable, public, protected :: &
+   solute_type                                                                                      !< solute transport model
 
  integer(kind(SOURCE_undefined_ID)),         dimension(:,:), allocatable, public, protected :: &
    phase_source, &                                                                                  !< active sources mechanisms of each phase
@@ -137,6 +143,8 @@ module material
 
  integer(pInt),                                                           public, protected :: &
    homogenization_maxNgrains, &                                                                     !< max number of grains in any USED homogenization
+   homogenization_maxNcomponents, &                                                                 !< max number of solute components in any USED homogenization
+   phase_maxNcomponents, &                                                                          !< max number of solute components in any phase
    material_Nphase, &                                                                               !< number of phases
    material_Nhomogenization, &                                                                      !< number of homogenizations
    material_Nmicrostructure, &                                                                      !< number of microstructures
@@ -145,7 +153,8 @@ module material
  integer(pInt),                              dimension(:),   allocatable, public, protected :: &
    phase_Nsources, &                                                                                !< number of source mechanisms active in each phase
    phase_Nkinematics, &                                                                             !< number of kinematic mechanisms active in each phase
-   phase_NstiffnessModifiers, &                                                                  !< number of stiffness degradation mechanisms active in each phase
+   phase_NstiffnessModifiers, &                                                                     !< number of stiffness degradation mechanisms active in each phase
+   phase_Ncomponents, &                                                                             !< number of solute components active in each phase 
    phase_Noutput, &                                                                                 !< number of '(output)' items per phase
    phase_elasticityInstance, &                                                                      !< instance of particular elasticity of each phase
    phase_plasticityInstance, &
@@ -156,9 +165,11 @@ module material
 
  integer(pInt),                              dimension(:),  allocatable, public, protected :: &
    homogenization_Ngrains, &                                                                        !< number of grains in each homogenization
+   homogenization_Ncomponents, &                                                                    !< number of solute components in each homogenization
    homogenization_Noutput, &                                                                        !< number of '(output)' items per homogenization
    homogenization_typeInstance, &                                                                   !< instance of particular type of each homogenization
    thermal_typeInstance, &                                                                          !< instance of particular type of each thermal transport
+   solute_typeInstance, &                                                                           !< instance of particular type of each solute transport
    microstructure_crystallite                                                                       !< crystallite setting ID of each microstructure
 
  real(pReal),                                dimension(:),  allocatable, public, protected :: &
@@ -176,7 +187,8 @@ module material
    sourceState
  type(tState),                               dimension(:),  allocatable, public            :: &
    homogState, &
-   thermalState
+   thermalState, &
+   soluteState
 
  integer(pInt),                          dimension(:,:,:),  allocatable, public, protected :: &
    material_texture                                                                                 !< texture (index) of each grain,IP,element
@@ -243,10 +255,11 @@ module material
 
  type(tHomogMapping),                       dimension(:),  allocatable,  public            :: &
    thermalMapping, &                                                                                !< mapping for thermal state/fields
+   soluteMapping, &                                                                                 !< mapping for solute state/fields
    phasefracMapping                                                                                 !< mapping for phase fraction state/fields
 
  type(tPhaseMapping),                       dimension(:),  allocatable,  public            :: &
-   chemicalMapping                                                                                 !< mapping for phase fraction state/fields
+   chemConcMapping                                                                                 !< mapping for phase fraction state/fields
 
  type(p_vec),                               dimension(:),  allocatable,  public            :: &
    temperature, &                                                                                   !< temperature field
@@ -279,6 +292,8 @@ module material
    THERMAL_isothermal_ID, &
    THERMAL_adiabatic_ID, &
    THERMAL_conduction_ID, &
+   SOLUTE_isoconc_ID, &
+   SOLUTE_flux_ID, &
    HOMOGENIZATION_none_ID, &
    HOMOGENIZATION_isostrain_ID, &
    HOMOGENIZATION_multiphase_ID, &
@@ -365,13 +380,15 @@ subroutine material_init()
  do myPhase = 1,material_Nphase
    allocate(sourceState(myPhase)%p(phase_Nsources(myPhase)))
  enddo
- allocate(chemicalMapping    (material_Nphase))
- allocate(chemicalConc       (material_maxNcomponents,&
+ allocate(chemConcMapping    (material_Nphase))
+ allocate(chemicalConc       (phase_maxNcomponents,&
                               material_Nphase))
 
  allocate(homogState         (material_Nhomogenization))
  allocate(thermalState       (material_Nhomogenization))
  allocate(thermalMapping     (material_Nhomogenization))
+ allocate(soluteState        (material_Nhomogenization))
+ allocate(soluteMapping      (material_Nhomogenization))
  allocate(temperature        (material_Nhomogenization))
  allocate(temperatureRate    (material_Nhomogenization))
  allocate(phasefracMapping   (material_Nhomogenization))
@@ -485,9 +502,12 @@ subroutine material_parseHomogenization(fileUnit,myPart)
  allocate(homogenization_name(Nsections));          homogenization_name = ''
  allocate(homogenization_type(Nsections),           source=HOMOGENIZATION_undefined_ID)
  allocate(thermal_type(Nsections),                  source=THERMAL_isothermal_ID)
+ allocate(solute_type(Nsections),                   source=SOLUTE_isoconc_ID)
  allocate(homogenization_typeInstance(Nsections),   source=0_pInt)
  allocate(thermal_typeInstance(Nsections),          source=0_pInt)
+ allocate(solute_typeInstance(Nsections),           source=0_pInt)
  allocate(homogenization_Ngrains(Nsections),        source=0_pInt)
+ allocate(homogenization_Ncomponents(Nsections),    source=0_pInt)
  allocate(homogenization_Noutput(Nsections),        source=0_pInt)
  allocate(homogenization_active(Nsections),         source=.false.)  !!!!!!!!!!!!!!!
  allocate(thermal_initialT(Nsections),              source=300.0_pReal)
@@ -533,8 +553,7 @@ subroutine material_parseHomogenization(fileUnit,myPart)
            case default
              call IO_error(500_pInt,ext_msg=trim(IO_stringValue(line,chunkPos,2_pInt)))
          end select
-         homogenization_typeInstance(section) = &
-                                          count(homogenization_type==homogenization_type(section))  ! count instances
+
         case ('thermal')
          select case (IO_lc(IO_stringValue(line,chunkPos,2_pInt)))
            case(THERMAL_isothermal_label)
@@ -547,8 +566,21 @@ subroutine material_parseHomogenization(fileUnit,myPart)
              call IO_error(500_pInt,ext_msg=trim(IO_stringValue(line,chunkPos,2_pInt)))
          end select
 
+        case ('solute')
+         select case (IO_lc(IO_stringValue(line,chunkPos,2_pInt)))
+           case(SOLUTE_isoconc_label)
+             solute_type(section) = SOLUTE_isoconc_ID
+           case(SOLUTE_flux_label)
+             solute_type(section) = SOLUTE_flux_ID
+           case default
+             call IO_error(500_pInt,ext_msg=trim(IO_stringValue(line,chunkPos,2_pInt)))
+         end select
+
        case ('nconstituents','ngrains')
          homogenization_Ngrains(section) = IO_intValue(line,chunkPos,2_pInt)
+
+       case ('ncomponents')
+         homogenization_Ncomponents(section) = IO_intValue(line,chunkPos,2_pInt)
 
        case ('initialtemperature','initialt')
          thermal_initialT(section) = IO_floatValue(line,chunkPos,2_pInt)
@@ -560,9 +592,11 @@ subroutine material_parseHomogenization(fileUnit,myPart)
  do p=1_pInt, Nsections
    homogenization_typeInstance(p)  = count(homogenization_type(1:p)  == homogenization_type(p))
    thermal_typeInstance(p)         = count(thermal_type       (1:p)  == thermal_type       (p))
+   solute_typeInstance(p)          = count(solute_type        (1:p)  == solute_type        (p))
  enddo
 
- homogenization_maxNgrains = maxval(homogenization_Ngrains,homogenization_active)
+ homogenization_maxNgrains     = maxval(homogenization_Ngrains,    homogenization_active)
+ homogenization_maxNcomponents = maxval(homogenization_Ncomponents,homogenization_active)
 
 end subroutine material_parseHomogenization
 
@@ -744,6 +778,7 @@ subroutine material_parsePhase(fileUnit,myPart)
    IO_isBlank, &
    IO_stringValue, &
    IO_stringPos, &
+   IO_intValue, &
    IO_EOF
 
  implicit none
@@ -773,6 +808,7 @@ subroutine material_parsePhase(fileUnit,myPart)
  allocate(phase_Nsources(Nsections),             source=0_pInt)
  allocate(phase_Nkinematics(Nsections),          source=0_pInt)
  allocate(phase_NstiffnessModifiers(Nsections),  source=0_pInt)
+ allocate(phase_Ncomponents(Nsections),          source=0_pInt)
  allocate(phase_Noutput(Nsections),              source=0_pInt)
  allocate(phase_localPlasticity(Nsections),      source=.false.)
 
@@ -879,6 +915,9 @@ subroutine material_parsePhase(fileUnit,myPart)
 
          end select
 
+       case ('ncomponents')
+         phase_Ncomponents(section) = IO_intValue(line,chunkPos,2_pInt)
+
      end select
    endif
  enddo
@@ -888,6 +927,8 @@ subroutine material_parsePhase(fileUnit,myPart)
    phase_plasticityInstance(p)  = count(phase_plasticity(1:p)  == phase_plasticity(p))
    phase_chemicalFEInstance(p)  = count(phase_chemicalFE(1:p)  == phase_chemicalFE(p))
  enddo
+ 
+ phase_maxNcomponents = maxval(phase_Ncomponents)
 
 end subroutine material_parsePhase
 

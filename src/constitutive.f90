@@ -965,8 +965,10 @@ function constitutive_postResults(Tstar_v, FeArray, ipc, ip, el)
    mesh_maxNips
  use material, only: &
    plasticState, &
+   chemicalState, &
    sourceState, &
    phase_plasticity, &
+   phase_chemicalFE, &
    phase_source, &
    phase_Nsources, &
    material_phase, &
@@ -979,7 +981,9 @@ function constitutive_postResults(Tstar_v, FeArray, ipc, ip, el)
    PLASTICITY_PHENOPOWERLAW_ID, &
    PLASTICITY_DISLOTWIN_ID, &
    PLASTICITY_DISLOUCLA_ID, &
-   PLASTICITY_NONLOCAL_ID
+   PLASTICITY_NONLOCAL_ID, &
+   CHEMICALFE_quadenergy_ID, &
+   CHEMICALFE_thermodynamic_ID
  use plastic_isotropic, only: &
    plastic_isotropic_postResults
  use plastic_phenopowerlaw, only: &
@@ -990,13 +994,18 @@ function constitutive_postResults(Tstar_v, FeArray, ipc, ip, el)
    plastic_disloucla_postResults
  use plastic_nonlocal, only: &
    plastic_nonlocal_postResults
+ use chemicalFE_quadenergy, only: &
+   chemicalFE_quadenergy_postResults  
+ use chemicalFE_thermodynamic, only: &
+   chemicalFE_thermodynamic_postResults  
 
  implicit none
  integer(pInt), intent(in) :: &
    ipc, &                                                                                           !< component-ID of integration point
    ip, &                                                                                            !< integration point
    el                                                                                               !< element
- real(pReal), dimension(plasticState(material_phase(ipc,ip,el))%sizePostResults + &
+ real(pReal), dimension(plasticState (material_phase(ipc,ip,el))%sizePostResults + &
+                        chemicalState(material_phase(ipc,ip,el))%sizePostResults + &
                         sum(sourceState(material_phase(ipc,ip,el))%p(:)%sizePostResults)) :: &
    constitutive_postResults
  real(pReal),  intent(in), dimension(3,3,homogenization_maxNgrains,mesh_maxNips,mesh_NcpElems) :: &
@@ -1034,6 +1043,18 @@ function constitutive_postResults(Tstar_v, FeArray, ipc, ip, el)
      constitutive_postResults(startPos:endPos) = &
        plastic_nonlocal_postResults (Tstar_v,FeArray,ip,el)
  end select plasticityType
+
+ startPos = endPos + 1_pInt
+ endPos = endPos + chemicalState(material_phase(ipc,ip,el))%sizePostResults
+ 
+ chemicalFEType: select case (phase_chemicalFE(material_phase(ipc,ip,el)))
+   case (CHEMICALFE_quadenergy_ID) chemicalFEType
+     constitutive_postResults(startPos:endPos) = &
+       chemicalFE_quadenergy_postResults(ipc,ip,el)
+   case (CHEMICALFE_thermodynamic_ID) chemicalFEType
+     constitutive_postResults(startPos:endPos) = &
+       chemicalFE_thermodynamic_postResults(ipc,ip,el)
+ end select chemicalFEType
 
  SourceLoop: do s = 1_pInt, phase_Nsources(material_phase(ipc,ip,el))
    startPos = endPos + 1_pInt

@@ -67,8 +67,10 @@ program DAMASK_spectral
    homogenization_active, &
    thermal_type, &
    THERMAL_conduction_ID, &
+   solute_type, &
+   SOLUTE_flux_ID, &
    homogenization_type, &
-   HOMOGENIZATION_MULTIPHASE_ID
+   HOMOGENIZATION_multiphase_ID
  use spectral_utilities, only: &
    utilities_init, &
    utilities_destroy, &
@@ -79,12 +81,14 @@ program DAMASK_spectral
    FIELD_UNDEFINED_ID, &
    FIELD_MECH_ID, &
    FIELD_THERMAL_ID, &
+   FIELD_SOLUTE_ID, &
    FIELD_MULTIPHASE_ID
  use spectral_mech_Basic
  use spectral_mech_AL
  use spectral_mech_Polarisation
  use spectral_mech_FEM
  use spectral_thermal
+ use spectral_solute
  use spectral_multiphase
 
 
@@ -169,9 +173,11 @@ program DAMASK_spectral
 !--------------------------------------------------------------------------------------------------
 ! initialize field solver information
  nActiveFields = 1
- if (any(homogenization_active .and. thermal_type         == THERMAL_conduction_ID       )) &
+ if (all(.not. homogenization_active .or. thermal_type         == THERMAL_conduction_ID       )) &
    nActiveFields = nActiveFields + 1
- if (any(homogenization_active .and. homogenization_type  == HOMOGENIZATION_MULTIPHASE_ID)) &
+ if (all(.not. homogenization_active .or. solute_type          == SOLUTE_flux_ID              )) &
+   nActiveFields = nActiveFields + 1
+ if (all(.not. homogenization_active .or. homogenization_type  == HOMOGENIZATION_multiphase_ID)) &
    nActiveFields = nActiveFields + 1
  allocate(solres(nActiveFields))
 
@@ -205,10 +211,14 @@ program DAMASK_spectral
    allocate(loadCases(i)%ID(nActiveFields))
    field = 1
    loadCases(i)%ID(field) = FIELD_MECH_ID           ! mechanical active by default
-   thermalActive:    if (any(homogenization_active .and. thermal_type         == THERMAL_conduction_ID       )) then
+   thermalActive:    if (all(.not. homogenization_active .or. thermal_type         == THERMAL_conduction_ID       )) then
      field = field + 1
      loadCases(i)%ID(field) = FIELD_THERMAL_ID
    endif thermalActive
+   soluteActive:     if (all(.not. homogenization_active .or. solute_type          == SOLUTE_flux_ID              )) then
+     field = field + 1
+     loadCases(i)%ID(field) = FIELD_SOLUTE_ID
+   endif soluteActive
    multiphaseActive: if (any(homogenization_active .and. homogenization_type  == HOMOGENIZATION_MULTIPHASE_ID)) then
      field = field + 1
      loadCases(i)%ID(field) = FIELD_MULTIPHASE_ID
@@ -391,6 +401,9 @@ program DAMASK_spectral
       case(FIELD_THERMAL_ID)
        call spectral_thermal_init
 
+      case(FIELD_SOLUTE_ID)
+       call spectral_solute_init
+
       case(FIELD_MULTIPHASE_ID)
        call spectral_multiphase_init
 
@@ -562,6 +575,8 @@ program DAMASK_spectral
 
              case(FIELD_THERMAL_ID); call spectral_thermal_forward()
 
+             case(FIELD_SOLUTE_ID); call spectral_solute_forward()
+
              case(FIELD_MULTIPHASE_ID); call spectral_multiphase_forward()
 
            end select
@@ -604,6 +619,9 @@ program DAMASK_spectral
 
                case(FIELD_THERMAL_ID)
                  solres(field) = spectral_thermal_solution(timeinc,timeIncOld,remainingLoadCaseTime)
+
+               case(FIELD_SOLUTE_ID)
+                 solres(field) = spectral_solute_solution(timeinc,timeIncOld)
 
                case(FIELD_MULTIPHASE_ID)
                  solres(field) = spectral_multiphase_solution(timeinc,timeIncOld)
@@ -730,6 +748,8 @@ subroutine quit(stop_id)
    FEM_destroy
  use spectral_thermal, only: &
    spectral_thermal_destroy
+ use spectral_solute, only: &
+   spectral_solute_destroy
  use spectral_multiphase, only: &
    spectral_multiphase_destroy
  use spectral_utilities, only: &
@@ -753,6 +773,7 @@ subroutine quit(stop_id)
  call Polarisation_destroy()
  call FEM_destroy()
  call spectral_thermal_destroy()
+ call spectral_solute_destroy()
  call spectral_multiphase_destroy()
  call utilities_destroy()
 

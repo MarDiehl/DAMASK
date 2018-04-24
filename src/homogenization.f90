@@ -35,7 +35,8 @@ module homogenization
  integer(pInt),                                      public, protected  :: &
    materialpoint_sizeResults, &
    homogenization_maxSizePostResults, &
-   thermal_maxSizePostResults
+   thermal_maxSizePostResults, &
+   solute_maxSizePostResults
 
  real(pReal),   dimension(:,:,:,:),     allocatable, private :: &
    materialpoint_subF0, &                                                                           !< def grad of IP at beginning of homogenization increment
@@ -104,6 +105,8 @@ subroutine homogenization_init
  use thermal_isothermal
  use thermal_adiabatic
  use thermal_conduction
+ use solute_isoconc
+ use solute_flux
  use IO
  use numerics, only: &
    worldrank
@@ -143,6 +146,14 @@ subroutine homogenization_init
    call thermal_adiabatic_init(FILEUNIT)
  if (any(thermal_type == THERMAL_conduction_ID)) &
    call thermal_conduction_init(FILEUNIT)
+
+!--------------------------------------------------------------------------------------------------
+! parse solute from config file
+ call IO_checkAndRewind(FILEUNIT)
+ if (any(solute_type == SOLUTE_isoconc_ID)) &
+   call solute_isoconc_init(FILEUNIT)
+ if (any(solute_type == SOLUTE_flux_ID)) &
+   call solute_flux_init(FILEUNIT)
 
 !--------------------------------------------------------------------------------------------------
 ! write description file for homogenization output
@@ -215,6 +226,28 @@ subroutine homogenization_init
            enddo
          endif
        endif
+       i = solute_typeInstance(p)                                                                   ! which instance of this solute type
+       valid = .true.                                                                               ! assume valid
+       select case(solute_type(p))                                                                  ! split per solute type
+         case (SOLUTE_isoconc_ID)
+           outputName = SOLUTE_isoconc_label
+           thisNoutput => solute_isoconc_Noutput
+           thisOutput => solute_isoconc_output
+           thisSize   => solute_isoconc_sizePostResult
+         case (SOLUTE_flux_ID)
+           outputName = SOLUTE_flux_label
+           thisNoutput => solute_flux_Noutput
+           thisOutput => solute_flux_output
+           thisSize   => solute_flux_sizePostResult
+         case default
+           valid = .false.
+       end select
+       if (valid) then
+         write(FILEUNIT,'(a)') '(solute)'//char(9)//trim(outputName)
+         do e = 1,thisNoutput(i)
+           write(FILEUNIT,'(a,i4)') trim(thisOutput(e,i))//char(9),thisSize(e,i)
+         enddo
+       endif
      endif
    enddo
    close(FILEUNIT)
@@ -241,9 +274,11 @@ subroutine homogenization_init
 ! allocate and initialize global state and postresutls variables
  homogenization_maxSizePostResults = 0_pInt
  thermal_maxSizePostResults        = 0_pInt
+ solute_maxSizePostResults         = 0_pInt
  do p = 1,material_Nhomogenization
-   homogenization_maxSizePostResults = max(homogenization_maxSizePostResults,homogState       (p)%sizePostResults)
-   thermal_maxSizePostResults        = max(thermal_maxSizePostResults,       thermalState     (p)%sizePostResults)
+   homogenization_maxSizePostResults = max(homogenization_maxSizePostResults,homogState  (p)%sizePostResults)
+   thermal_maxSizePostResults        = max(thermal_maxSizePostResults,       thermalState(p)%sizePostResults)
+   solute_maxSizePostResults         = max(solute_maxSizePostResults,        soluteState (p)%sizePostResults)
  enddo
 
 #ifdef FEM
@@ -251,8 +286,9 @@ subroutine homogenization_init
  allocate(crystalliteOutput(material_Ncrystallite,  homogenization_maxNgrains))
  allocate(phaseOutput      (material_Nphase,        homogenization_maxNgrains))
  do p = 1, material_Nhomogenization
-   homogOutput(p)%sizeResults = homogState       (p)%sizePostResults + &
-                                thermalState     (p)%sizePostResults
+   homogOutput(p)%sizeResults = homogState  (p)%sizePostResults + &
+                                thermalState(p)%sizePostResults + &
+                                soluteState (p)%sizePostResults
    homogOutput(p)%sizeIpCells = count(material_homog==p)
    allocate(homogOutput(p)%output(homogOutput(p)%sizeResults,homogOutput(p)%sizeIpCells))
  enddo
@@ -264,6 +300,7 @@ subroutine homogenization_init
  enddo; enddo
  do p = 1, material_Nphase; do e = 1, homogenization_maxNgrains
    phaseOutput(p,e)%sizeResults = plasticState    (p)%sizePostResults + &
+                                  chemicalState   (p)%sizePostResults + &
                                   sum(sourceState (p)%p(:)%sizePostResults)
    phaseOutput(p,e)%sizeIpCells = count(material_phase(e,:,:) == p)
    allocate(phaseOutput(p,e)%output(phaseOutput(p,e)%sizeResults,phaseOutput(p,e)%sizeIpCells))
@@ -272,6 +309,7 @@ subroutine homogenization_init
  materialpoint_sizeResults = 1 &                                                                    ! grain count
                            + 1 + homogenization_maxSizePostResults &                                ! homogSize & homogResult
                                + thermal_maxSizePostResults        &
+                               + solute_maxSizePostResults         &
                            + homogenization_maxNgrains * (1 + crystallite_maxSizePostResults &      ! crystallite size & crystallite results
                                                         + 1 + constitutive_plasticity_maxSizePostResults &     ! constitutive size & constitutive results
                                                             + constitutive_source_maxSizePostResults)
@@ -336,9 +374,11 @@ subroutine materialpoint_stressAndItsTangent(updateJaco,dt)
    mesh_element
  use material, only: &
    plasticState, &
+   chemicalState, &
    sourceState, &
    homogState, &
    thermalState, &
+   soluteState, &
    phase_Nsources, &
    phasefrac, &
    phasefracMapping, &
@@ -416,6 +456,8 @@ subroutine materialpoint_stressAndItsTangent(updateJaco,dt)
 
      plasticState    (phaseAt(g,i,e))%partionedState0(:,phasememberAt(g,i,e)) = &
      plasticState    (phaseAt(g,i,e))%state0(         :,phasememberAt(g,i,e))
+     chemicalState   (phaseAt(g,i,e))%partionedState0(:,phasememberAt(g,i,e)) = &
+     chemicalState   (phaseAt(g,i,e))%state0(         :,phasememberAt(g,i,e))
      do mySource = 1_pInt, phase_Nsources(phaseAt(g,i,e))
        sourceState(phaseAt(g,i,e))%p(mySource)%partionedState0(:,phasememberAt(g,i,e)) = &
        sourceState(phaseAt(g,i,e))%p(mySource)%state0(         :,phasememberAt(g,i,e))
@@ -445,6 +487,10 @@ subroutine materialpoint_stressAndItsTangent(updateJaco,dt)
      thermalState(mappingHomogenization(2,i,e))%sizeState > 0_pInt) &
        thermalState(mappingHomogenization(2,i,e))%subState0(:,mappingHomogenization(1,i,e)) = &
        thermalState(mappingHomogenization(2,i,e))%State0(   :,mappingHomogenization(1,i,e))         ! ...internal thermal state
+   forall(i = FEsolving_execIP(1,e):FEsolving_execIP(2,e), &
+     soluteState(mappingHomogenization(2,i,e))%sizeState > 0_pInt) &
+       soluteState(mappingHomogenization(2,i,e))%subState0(:,mappingHomogenization(1,i,e)) = &
+       soluteState(mappingHomogenization(2,i,e))%State0(   :,mappingHomogenization(1,i,e))         ! ...internal solute state
  enddo
  NiterationHomog = 0_pInt
 
@@ -502,6 +548,8 @@ subroutine materialpoint_stressAndItsTangent(updateJaco,dt)
            do g = 1,myNgrains
              plasticState    (phaseAt(g,i,e))%partionedState0(:,phasememberAt(g,i,e)) = &
              plasticState    (phaseAt(g,i,e))%state(          :,phasememberAt(g,i,e))
+             chemicalState   (phaseAt(g,i,e))%partionedState0(:,phasememberAt(g,i,e)) = &
+             chemicalState   (phaseAt(g,i,e))%state(          :,phasememberAt(g,i,e))
              do mySource = 1_pInt, phase_Nsources(phaseAt(g,i,e))
                sourceState(phaseAt(g,i,e))%p(mySource)%partionedState0(:,phasememberAt(g,i,e)) = &
                sourceState(phaseAt(g,i,e))%p(mySource)%state(          :,phasememberAt(g,i,e))
@@ -516,6 +564,10 @@ subroutine materialpoint_stressAndItsTangent(updateJaco,dt)
              thermalState(mappingHomogenization(2,i,e))%sizeState > 0_pInt) &
                thermalState(mappingHomogenization(2,i,e))%subState0(:,mappingHomogenization(1,i,e)) = &
                thermalState(mappingHomogenization(2,i,e))%State(    :,mappingHomogenization(1,i,e)) ! ...internal thermal state
+           forall(i = FEsolving_execIP(1,e):FEsolving_execIP(2,e), &
+             soluteState(mappingHomogenization(2,i,e))%sizeState > 0_pInt) &
+               soluteState(mappingHomogenization(2,i,e))%subState0(:,mappingHomogenization(1,i,e)) = &
+               soluteState(mappingHomogenization(2,i,e))%State(    :,mappingHomogenization(1,i,e)) ! ...internal solute state
            materialpoint_subF0(1:3,1:3,i,e) = materialpoint_subF(1:3,1:3,i,e)                       ! ...def grad
            !$OMP FLUSH(materialpoint_subF0)
          elseif (materialpoint_requested(i,e)) then steppingNeeded                                  ! already at final time (??)
@@ -571,6 +623,8 @@ subroutine materialpoint_stressAndItsTangent(updateJaco,dt)
            do g = 1, myNgrains
              plasticState    (phaseAt(g,i,e))%state(          :,phasememberAt(g,i,e)) = &
              plasticState    (phaseAt(g,i,e))%partionedState0(:,phasememberAt(g,i,e))
+             chemicalState   (phaseAt(g,i,e))%state(          :,phasememberAt(g,i,e)) = &
+             chemicalState   (phaseAt(g,i,e))%partionedState0(:,phasememberAt(g,i,e))
              do mySource = 1_pInt, phase_Nsources(phaseAt(g,i,e))
                sourceState(phaseAt(g,i,e))%p(mySource)%state(          :,phasememberAt(g,i,e)) = &
                sourceState(phaseAt(g,i,e))%p(mySource)%partionedState0(:,phasememberAt(g,i,e))
@@ -584,6 +638,10 @@ subroutine materialpoint_stressAndItsTangent(updateJaco,dt)
              thermalState(mappingHomogenization(2,i,e))%sizeState > 0_pInt) &
                thermalState(mappingHomogenization(2,i,e))%State(    :,mappingHomogenization(1,i,e)) = &
                thermalState(mappingHomogenization(2,i,e))%subState0(:,mappingHomogenization(1,i,e)) ! ...internal thermal state
+           forall(i = FEsolving_execIP(1,e):FEsolving_execIP(2,e), &
+             soluteState(mappingHomogenization(2,i,e))%sizeState > 0_pInt) &
+               soluteState(mappingHomogenization(2,i,e))%State(    :,mappingHomogenization(1,i,e)) = &
+               soluteState(mappingHomogenization(2,i,e))%subState0(:,mappingHomogenization(1,i,e)) ! ...internal solute state
          endif
        endif converged
 
@@ -708,8 +766,10 @@ subroutine materialpoint_postResults
 #else
    homogState, &
    thermalState, &
+   soluteState, &
 #endif
    plasticState, &
+   chemicalState, &
    sourceState, &
    material_phase, &
    homogenization_Ngrains, &
@@ -763,6 +823,7 @@ subroutine materialpoint_postResults
        myPhase = phaseAt(g,i,e)
        crystalliteResults(1:1+crystallite_sizePostResults(myCrystallite) + &
                             1+plasticState(myPhase)%sizePostResults + &
+                              chemicalState(myPhase)%sizePostResults + &
                               sum(sourceState(myPhase)%p(:)%sizePostResults)) = crystallite_postResults(g,i,e)
        if (microstructure_crystallite(mesh_element(4,e)) == myCrystallite .and. &
            homogenization_Ngrains    (mesh_element(3,e)) >= g) then
@@ -778,6 +839,7 @@ subroutine materialpoint_postResults
              crystalliteResults(3 + crystalliteOutput(myCrystallite,g)%sizeResults: &
                                 1 + crystalliteOutput(myCrystallite,g)%sizeResults + &
                                 1 + plasticState    (myphase)%sizePostResults + &
+                                    chemicalState   (myPhase)%sizePostResults + &
                                     sum(sourceState(myphase)%p(:)%sizePostResults))
        endif
      enddo grainLooping
@@ -792,8 +854,9 @@ subroutine materialpoint_postResults
      IpLooping: do i = FEsolving_execIP(1,e),FEsolving_execIP(2,e)
        thePos = 0_pInt
 
-       theSize = homogState       (mappingHomogenization(2,i,e))%sizePostResults &
-               + thermalState     (mappingHomogenization(2,i,e))%sizePostResults 
+       theSize = homogState  (mappingHomogenization(2,i,e))%sizePostResults &
+               + thermalState(mappingHomogenization(2,i,e))%sizePostResults &
+               + soluteState (mappingHomogenization(2,i,e))%sizePostResults 
        materialpoint_results(thePos+1,i,e) = real(theSize,pReal)                                    ! tell size of homogenization results
        thePos = thePos + 1_pInt
 
@@ -808,6 +871,7 @@ subroutine materialpoint_postResults
        grainLooping :do g = 1,myNgrains
          theSize = 1 + crystallite_sizePostResults(myCrystallite) + &
                    1 + plasticState    (material_phase(g,i,e))%sizePostResults + &                    !ToDo
+                       chemicalState   (material_phase(g,i,e))%sizePostResults + &
                        sum(sourceState(material_phase(g,i,e))%p(:)%sizePostResults)
          materialpoint_results(thePos+1:thePos+theSize,i,e) = crystallite_postResults(g,i,e)        ! tell crystallite results
          thePos = thePos + theSize
@@ -1027,6 +1091,7 @@ function homogenization_postResults(ip,el)
    mappingHomogenization, &
    homogState, &
    thermalState, &
+   soluteState, &
    homogenization_type, &
    thermal_type, &
    HOMOGENIZATION_NONE_ID, &
@@ -1035,7 +1100,9 @@ function homogenization_postResults(ip,el)
    HOMOGENIZATION_RGC_ID, &
    THERMAL_isothermal_ID, &
    THERMAL_adiabatic_ID, &
-   THERMAL_conduction_ID
+   THERMAL_conduction_ID, &
+   SOLUTE_isoconc_ID, &
+   SOLUTE_flux_ID
  use homogenization_isostrain, only: &
    homogenization_isostrain_postResults
  use homogenization_multiphase, only: &
@@ -1046,13 +1113,18 @@ function homogenization_postResults(ip,el)
    thermal_adiabatic_postResults
  use thermal_conduction, only: &
    thermal_conduction_postResults
+ use solute_isoconc, only: &
+   solute_isoconc_postResults
+ use solute_flux, only: &
+   solute_flux_postResults
 
  implicit none
  integer(pInt), intent(in) :: &
    ip, &                                                                                            !< integration point
    el                                                                                               !< element number
- real(pReal), dimension(  homogState       (mappingHomogenization(2,ip,el))%sizePostResults &
-                        + thermalState     (mappingHomogenization(2,ip,el))%sizePostResults) :: &
+ real(pReal), dimension(  homogState  (mappingHomogenization(2,ip,el))%sizePostResults &
+                        + thermalState(mappingHomogenization(2,ip,el))%sizePostResults &
+                        + soluteState (mappingHomogenization(2,ip,el))%sizePostResults) :: &
    homogenization_postResults
  integer(pInt) :: &
    startPos, endPos
@@ -1101,6 +1173,17 @@ function homogenization_postResults(ip,el)
      homogenization_postResults(startPos:endPos) = &
        thermal_conduction_postResults(ip, el)
  end select chosenThermal
+
+ startPos = endPos + 1_pInt
+ endPos   = endPos + soluteState(mappingHomogenization(2,ip,el))%sizePostResults
+ chosenSolute: select case (thermal_type(mesh_element(3,el)))
+   case (SOLUTE_isoconc_ID) chosenSolute
+     homogenization_postResults(startPos:endPos) = &
+       solute_isoconc_postResults(ip, el)
+   case (SOLUTE_flux_ID) chosenSolute
+     homogenization_postResults(startPos:endPos) = &
+       solute_flux_postResults(ip, el)
+ end select chosenSolute
 
 end function homogenization_postResults
 

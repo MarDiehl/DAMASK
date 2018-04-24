@@ -325,8 +325,6 @@ end function spectral_multiphase_solution
 !> @brief forms the residual vector
 !--------------------------------------------------------------------------------------------------
 subroutine spectral_multiphase_formResidual(da_local,solution_current_local,residual_current_local,dummy,ierr)
- use mesh, only: &
-   grid
  use homogenization_multiphase, only: &
    homogenization_multiphase_getPhaseFlux, &
    homogenization_multiphase_getPhaseSource
@@ -346,7 +344,7 @@ subroutine spectral_multiphase_formResidual(da_local,solution_current_local,resi
                          phi_grad(3,NActivePhases)
  real(pReal)          :: phi_source(NActivePhases), &
                          phi_flux(3,NActivePhases)
- PetscInt             :: i, j, k, phase, cell
+ PetscInt             :: i, j, k, cell
  PetscObject          :: dummy
  PetscErrorCode       :: ierr
 
@@ -407,8 +405,6 @@ end subroutine spectral_multiphase_formResidual
 subroutine spectral_multiphase_formJacobian(da_local,solution_current_local,Jac_pre,Jac,dummy,ierr)
  use math, only: &
    math_identity2nd
- use mesh, only: &
-   grid
  use homogenization_multiphase, only: &
    homogenization_multiphase_getPhaseFluxTangent, &
    homogenization_multiphase_getPhaseSourceTangent

@@ -26,7 +26,8 @@ module spectral_utilities
    enumerator :: FIELD_UNDEFINED_ID, &
                  FIELD_MECH_ID, &
                  FIELD_THERMAL_ID, &
-                 FIELD_MULTIPHASE_ID
+                 FIELD_MULTIPHASE_ID, &
+                 FIELD_SOLUTE_ID
  end enum
 
 !--------------------------------------------------------------------------------------------------
@@ -144,6 +145,7 @@ module spectral_utilities
    FIELD_UNDEFINED_ID, &
    FIELD_MECH_ID, &
    FIELD_THERMAL_ID, &
+   FIELD_SOLUTE_ID, &
    FIELD_MULTIPHASE_ID
  private :: &
    utilities_getFreqDerivative
