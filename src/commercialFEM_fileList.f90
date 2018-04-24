@@ -37,5 +37,7 @@
 #include "thermal_isothermal.f90"
 #include "thermal_adiabatic.f90"
 #include "thermal_conduction.f90"
+#include "solute_isoconc.f90"
+#include "solute_flux.f90"
 #include "homogenization.f90"
 #include "CPFEM.f90"
