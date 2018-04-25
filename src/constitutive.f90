@@ -809,6 +809,7 @@ subroutine constitutive_collectDotState(Tstar_v, FeArray, FpArray, subdt, subfra
    mesh_maxNips
  use material, only: &
    phase_plasticity, &
+   phase_chemicalFE, &
    phase_source, &
    phase_Nsources, &
    material_phase, &
@@ -822,6 +823,8 @@ subroutine constitutive_collectDotState(Tstar_v, FeArray, FpArray, subdt, subfra
    PLASTICITY_dislotwin_ID, &
    PLASTICITY_disloucla_ID, &
    PLASTICITY_nonlocal_ID, &
+   CHEMICALFE_quadenergy_ID, &
+   CHEMICALFE_thermodynamic_ID, &
    SOURCE_thermal_externalheat_ID
  use plastic_isotropic, only:  &
    plastic_isotropic_dotState
@@ -833,6 +836,10 @@ subroutine constitutive_collectDotState(Tstar_v, FeArray, FpArray, subdt, subfra
    plastic_disloucla_dotState
  use plastic_nonlocal, only: &
    plastic_nonlocal_dotState
+ use chemicalFE_quadenergy, only: &
+   chemicalFE_quadenergy_dotState  
+ use chemicalFE_thermodynamic, only: &
+   chemicalFE_thermodynamic_dotState  
  use source_thermal_externalheat, only: &
    source_thermal_externalheat_dotState
 
@@ -881,6 +888,13 @@ subroutine constitutive_collectDotState(Tstar_v, FeArray, FpArray, subdt, subfra
      call plastic_nonlocal_dotState     (Tstar_v,FeArray,FpArray,temperature(ho)%p(tme), &
                                          subdt,subfracArray,ip,el)
  end select plasticityType
+
+ chemicalType: select case (phase_chemicalFE(material_phase(ipc,ip,el)))
+   case (CHEMICALFE_quadenergy_ID) chemicalType
+     call chemicalFE_quadenergy_dotState   (ipc,ip,el)
+   case (CHEMICALFE_thermodynamic_ID) chemicalType
+     call chemicalFE_thermodynamic_dotState(ipc,ip,el)
+ end select chemicalType
 
  SourceLoop: do s = 1_pInt, phase_Nsources(material_phase(ipc,ip,el))
     sourceType: select case (phase_source(s,material_phase(ipc,ip,el)))

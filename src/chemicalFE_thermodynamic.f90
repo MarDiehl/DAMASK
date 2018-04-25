@@ -48,6 +48,7 @@ module chemicalFE_thermodynamic
 
  public :: &
    chemicalFE_thermodynamic_init, &
+   chemicalFE_thermodynamic_dotState, &
    chemicalFE_thermodynamic_getEnergy, &
    chemicalFE_thermodynamic_getChemPot, &
    chemicalFE_thermodynamic_getConc, &
@@ -91,6 +92,7 @@ subroutine chemicalFE_thermodynamic_init(fileUnit)
  use material, only: &
    chemConcMapping, &
    chemicalConc, &
+   chemicalConcRate, &
    phasememberAt, &
    phase_chemicalFE, &
    phase_chemicalFEInstance, &
@@ -285,7 +287,7 @@ subroutine chemicalFE_thermodynamic_init(fileUnit)
 !--------------------------------------------------------------------------------------------------
 ! allocate state arrays
      sizeState = phase_Ncomponents(phase)
-     sizeDotState = 0_pInt
+     sizeDotState = phase_Ncomponents(phase)
      sizeDeltaState = 0_pInt
      chemicalState(phase)%sizeState = sizeState
      chemicalState(phase)%sizeDotState = sizeDotState
@@ -311,7 +313,8 @@ subroutine chemicalFE_thermodynamic_init(fileUnit)
        chemicalState(phase)%state0   (j,1:NipcMyPhase) = param(instance)%InitialConc(j)
        chemicalState(phase)%subState0(j,1:NipcMyPhase) = param(instance)%InitialConc(j)
        chemicalState(phase)%state    (j,1:NipcMyPhase) = param(instance)%InitialConc(j)
-       chemicalConc(j,phase)%p => chemicalState(phase)%state(j,1:NipcMyPhase)
+       chemicalConc (j,phase)%p => chemicalState(phase)%state (j,1:NipcMyPhase)
+       allocate(chemicalConcRate(j,phase)%p(NipcMyPhase), source=0.0_pReal)
        param(instance)%chemicalConc0 => chemicalState(phase)%state0
      enddo
    endif myPhase2
@@ -319,6 +322,32 @@ subroutine chemicalFE_thermodynamic_init(fileUnit)
 
 end subroutine chemicalFE_thermodynamic_init
 
+
+!--------------------------------------------------------------------------------------------------
+!> @brief returns the chemical concentration rates
+!--------------------------------------------------------------------------------------------------
+subroutine chemicalFE_thermodynamic_dotState(ipc,ip,el)
+ use material, only: &
+   chemicalState, &
+   chemicalConcRate, &
+   chemConcMapping, &
+   material_phase, &
+   phase_Ncomponents
+   
+ implicit none
+ integer(pInt), intent(in) :: &
+   ipc, ip, el
+ integer(pInt) :: &
+   cp, &
+   phase
+
+ phase = material_phase(ipc,ip,el) 
+ do cp = 1_pInt, phase_Ncomponents(phase)
+   chemicalState(phase)%dotState(cp,chemConcMapping(phase)%p(ipc,ip,el)) = &
+     chemicalConcRate(cp,phase)%p(chemConcMapping(phase)%p(ipc,ip,el))
+ enddo
+
+end subroutine chemicalFE_thermodynamic_dotState
 
 !--------------------------------------------------------------------------------------------------
 !> @brief returns the chemical energy for a given instance of this model

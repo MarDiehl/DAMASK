@@ -47,6 +47,7 @@ module chemicalFE_quadenergy
 
  public :: &
    chemicalFE_quadenergy_init, &
+   chemicalFE_quadenergy_dotState, &
    chemicalFE_quadenergy_getEnergy, &
    chemicalFE_quadenergy_getChemPot, &
    chemicalFE_quadenergy_getConc, &
@@ -92,6 +93,7 @@ subroutine chemicalFE_quadenergy_init(fileUnit)
  use material, only: &
    chemConcMapping, &
    chemicalConc, &
+   chemicalConcRate, &
    phasememberAt, &
    phase_chemicalFE, &
    phase_chemicalFEInstance, &
@@ -313,7 +315,7 @@ subroutine chemicalFE_quadenergy_init(fileUnit)
      enddo outputsLoop
 !--------------------------------------------------------------------------------------------------
 ! allocate state arrays
-     sizeState = 0_pInt
+     sizeState = phase_Ncomponents(phase)
      sizeDotState = sizeState
      sizeDeltaState = 0_pInt
      chemicalState(phase)%sizeState = sizeState
@@ -338,13 +340,43 @@ subroutine chemicalFE_quadenergy_init(fileUnit)
 
      chemConcMapping(phase)%p => phasememberAt
      do j = 1_pInt, phase_Ncomponents(phase)
-       allocate(chemicalConc(j,phase)%p(NipcMyPhase), source=param(instance)%InitialConc(j))
+       chemicalState(phase)%state0   (j,1:NipcMyPhase) = param(instance)%InitialConc(j)
+       chemicalState(phase)%subState0(j,1:NipcMyPhase) = param(instance)%InitialConc(j)
+       chemicalState(phase)%state    (j,1:NipcMyPhase) = param(instance)%InitialConc(j)
+       chemicalConc (j,phase)%p => chemicalState(phase)%state (j,1:NipcMyPhase)
+       allocate(chemicalConcRate(j,phase)%p(NipcMyPhase), source=0.0_pReal)
      enddo
    endif myPhase2
  enddo initializeInstances   
 
 end subroutine chemicalFE_quadenergy_init
 
+
+!--------------------------------------------------------------------------------------------------
+!> @brief returns the chemical concentration rates
+!--------------------------------------------------------------------------------------------------
+subroutine chemicalFE_quadenergy_dotState(ipc,ip,el)
+ use material, only: &
+   chemicalState, &
+   chemicalConcRate, &
+   chemConcMapping, &
+   material_phase, &
+   phase_Ncomponents
+   
+ implicit none
+ integer(pInt), intent(in) :: &
+   ipc, ip, el
+ integer(pInt) :: &
+   cp, &
+   phase
+
+ phase = material_phase(ipc,ip,el) 
+ do cp = 1_pInt, phase_Ncomponents(phase)
+   chemicalState(phase)%dotState(cp,chemConcMapping(phase)%p(ipc,ip,el)) = &
+     chemicalConcRate(cp,phase)%p(chemConcMapping(phase)%p(ipc,ip,el))
+ enddo
+
+end subroutine chemicalFE_quadenergy_dotState
 
 !--------------------------------------------------------------------------------------------------
 !> @brief returns the chemical energy for a given instance of this model

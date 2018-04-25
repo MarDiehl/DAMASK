@@ -43,6 +43,7 @@ subroutine chemicalFE_none_init
  use material, only: &
    chemConcMapping, &
    chemicalConc, &
+   chemicalConcRate, &
    phase_Ncomponents, &
    phaseconstmemberAt, &
    phase_chemicalFE, &
@@ -101,7 +102,8 @@ subroutine chemicalFE_none_init
        allocate(chemicalState(phase)%RKCK45dotState (6,sizeDotState,NofMyPhase))
      chemConcMapping(phase)%p => phaseconstmemberAt
      do comp = 1_pInt, phase_Ncomponents(phase)
-       allocate(chemicalConc(comp,phase)%p(1), source=0.0_pReal)
+       allocate(chemicalConc    (comp,phase)%p(1), source=0.0_pReal)
+       allocate(chemicalConcRate(comp,phase)%p(1), source=0.0_pReal)
      enddo
    endif
  enddo initializeInstances
