@@ -267,7 +267,8 @@ module material
 
  type(p_vec),                             dimension(:,:),  allocatable,  public            :: &
    phasefrac, &                                                                                     !< phase fraction field
-   chemicalConc, &                                                                                  !< component concentration field
+   chemicalConc, &                                                                                  !< current component concentration field
+   chemicalConc0, &                                                                                 !< previous component concentration field
    chemicalConcRate                                                                                 !< component concentration rate field
 
  public :: &
@@ -383,6 +384,8 @@ subroutine material_init()
  enddo
  allocate(chemConcMapping    (material_Nphase))
  allocate(chemicalConc       (phase_maxNcomponents,&
+                              material_Nphase))
+ allocate(chemicalConc0      (phase_maxNcomponents,&
                               material_Nphase))
  allocate(chemicalConcRate   (phase_maxNcomponents,&
                               material_Nphase))

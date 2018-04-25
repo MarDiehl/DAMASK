@@ -81,8 +81,8 @@ subroutine spectral_solute_init
    material_homog, &   
    material_Nhomogenization
  use solute_flux, only: &
-   solute_flux_getComponentPotential, &
-   solute_flux_getComponentConc  
+   solute_flux_getInitialComponentPotential, &
+   solute_flux_getComponentConc
    
  implicit none
  DM :: solute_grid
@@ -152,10 +152,9 @@ subroutine spectral_solute_init
  do k = zstart, zend;  do j = ystart, yend;  do i = xstart, xend
    cell = cell + 1_pInt
    homog = material_homog(1,cell)
-   x_scal(          0:  Ncomponents-1,i,j,k) = solute_flux_getComponentPotential(1,cell)
-   x_scal(Ncomponents:2*Ncomponents-1,i,j,k) = solute_flux_getComponentConc(x_scal(0: Ncomponents-1,i,j,k), &
-                                                                            1,cell)
-   conc_current(1:Ncomponents,i,j,k) = x_scal(Ncomponents:2*Ncomponents-1,i,j,k)
+   x_scal(          0:  Ncomponents-1,i,j,k) = solute_flux_getInitialComponentPotential(1,cell)
+   x_scal(Ncomponents:2*Ncomponents-1,i,j,k) = solute_flux_getComponentConc(1,cell)
+   conc_current(    1:  Ncomponents  ,i,j,k) = solute_flux_getComponentConc(1,cell)
  enddo; enddo; enddo
  call DMDAVecRestoreArrayF90(solute_grid,solution_current,x_scal,ierr)
  CHKERRQ(ierr)
@@ -182,7 +181,7 @@ type(tSolutionState) function spectral_solute_solution(timeinc,timeinc_old)
  use spectral_utilities, only: &
    wgt
  use solute_flux, only: &
-   solute_flux_putComponentConc
+   solute_flux_calAndPutComponentConcRate
 
  implicit none
 
@@ -236,7 +235,9 @@ type(tSolutionState) function spectral_solute_solution(timeinc,timeinc_old)
      avgConc (comp) = avgConc(comp) + conc_current(comp,i,j,k)
      stagNorm(comp) = max(stagNorm(comp),abs(conc_current(comp,i,j,k) - conc_stagInc(comp,i,j,k)))
    enddo    
-   call solute_flux_putComponentConc(x_scal_current(0:Ncomponents-1,i,j,k),1,cell)
+   call solute_flux_calAndPutComponentConcRate(x_scal_current(          0:  Ncomponents-1,i,j,k), &
+                                               x_scal_current(Ncomponents:2*Ncomponents-1,i,j,k), &
+                                               params%timeinc,1,cell)
  enddo; enddo; enddo
  call MPI_Allreduce(MPI_IN_PLACE,minConc ,Ncomponents  ,MPI_DOUBLE,MPI_MIN,PETSC_COMM_WORLD,ierr)
  call MPI_Allreduce(MPI_IN_PLACE,maxConc ,Ncomponents  ,MPI_DOUBLE,MPI_MAX,PETSC_COMM_WORLD,ierr)
@@ -274,7 +275,7 @@ subroutine spectral_solute_formResidual(da_local,solution_current_local,residual
  use numerics, only: &
    charLength
  use solute_flux, only: &
-   solute_flux_getComponentConc, &
+   solute_flux_calComponentConcandTangent, &
    solute_flux_getComponentMobility
 
  implicit none
@@ -286,6 +287,9 @@ subroutine spectral_solute_formResidual(da_local,solution_current_local,residual
                          residual_current_scal(:,:,:,:)
  PetscScalar          :: solution_current_elem(4,2*Ncomponents), &
                          residual_current_elem(4,2*Ncomponents)
+ real(pReal)          :: Conc         (Ncomponents), &
+                         dConcdChemPot(Ncomponents,Ncomponents), &
+                         dConcdGradC  (Ncomponents,Ncomponents)
  PetscInt             :: i, j, k, cell
  PetscObject          :: dummy
  PetscErrorCode       :: ierr
@@ -309,7 +313,11 @@ subroutine spectral_solute_formResidual(da_local,solution_current_local,residual
    solution_current_elem(4,            1:  Ncomponents) = solution_current_scal(          0:  Ncomponents-1,i  ,j  ,k+1)      
    solution_current_elem(4,Ncomponents+1:2*Ncomponents) = solution_current_scal(Ncomponents:2*Ncomponents-1,i  ,j  ,k+1)
    
-   conc_current(1:Ncomponents,i,j,k) = solute_flux_getComponentConc(solution_current_elem(1,1:Ncomponents),1,cell)
+   call solute_flux_calComponentConcandTangent(Conc,dConcdChemPot,dConcdGradC, & 
+                                               solution_current_scal(          0:  Ncomponents-1,i,j,k), &
+                                               solution_current_scal(Ncomponents:2*Ncomponents-1,i,j,k), &
+                                               1,cell)
+   conc_current(1:Ncomponents,i,j,k) = Conc
    
    residual_current_elem = 0.0_pReal
    residual_current_elem(1  ,            1:  Ncomponents) = &
@@ -354,7 +362,7 @@ subroutine spectral_solute_formJacobian(da_local,solution_current_local,Jac_pre,
  use numerics, only: &
    charLength
  use solute_flux, only: &
-   solute_flux_getComponentConcTangent, &
+   solute_flux_calComponentConcandTangent, &
    solute_flux_getComponentMobility
 
  implicit none
@@ -365,9 +373,10 @@ subroutine spectral_solute_formJacobian(da_local,solution_current_local,Jac_pre,
  MatStencil           :: col(4,8*Ncomponents)
  PetscScalar, pointer :: solution_current_scal(:,:,:,:)
  PetscScalar          :: k_ele(8*Ncomponents,8*Ncomponents)
- real(pReal)          :: dConcdChemPot(Ncomponents,Ncomponents), &
-                         dConcdGradC  (Ncomponents,Ncomponents), &
-                         mobility     (Ncomponents)
+ real(pReal)          :: Conc         (Ncomponents), &
+                         mobility     (Ncomponents), &
+                         dConcdChemPot(Ncomponents,Ncomponents), &
+                         dConcdGradC  (Ncomponents,Ncomponents)
  PetscInt             :: i, j, k, cell, comp
  PetscObject          :: dummy
  PetscErrorCode       :: ierr
@@ -401,9 +410,10 @@ subroutine spectral_solute_formJacobian(da_local,solution_current_local,Jac_pre,
      col(MatStencil_c,4*comp+4) = comp
    enddo
 
-   call solute_flux_getComponentConcTangent(dConcdChemPot,dConcdGradC, &
-                                            solution_current_scal(0:Ncomponents-1,i,j,k), &
-                                            1,cell)
+   call solute_flux_calComponentConcandTangent(Conc,dConcdChemPot,dConcdGradC, & 
+                                               solution_current_scal(          0:  Ncomponents-1,i,j,k), &
+                                               solution_current_scal(Ncomponents:2*Ncomponents-1,i,j,k), &
+                                               1,cell)
    
    k_ele = 0.0
    k_ele(              1:4*Ncomponents:4,              1:4*Ncomponents:4) = &
@@ -447,27 +457,12 @@ end subroutine spectral_solute_formJacobian
 subroutine spectral_solute_forward()
  use spectral_utilities, only: &
    cutBack
- use solute_flux, only: &
-   solute_flux_putComponentConc
 
  implicit none
- DM :: da_local
- PetscScalar, pointer :: solution_current_scal(:,:,:,:)
- integer(pInt) :: i, j, k, cell
  PetscErrorCode :: ierr
 
- call SNESGetDM(solute_snes,da_local,ierr); CHKERRQ(ierr)
  if (cutBack) then 
    call VecCopy(solution_lastInc,solution_current,ierr); CHKERRQ(ierr)
-   call DMDAVecGetArrayF90(da_local,solution_current,solution_current_scal,ierr)
-   CHKERRQ(ierr)
-   cell = 0
-   do k = zstart, zend; do j = ystart, yend; do i = xstart, xend                                    ! walk through my (sub)domain
-     cell = cell + 1
-     call solute_flux_putComponentConc(solution_current_scal(0:Ncomponents-1,i,j,k),1,cell)
-   enddo; enddo; enddo
-   call DMDAVecRestoreArrayF90(da_local,solution_current,solution_current_scal,ierr)
-   CHKERRQ(ierr)
  else
    conc_lastInc = conc_current
    conc_stagInc = conc_current

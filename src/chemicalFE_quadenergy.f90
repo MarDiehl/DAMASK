@@ -24,7 +24,6 @@ module chemicalFE_quadenergy
  enum, bind(c)
    enumerator :: undefined_ID, &
                  chemicalFE_ID, &
-                 chemicalPot_ID, &
                  chemicalConc_ID
  end enum
 
@@ -38,9 +37,11 @@ module chemicalFE_quadenergy
      Mobility, &
      EqConc, &
      InitialConc, &
-     LinearCoeff
+     LinearCoeff, &
+     GradientCoeff
    real(pReal) :: &
-     ConstantCoeff
+     ConstantCoeff, &
+     aTol
  end type
 
  type(tParameters), dimension(:), allocatable, private :: param                                       !< containers of constitutive parameters (len Ninstance)
@@ -49,10 +50,7 @@ module chemicalFE_quadenergy
    chemicalFE_quadenergy_init, &
    chemicalFE_quadenergy_dotState, &
    chemicalFE_quadenergy_getEnergy, &
-   chemicalFE_quadenergy_getChemPot, &
-   chemicalFE_quadenergy_getConc, &
-   chemicalFE_quadenergy_putConc, &
-   chemicalFE_quadenergy_getConcTangent, &
+   chemicalFE_quadenergy_calConcandTangent, &
    chemicalFE_quadenergy_getMobility, &
    chemicalFE_quadenergy_postResults
 
@@ -93,6 +91,7 @@ subroutine chemicalFE_quadenergy_init(fileUnit)
  use material, only: &
    chemConcMapping, &
    chemicalConc, &
+   chemicalConc0, &
    chemicalConcRate, &
    phasememberAt, &
    phase_chemicalFE, &
@@ -106,6 +105,7 @@ subroutine chemicalFE_quadenergy_init(fileUnit)
    chemicalState, &
    MATERIAL_partPhase
  use numerics,only: &
+   charLength, &
    numerics_integrator
 
  implicit none
@@ -124,7 +124,8 @@ subroutine chemicalFE_quadenergy_init(fileUnit)
    tempMobility, &
    tempEqConc, &
    tempInitialConc, &
-   tempLinCoeff
+   tempLinCoeff, &
+   tempGradCoeff
  real(pReal), dimension(:,:,:), allocatable :: &
    tempQuadCoeff, &
    tempQuadCoeffInv
@@ -157,6 +158,7 @@ subroutine chemicalFE_quadenergy_init(fileUnit)
  allocate(tempEqConc     (phase_maxNcomponents,maxNinstance),source=0.0_pReal)
  allocate(tempInitialConc(phase_maxNcomponents,maxNinstance),source=0.0_pReal)
  allocate(tempLinCoeff   (phase_maxNcomponents,maxNinstance),source=0.0_pReal)
+ allocate(tempGradCoeff  (phase_maxNcomponents,maxNinstance),source=0.0_pReal)
  allocate(tempQuadCoeff  (phase_maxNcomponents, &
                           phase_maxNcomponents,maxNinstance),source=0.0_pReal)
  allocate(tempQuadCoeffInv(phase_maxNcomponents, &
@@ -191,11 +193,6 @@ subroutine chemicalFE_quadenergy_init(fileUnit)
              chemicalFE_quadenergy_output(chemicalFE_quadenergy_Noutput(instance),instance) = &
                                                            IO_lc(IO_stringValue(line,chunkPos,2_pInt))
              tempOutputID(chemicalFE_quadenergy_Noutput(instance),instance) = chemicalFE_ID
-           case ('chemicalpot')
-             chemicalFE_quadenergy_Noutput(instance) = chemicalFE_quadenergy_Noutput(instance) + 1_pInt
-             chemicalFE_quadenergy_output(chemicalFE_quadenergy_Noutput(instance),instance) = &
-                                                           IO_lc(IO_stringValue(line,chunkPos,2_pInt))
-             tempOutputID(chemicalFE_quadenergy_Noutput(instance),instance) = chemicalPot_ID
            case ('chemicalconc')
              chemicalFE_quadenergy_Noutput(instance) = chemicalFE_quadenergy_Noutput(instance) + 1_pInt
              chemicalFE_quadenergy_output(chemicalFE_quadenergy_Noutput(instance),instance) = &
@@ -208,6 +205,9 @@ subroutine chemicalFE_quadenergy_init(fileUnit)
 
 !--------------------------------------------------------------------------------------------------
 ! parameters depending on number of components
+       case ('component_tolerance')
+         param(instance)%aTol = IO_floatValue(line,chunkPos,2_pInt)
+         
        case ('component_mobility')
          if (chunkPos(1) /= phase_Ncomponents(phase) + 1_pInt) &
            call IO_error(150_pInt,ext_msg=trim(tag)//' ('//CHEMICALFE_QUADENERGY_label//')')
@@ -229,17 +229,24 @@ subroutine chemicalFE_quadenergy_init(fileUnit)
            tempInitialConc(j,instance) = IO_floatValue(line,chunkPos,1_pInt+j)
          enddo
          
-       case ('component_constcoeff')
+       case ('component_constcoeff','component_constantcoeff')
          param(instance)%ConstantCoeff = IO_floatValue(line,chunkPos,2_pInt)
          
-       case ('component_lincoeff')
+       case ('component_lincoeff','component_linearcoeff')
          if (chunkPos(1) /= phase_Ncomponents(phase) + 1_pInt) &
            call IO_error(150_pInt,ext_msg=trim(tag)//' ('//CHEMICALFE_QUADENERGY_label//')')
          do j = 1_pInt, phase_Ncomponents(phase)
            tempLinCoeff(j,instance) = IO_floatValue(line,chunkPos,1_pInt+j)
          enddo
          
-       case ('component_quadcoeff')
+       case ('component_gradcoeff','component_gradientcoeff')
+         if (chunkPos(1) /= phase_Ncomponents(phase) + 1_pInt) &
+           call IO_error(150_pInt,ext_msg=trim(tag)//' ('//CHEMICALFE_QUADENERGY_label//')')
+         do j = 1_pInt, phase_Ncomponents(phase)
+           tempGradCoeff(j,instance) = IO_floatValue(line,chunkPos,1_pInt+j)
+         enddo
+         
+       case ('component_quadcoeff','component_quadraticcoeff')
          if (chunkPos(1) /= phase_Ncomponents(phase)* &
                             (phase_Ncomponents(phase) + 1_pInt) + 1_pInt) &
            call IO_error(150_pInt,ext_msg=trim(tag)//' ('//CHEMICALFE_QUADENERGY_label//')')
@@ -267,6 +274,7 @@ subroutine chemicalFE_quadenergy_init(fileUnit)
      allocate(param(instance)%EqConc           (phase_Ncomponents(phase)))
      allocate(param(instance)%InitialConc      (phase_Ncomponents(phase)))
      allocate(param(instance)%LinearCoeff      (phase_Ncomponents(phase)))
+     allocate(param(instance)%GradientCoeff    (phase_Ncomponents(phase)))
      allocate(param(instance)%QuadraticCoeff   (phase_Ncomponents(phase), &
                                                 phase_Ncomponents(phase)))
      allocate(param(instance)%QuadraticCoeffInv(phase_Ncomponents(phase), &
@@ -275,10 +283,16 @@ subroutine chemicalFE_quadenergy_init(fileUnit)
      param(instance)%EqConc         = tempEqConc     (1:phase_Ncomponents(phase),instance)
      param(instance)%InitialConc    = tempInitialConc(1:phase_Ncomponents(phase),instance)
      param(instance)%LinearCoeff    = tempLinCoeff   (1:phase_Ncomponents(phase),instance)
+     param(instance)%GradientCoeff  = tempGradCoeff  (1:phase_Ncomponents(phase),instance)
      param(instance)%QuadraticCoeff = tempQuadCoeff  (1:phase_Ncomponents(phase), &
                                                       1:phase_Ncomponents(phase),instance)
+     do j = 1_pInt, phase_Ncomponents(phase)
+       tempQuadCoeff(j,j,instance) = tempQuadCoeff(j,j,instance) + &
+                                     param(instance)%GradientCoeff(j)/charLength/charLength 
+     enddo
      call math_invert(phase_Ncomponents(phase), &
-                      param(instance)%QuadraticCoeff, &
+                      tempQuadCoeff(1:phase_Ncomponents(phase), &
+                                    1:phase_Ncomponents(phase),instance), &
                       param(instance)%QuadraticCoeffInv, &
                       error)
      if (error) &
@@ -301,9 +315,7 @@ subroutine chemicalFE_quadenergy_init(fileUnit)
        select case(param(instance)%outputID(o))
          case(chemicalFE_ID)
            mySize = 1_pInt
-         case(chemicalPot_ID, &
-              chemicalConc_ID &
-              )
+         case(chemicalConc_ID)
            mySize = phase_Ncomponents(phase)
          case default
        end select
@@ -322,7 +334,7 @@ subroutine chemicalFE_quadenergy_init(fileUnit)
      chemicalState(phase)%sizeDotState = sizeDotState
      chemicalState(phase)%sizeDeltaState = sizeDeltaState
      chemicalState(phase)%sizePostResults = chemicalFE_quadenergy_sizePostResults(instance)
-     allocate(chemicalState(phase)%aTolState          (   sizeState),             source=0.0_pReal)
+     allocate(chemicalState(phase)%aTolState          (   sizeState),             source=param(instance)%aTol)
      allocate(chemicalState(phase)%state0             (   sizeState,NipcMyPhase), source=0.0_pReal)
      allocate(chemicalState(phase)%partionedState0    (   sizeState,NipcMyPhase), source=0.0_pReal)
      allocate(chemicalState(phase)%subState0          (   sizeState,NipcMyPhase), source=0.0_pReal)
@@ -344,6 +356,7 @@ subroutine chemicalFE_quadenergy_init(fileUnit)
        chemicalState(phase)%subState0(j,1:NipcMyPhase) = param(instance)%InitialConc(j)
        chemicalState(phase)%state    (j,1:NipcMyPhase) = param(instance)%InitialConc(j)
        chemicalConc (j,phase)%p => chemicalState(phase)%state (j,1:NipcMyPhase)
+       chemicalConc0(j,phase)%p => chemicalState(phase)%state0(j,1:NipcMyPhase)
        allocate(chemicalConcRate(j,phase)%p(NipcMyPhase), source=0.0_pReal)
      enddo
    endif myPhase2
@@ -426,126 +439,14 @@ function chemicalFE_quadenergy_getEnergy(ipc,ip,el)
 
 end function chemicalFE_quadenergy_getEnergy
 
-!--------------------------------------------------------------------------------------------------
-!> @brief returns the component chemical potential for a given instance of this model
-!--------------------------------------------------------------------------------------------------
-function chemicalFE_quadenergy_getChemPot(ipc,ip,el)
- use material, only: &
-   material_phase, &
-   chemicalConc, &
-   chemConcMapping, &
-   phase_Ncomponents, &
-   phase_chemicalFEInstance
-
- implicit none
- integer(pInt), intent(in) :: &
-   ipc, ip, el
- real(pReal), dimension(phase_Ncomponents(material_phase(ipc,ip,el))) :: &
-   conc
- real(pReal), dimension(phase_Ncomponents(material_phase(ipc,ip,el))) :: &
-   chemicalFE_quadenergy_getChemPot
- integer(pInt) :: &
-   cpI, cpJ, &
-   phase, &
-   instance    
-
- phase = material_phase(ipc,ip,el)
- instance = phase_chemicalFEInstance(phase)
- conc = 0.0_pReal
- do cpI = 1_pInt, phase_Ncomponents(phase)
-   conc(cpI) = chemicalConc(cpI,phase)%p(chemConcMapping(phase)%p(ipc, ip, el))
- enddo
- chemicalFE_quadenergy_getChemPot = 0.0_pReal
- do cpI = 1_pInt, phase_Ncomponents(phase)
-   chemicalFE_quadenergy_getChemPot(cpI) = &
-     param(instance)%LinearCoeff(cpI)
-   do cpJ = 1_pInt, phase_Ncomponents(phase)
-     chemicalFE_quadenergy_getChemPot(cpI) = &
-       chemicalFE_quadenergy_getChemPot(cpI) + &
-       param(instance)%QuadraticCoeff(cpI,cpJ)* &
-       (conc(cpJ) - param(instance)%EqConc(cpJ))
-   enddo
- enddo
-
-end function chemicalFE_quadenergy_getChemPot
-
-
-!--------------------------------------------------------------------------------------------------
-!> @brief returns the component concentration for a given instance of this model
-!--------------------------------------------------------------------------------------------------
-function chemicalFE_quadenergy_getConc(chempot,ipc,ip,el)
- use material, only: &
-   material_phase, &
-   phase_Ncomponents, &
-   phase_chemicalFEInstance
-
- implicit none
- integer(pInt), intent(in) :: &
-   ipc, ip, el
- real(pReal), dimension(phase_Ncomponents(material_phase(ipc,ip,el))), intent(in) :: &
-   chempot
- real(pReal), dimension(phase_Ncomponents(material_phase(ipc,ip,el))) :: &
-   chemicalFE_quadenergy_getConc
- integer(pInt) :: &
-   cpI, cpJ, &
-   phase, &
-   instance    
-
- phase = material_phase(ipc,ip,el)
- instance = phase_chemicalFEInstance(phase)
- chemicalFE_quadenergy_getConc = 0.0_pReal
- do cpI = 1_pInt, phase_Ncomponents(phase)
-   chemicalFE_quadenergy_getConc(cpI) = &
-     param(instance)%EqConc(cpI)
-   do cpJ = 1_pInt, phase_Ncomponents(phase)
-     chemicalFE_quadenergy_getConc(cpI) = &
-       chemicalFE_quadenergy_getConc(cpI) + &
-       param(instance)%QuadraticCoeffInv(cpI,cpJ)* &
-       (chempot(cpJ) - param(instance)%LinearCoeff(cpJ))
-   enddo
- enddo
-
-end function chemicalFE_quadenergy_getConc
-
-
-!--------------------------------------------------------------------------------------------------
-!> @brief stores the component concentration for a given instance of this model
-!--------------------------------------------------------------------------------------------------
-subroutine chemicalFE_quadenergy_putConc(chempot,ipc,ip,el)
- use material, only: &
-   material_phase, &
-   phase_Ncomponents, &
-   phase_chemicalFEInstance, &
-   chemConcMapping, &
-   chemicalConc
-
- implicit none
- integer(pInt), intent(in) :: &
-   ipc, ip, el
- real(pReal), dimension(phase_Ncomponents(material_phase(ipc,ip,el))), intent(in) :: &
-   chempot
- real(pReal), dimension(phase_Ncomponents(material_phase(ipc,ip,el))) :: &
-   conc
- integer(pInt) :: &
-   cp, &
-   phase, &
-   instance    
-
- phase = material_phase(ipc,ip,el)
- instance = phase_chemicalFEInstance(phase)
- conc = chemicalFE_quadenergy_getConc(chempot,ipc,ip,el)
- do cp = 1_pInt, phase_Ncomponents(phase)
-   chemicalConc(cp,phase)%p(chemConcMapping(phase)%p(ipc,ip,el)) = &
-     conc(cp)
- enddo
-
-end subroutine chemicalFE_quadenergy_putConc
-
 
 !--------------------------------------------------------------------------------------------------
 !> @brief returns the component concentration tangent for a given instance of this model
 !--------------------------------------------------------------------------------------------------
-subroutine chemicalFE_quadenergy_getConcTangent(dConcdChemPot,dConcdGradC,ipc,ip,el)
+subroutine chemicalFE_quadenergy_calConcandTangent(Conc,dConcdChemPot,dConcdGradC, & 
+                                                   ChemPot,GradC,ipc,ip,el)
+ use numerics, only: &
+   charLength
  use material, only: &
    material_phase, &
    phase_Ncomponents, &
@@ -554,6 +455,11 @@ subroutine chemicalFE_quadenergy_getConcTangent(dConcdChemPot,dConcdGradC,ipc,ip
  implicit none
  integer(pInt), intent(in) :: &
    ipc, ip, el
+ real(pReal), dimension(phase_Ncomponents(material_phase(ipc,ip,el))), intent(in)  :: &
+   ChemPot, &
+   GradC
+ real(pReal), dimension(phase_Ncomponents(material_phase(ipc,ip,el))), intent(out) :: &
+   Conc
  real(pReal), dimension(phase_Ncomponents(material_phase(ipc,ip,el)), &
                         phase_Ncomponents(material_phase(ipc,ip,el))), intent(out) :: &
    dConcdChemPot, &
@@ -565,16 +471,25 @@ subroutine chemicalFE_quadenergy_getConcTangent(dConcdChemPot,dConcdGradC,ipc,ip
 
  phase = material_phase(ipc,ip,el)
  instance = phase_chemicalFEInstance(phase)
+ Conc = 0.0_pReal
  dConcdChemPot = 0.0_pReal
  dConcdGradC = 0.0_pReal
  do cpI = 1_pInt, phase_Ncomponents(phase)
+   Conc(cpI) = param(instance)%EqConc(cpI)
    do cpJ = 1_pInt, phase_Ncomponents(phase)
+     Conc(cpI) = Conc(cpI) + &
+                 param(instance)%QuadraticCoeffInv(cpI,cpJ)* &
+                 (ChemPot(cpJ) - param(instance)%LinearCoeff(cpJ) + &
+                  GradC(cpJ)*param(instance)%GradientCoeff(cpJ)/charLength/charLength)
      dConcdChemPot(cpI,cpJ) = &
        param(instance)%QuadraticCoeffInv(cpI,cpJ)
+     dConcdChemPot(cpI,cpJ) = &
+       param(instance)%QuadraticCoeffInv(cpI,cpJ)* &
+       param(instance)%GradientCoeff(cpI)/charLength/charLength
    enddo
  enddo
 
-end subroutine chemicalFE_quadenergy_getConcTangent
+end subroutine chemicalFE_quadenergy_calConcandTangent
 
 
 !--------------------------------------------------------------------------------------------------
@@ -626,9 +541,6 @@ function chemicalFE_quadenergy_postResults(ipc,ip,el)
 
  real(pReal), dimension(chemicalFE_quadenergy_sizePostResults(phase_chemicalFEInstance(material_phase(ipc,ip,el)))) :: &
    chemicalFE_quadenergy_postResults
- real(pReal), dimension(phase_Ncomponents(material_phase(ipc,ip,el))) :: &
-   conc, tempPerComponent
-
  integer(pInt) :: &
    phase, &
    instance, &
@@ -636,9 +548,6 @@ function chemicalFE_quadenergy_postResults(ipc,ip,el)
 
  phase = material_phase(ipc,ip,el)
  instance = phase_chemicalFEInstance(phase)
- do cp = 1_pInt, phase_Ncomponents(phase)
-   conc(cp) = chemicalConc(cp,phase)%p(chemConcMapping(phase)%p(ipc,ip,el))
- enddo
  
  chemicalFE_quadenergy_postResults = 0.0_pReal
  c = 0_pInt
@@ -648,15 +557,11 @@ function chemicalFE_quadenergy_postResults(ipc,ip,el)
        chemicalFE_quadenergy_postResults(c+1_pInt) = chemicalFE_quadenergy_getEnergy(ipc,ip,el)
        c = c + 1_pInt
 
-     case (chemicalPot_ID)
-       tempPerComponent = chemicalFE_quadenergy_getChemPot(ipc,ip,el)
-       chemicalFE_quadenergy_postResults(c+1_pInt:c+phase_Ncomponents(phase)) = &
-         tempPerComponent(1_pInt:phase_Ncomponents(phase))
-       c = c + phase_Ncomponents(phase)
-
      case (chemicalConc_ID)
-       chemicalFE_quadenergy_postResults(c+1_pInt:c+phase_Ncomponents(phase)) = &
-         conc(1_pInt:phase_Ncomponents(phase))
+       do cp = 1_pInt, phase_Ncomponents(phase)
+         chemicalFE_quadenergy_postResults(c+cp) = &
+           chemicalConc(cp,phase)%p(chemConcMapping(phase)%p(ipc,ip,el))
+       enddo
        c = c + phase_Ncomponents(phase)
 
    end select

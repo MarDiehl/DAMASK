@@ -21,8 +21,7 @@ module solute_flux
 
  enum, bind(c) 
    enumerator :: undefined_ID, &
-                 conc_ID, &
-                 chempot_ID
+                 conc_ID
  end enum
 
  type, private :: tParameters                                                                       !< container type for internal constitutive parameters
@@ -36,11 +35,11 @@ module solute_flux
 
  public :: &
    solute_flux_init, &
-   solute_flux_getComponentPotential, &  
+   solute_flux_getInitialComponentPotential, &  
+   solute_flux_calComponentConcandTangent, &
    solute_flux_getComponentConc, &
-   solute_flux_getComponentConcTangent, &
    solute_flux_getComponentMobility, &
-   solute_flux_putComponentConc, &
+   solute_flux_calAndPutComponentConcRate, &
    solute_flux_postResults
 
 contains
@@ -135,11 +134,6 @@ subroutine solute_flux_init(fileUnit)
                solute_flux_output(solute_flux_Noutput(i),i) = &
                  IO_lc(IO_stringValue(line,chunkPos,2_pInt))
                param(i)%outputID(solute_flux_Noutput(i)) = conc_ID
-             case('chempot','chemicalpotential')
-               solute_flux_Noutput(i) = solute_flux_Noutput(i) + 1_pInt
-               solute_flux_output(solute_flux_Noutput(i),i) = &
-                 IO_lc(IO_stringValue(line,chunkPos,2_pInt))
-               param(i)%outputID(solute_flux_Noutput(i)) = chempot_ID
 
            end select
 
@@ -164,8 +158,6 @@ subroutine solute_flux_init(fileUnit)
      outputsLoop: do o = 1_pInt, solute_flux_Noutput(instance)
        select case(param(instance)%outputID(o))
         case(conc_ID)
-          mySize = homogenization_Ncomponents(homog)
-        case(chempot_ID)
           mySize = homogenization_Ncomponents(homog)
         case default
           mySize = 0_pInt
@@ -209,61 +201,31 @@ end subroutine solute_flux_init
 
 
 !--------------------------------------------------------------------------------------------------
-!> @brief return component chemical potential at material point 
+!> @brief return initial component chemical potential at material point 
 !--------------------------------------------------------------------------------------------------
-function solute_flux_getComponentPotential(ip,el)
+function solute_flux_getInitialComponentPotential(ip,el)
  use material, only: &
    material_homog, &
-   homogenization_Ngrains, &
-   material_phase, &
-   homogenization_maxNcomponents, &
-   phase_chemicalFE, &
-   CHEMICALFE_quadenergy_ID, &
-   CHEMICALFE_thermodynamic_ID, &
-   phasefracMapping, &
-   phasefrac
- use chemicalFE_quadenergy, only: &
-   chemicalFE_quadenergy_getChemPot  
- use chemicalFE_thermodynamic, only: &
-   chemicalFE_thermodynamic_getChemPot  
+   solute_typeInstance, &
+   homogenization_maxNcomponents
  
  implicit none
  integer(pInt),                                         intent(in) :: &
    ip, el                                                                                      !< element number
  real(pReal), dimension(homogenization_maxNcomponents) :: &
-   solute_flux_getComponentPotential
- integer(pInt) :: &
-   gr, &
-   homog, & 
-   offset
+   solute_flux_getInitialComponentPotential
 
- homog = material_homog(ip,el)
- offset = phasefracMapping(homog)%p(ip,el)
- solute_flux_getComponentPotential = 0.0_pReal
- do gr = 1_pInt, homogenization_Ngrains(homog)
-   chemicalFEType: select case (phase_chemicalFE(material_phase(gr,ip,el)))
-     case (CHEMICALFE_quadenergy_ID) chemicalFEType
-       solute_flux_getComponentPotential = &
-         solute_flux_getComponentPotential + &
-         phasefrac(gr,homog)%p(offset)* &
-         chemicalFE_quadenergy_getChemPot(gr,ip,el)
+ solute_flux_getInitialComponentPotential = &
+   param(solute_typeInstance(material_homog(ip,el)))%initialChemPot
 
-     case (CHEMICALFE_thermodynamic_ID) chemicalFEType
-       solute_flux_getComponentPotential = &
-         solute_flux_getComponentPotential + &
-         phasefrac(gr,homog)%p(offset)* &
-         chemicalFE_thermodynamic_getChemPot(gr,ip,el)
-
-   end select chemicalFEType
- enddo
-
-end function solute_flux_getComponentPotential
+end function solute_flux_getInitialComponentPotential
 
 
 !--------------------------------------------------------------------------------------------------
-!> @brief return component concentration at material point 
+!> @brief calculates and returns component concentrations and tangents at material point 
 !--------------------------------------------------------------------------------------------------
-function solute_flux_getComponentConc(chempot,ip,el)
+subroutine solute_flux_calComponentConcandTangent(Conc,dConcdChemPot,dConcdGradC, & 
+                                                  ChemPot,GradC,ip,el)
  use material, only: &
    material_homog, &
    homogenization_Ngrains, &
@@ -275,73 +237,24 @@ function solute_flux_getComponentConc(chempot,ip,el)
    phasefracMapping, &
    phasefrac
  use chemicalFE_quadenergy, only: &
-   chemicalFE_quadenergy_getConc  
+   chemicalFE_quadenergy_calConcandTangent  
  use chemicalFE_thermodynamic, only: &
-   chemicalFE_thermodynamic_getConc  
- 
- implicit none
- integer(pInt),                                         intent(in) :: &
-   ip, el                                                                                      !< element number
- real(pReal), dimension(homogenization_maxNcomponents), intent(in) :: &
-   chempot
- real(pReal), dimension(homogenization_maxNcomponents) :: &
-   solute_flux_getComponentConc
- integer(pInt) :: &
-   gr, &
-   homog, & 
-   offset
-
- homog = material_homog(ip,el)
- offset = phasefracMapping(homog)%p(ip,el)
- solute_flux_getComponentConc = 0.0_pReal
- do gr = 1_pInt, homogenization_Ngrains(homog)
-   chemicalFEType: select case (phase_chemicalFE(material_phase(gr,ip,el)))
-     case (CHEMICALFE_quadenergy_ID) chemicalFEType
-       solute_flux_getComponentConc = &
-         solute_flux_getComponentConc + &
-         phasefrac(gr,homog)%p(offset)* &
-         chemicalFE_quadenergy_getConc(chempot,gr,ip,el)
-
-     case (CHEMICALFE_thermodynamic_ID) chemicalFEType
-       solute_flux_getComponentConc = &
-         solute_flux_getComponentConc + &
-         phasefrac(gr,homog)%p(offset)* &
-         chemicalFE_thermodynamic_getConc(chempot,gr,ip,el)
-
-   end select chemicalFEType
- enddo
-
-end function solute_flux_getComponentConc
-
-
-!--------------------------------------------------------------------------------------------------
-!> @brief return component concentration tangent at material point 
-!--------------------------------------------------------------------------------------------------
-subroutine solute_flux_getComponentConcTangent(dConcdChemPot,dConcdGradC,ChemPot,ip,el)
- use material, only: &
-   material_homog, &
-   homogenization_Ngrains, &
-   material_phase, &
-   homogenization_maxNcomponents, &
-   phase_chemicalFE, &
-   CHEMICALFE_quadenergy_ID, &
-   CHEMICALFE_thermodynamic_ID, &
-   phasefracMapping, &
-   phasefrac
- use chemicalFE_quadenergy, only: &
-   chemicalFE_quadenergy_getConcTangent  
- use chemicalFE_thermodynamic, only: &
-   chemicalFE_thermodynamic_getConcTangent  
+   chemicalFE_thermodynamic_calConcandTangent  
  
  implicit none
  integer(pInt),                                         intent(in)  :: &
    ip, el                                                                                      !< element number
  real(pReal), dimension(homogenization_maxNcomponents), intent(in)  :: &
-   ChemPot
+   ChemPot, &
+   GradC
+ real(pReal), dimension(homogenization_maxNcomponents), intent(out) :: &
+   Conc
  real(pReal), dimension(homogenization_maxNcomponents, &
                         homogenization_maxNcomponents), intent(out) :: &
    dConcdChemPot, &
    dConcdGradC
+ real(pReal), dimension(homogenization_maxNcomponents) :: &
+   Conc_local
  real(pReal), dimension(homogenization_maxNcomponents, &
                         homogenization_maxNcomponents) :: &
    dConcdChemPot_local, &
@@ -353,28 +266,70 @@ subroutine solute_flux_getComponentConcTangent(dConcdChemPot,dConcdGradC,ChemPot
 
  homog = material_homog(ip,el)
  offset = phasefracMapping(homog)%p(ip,el)
+ Conc = 0.0_pReal
  dConcdChemPot = 0.0_pReal
- dConcdGradC   = 0.0_pReal
+ dConcdGradC = 0.0_pReal
  do gr = 1_pInt, homogenization_Ngrains(homog)
    chemicalFEType: select case (phase_chemicalFE(material_phase(gr,ip,el)))
      case (CHEMICALFE_quadenergy_ID) chemicalFEType
-       call chemicalFE_quadenergy_getConcTangent   (dConcdChemPot_local,dConcdGradC_local,        gr,ip,el)
+       call chemicalFE_quadenergy_calConcandTangent(Conc_local,dConcdChemPot_local,dConcdGradC_local, & 
+                                                    ChemPot,GradC,gr,ip,el)
 
      case (CHEMICALFE_thermodynamic_ID) chemicalFEType
-       call chemicalFE_thermodynamic_getConcTangent(dConcdChemPot_local,dConcdGradC_local,ChemPot,gr,ip,el)
-         
-     case default
-       dConcdChemPot_local = 0.0_pReal
-       dConcdGradC_local   = 0.0_pReal           
+       call chemicalFE_thermodynamic_calConcandTangent(Conc_local,dConcdChemPot_local,dConcdGradC_local, & 
+                                                       ChemPot,GradC,gr,ip,el)
 
+     case default
+       Conc_local = 0.0_pReal
+       dConcdChemPot_local = 0.0_pReal
+       dConcdGradC_local = 0.0_pReal
+       
    end select chemicalFEType
-   dConcdChemPot = dConcdChemPot + &
-                   phasefrac(gr,homog)%p(offset)*dConcdChemPot_local
-   dConcdGradC   = dConcdGradC + &
-                   phasefrac(gr,homog)%p(offset)*dConcdGradC_local
+   Conc = Conc + phasefrac(gr,homog)%p(offset)*Conc_local
+   dConcdChemPot = dConcdChemPot + phasefrac(gr,homog)%p(offset)*dConcdChemPot_local
+   dConcdGradC = dConcdGradC + phasefrac(gr,homog)%p(offset)*dConcdGradC_local
  enddo
 
-end subroutine solute_flux_getComponentConcTangent
+end subroutine solute_flux_calComponentConcandTangent
+
+
+!--------------------------------------------------------------------------------------------------
+!> @brief return previously calculated component concentration at material point 
+!--------------------------------------------------------------------------------------------------
+function solute_flux_getComponentConc(ip,el)
+ use material, only: &
+   material_homog, &
+   homogenization_Ngrains, &
+   material_phase, &
+   homogenization_maxNcomponents, &
+   phasefracMapping, &
+   phasefrac, &
+   chemConcMapping, &
+   chemicalConc
+ 
+ implicit none
+ integer(pInt),                                         intent(in) :: &
+   ip, el                                                                                      !< element number
+ real(pReal), dimension(homogenization_maxNcomponents) :: &
+   solute_flux_getComponentConc
+ integer(pInt) :: &
+   gr, cp, &
+   homog, &
+   phase
+
+ homog = material_homog(ip,el)
+ solute_flux_getComponentConc = 0.0_pReal
+ do gr = 1_pInt, homogenization_Ngrains(homog)
+   phase = material_phase(gr,ip,el)
+   do cp = 1_pInt, homogenization_maxNcomponents
+     solute_flux_getComponentConc = &
+       solute_flux_getComponentConc + &
+       phasefrac(gr,homog)%p(phasefracMapping(homog)%p(ip,el))* &
+       chemicalConc(cp,phase)%p(chemConcMapping(phase)%p(gr,ip,el))
+   enddo
+ enddo
+
+end function solute_flux_getComponentConc
 
 
 !--------------------------------------------------------------------------------------------------
@@ -432,42 +387,47 @@ end function solute_flux_getComponentMobility
 !--------------------------------------------------------------------------------------------------
 !> @brief set module wide component concentrations 
 !--------------------------------------------------------------------------------------------------
-subroutine solute_flux_putComponentConc(chempot,ip,el)
+subroutine solute_flux_calAndPutComponentConcRate(ChemPot,GradC,dt,ip,el)
  use material, only: &
    material_homog, &
    homogenization_Ngrains, &
    material_phase, &
    homogenization_maxNcomponents, &
-   phase_chemicalFE, &
-   CHEMICALFE_quadenergy_ID, &
-   CHEMICALFE_thermodynamic_ID
- use chemicalFE_quadenergy, only: &
-   chemicalFE_quadenergy_putConc  
- use chemicalFE_thermodynamic, only: &
-   chemicalFE_thermodynamic_putConc  
- 
+   chemicalConcRate, &
+   chemicalConc0, &
+   chemConcMapping
  implicit none
  integer(pInt),                                         intent(in) :: &
    ip, el                                                                                      !< element number
+ real(pReal),                                           intent(in) :: &
+   dt
  real(pReal), dimension(homogenization_maxNcomponents), intent(in) :: &
-   chempot
+   ChemPot, &
+   GradC
+ real(pReal), dimension(homogenization_maxNcomponents) :: &
+   Conc
+ real(pReal), dimension(homogenization_maxNcomponents, &
+                        homogenization_maxNcomponents) :: &
+   dConcdChemPot, &
+   dConcdGradC
  integer(pInt) :: &
    gr, &
+   cp, &
+   phase, &
    homog
 
  homog = material_homog(ip,el)
  do gr = 1_pInt, homogenization_Ngrains(homog)
-   chemicalFEType: select case (phase_chemicalFE(material_phase(gr,ip,el)))
-     case (CHEMICALFE_quadenergy_ID) chemicalFEType
-       call chemicalFE_quadenergy_putConc(chempot,gr,ip,el)
-
-     case (CHEMICALFE_thermodynamic_ID) chemicalFEType
-       call chemicalFE_thermodynamic_putConc(chempot,gr,ip,el)
-
-   end select chemicalFEType
+   phase = material_phase(gr,ip,el)
+   call solute_flux_calComponentConcandTangent(Conc,dConcdChemPot,dConcdGradC, & 
+                                               ChemPot,GradC,ip,el)
+   do cp = 1_pInt, homogenization_maxNcomponents
+     chemicalConcRate(cp,phase)%p(chemConcMapping(phase)%p(gr,ip,el)) = &
+       (Conc(cp) - chemicalConc0(cp,phase)%p(chemConcMapping(phase)%p(gr,ip,el)))/dt
+   enddo
  enddo
 
-end subroutine solute_flux_putComponentConc
+end subroutine solute_flux_calAndPutComponentConcRate
 
 
 !--------------------------------------------------------------------------------------------------
@@ -499,11 +459,7 @@ function solute_flux_postResults(ip,el)
    select case(param(homID)%outputID(o))
      case (conc_ID)
        solute_flux_postResults(c+1_pInt:c+homogenization_Ncomponents(material_homog(ip,el))) = &
-         solute_flux_getComponentConc(solute_flux_getComponentPotential(ip,el),ip,el)
-       c = c + homogenization_Ncomponents(material_homog(ip,el))
-     case (chempot_ID)
-       solute_flux_postResults(c+1_pInt:c+homogenization_Ncomponents(material_homog(ip,el))) = &
-         solute_flux_getComponentPotential(ip,el)
+         solute_flux_getComponentConc(ip,el)
        c = c + homogenization_Ncomponents(material_homog(ip,el))
 
    end select

@@ -27,21 +27,23 @@ module chemicalFE_thermodynamic
  enum, bind(c)
    enumerator :: undefined_ID, &
                  chemicalFE_ID, &
-                 chemicalPot_ID, &
                  chemicalConc_ID
  end enum
 
  type, private :: tParameters                                                                         !< container type for internal constitutive parameters
    integer(kind(undefined_ID)), dimension(:), allocatable :: & 
      outputID
+   integer(pInt) :: &
+     maxNIter = 100_pInt
+   real(pReal) :: &
+     aTol = 1e-6_pReal
    real(pReal), dimension(:,:), allocatable :: &
      InteractionEnergy
    real(pReal), dimension(:  ), allocatable :: &
      Mobility, &
      SolutionEnergy, &
-     InitialConc
-   real(pReal), dimension(:,:), pointer     :: &  
-     chemicalConc0
+     InitialConc, &
+     GradientCoeff
  end type
 
  type(tParameters), dimension(:), allocatable, private :: param                                       !< containers of constitutive parameters (len Ninstance)
@@ -50,10 +52,7 @@ module chemicalFE_thermodynamic
    chemicalFE_thermodynamic_init, &
    chemicalFE_thermodynamic_dotState, &
    chemicalFE_thermodynamic_getEnergy, &
-   chemicalFE_thermodynamic_getChemPot, &
-   chemicalFE_thermodynamic_getConc, &
-   chemicalFE_thermodynamic_putConc, &
-   chemicalFE_thermodynamic_getConcTangent, &
+   chemicalFE_thermodynamic_calConcandTangent, &
    chemicalFE_thermodynamic_getMobility, &
    chemicalFE_thermodynamic_postResults
 
@@ -92,6 +91,7 @@ subroutine chemicalFE_thermodynamic_init(fileUnit)
  use material, only: &
    chemConcMapping, &
    chemicalConc, &
+   chemicalConc0, &
    chemicalConcRate, &
    phasememberAt, &
    phase_chemicalFE, &
@@ -122,7 +122,8 @@ subroutine chemicalFE_thermodynamic_init(fileUnit)
  real(pReal), dimension(:,:), allocatable :: &
    tempMobility, &
    tempSolutionEnergy, &
-   tempInitialConc
+   tempInitialConc, &
+   tempGradCoeff
  real(pReal), dimension(:,:,:), allocatable :: &
    tempInteractionEnergy
  integer(kind(undefined_ID)), dimension(:,:), allocatable :: & 
@@ -152,6 +153,7 @@ subroutine chemicalFE_thermodynamic_init(fileUnit)
  allocate(tempMobility         (phase_maxNcomponents,maxNinstance),source=0.0_pReal)
  allocate(tempSolutionEnergy   (phase_maxNcomponents,maxNinstance),source=0.0_pReal)
  allocate(tempInitialConc      (phase_maxNcomponents,maxNinstance),source=0.0_pReal)
+ allocate(tempGradCoeff        (phase_maxNcomponents,maxNinstance),source=0.0_pReal)
  allocate(tempInteractionEnergy(phase_maxNcomponents, &
                                 phase_maxNcomponents,maxNinstance),source=0.0_pReal)
 
@@ -184,11 +186,6 @@ subroutine chemicalFE_thermodynamic_init(fileUnit)
              chemicalFE_thermodynamic_output(chemicalFE_thermodynamic_Noutput(instance),instance) = &
                                                            IO_lc(IO_stringValue(line,chunkPos,2_pInt))
              tempOutputID(chemicalFE_thermodynamic_Noutput(instance),instance) = chemicalFE_ID
-           case ('chemicalpot')
-             chemicalFE_thermodynamic_Noutput(instance) = chemicalFE_thermodynamic_Noutput(instance) + 1_pInt
-             chemicalFE_thermodynamic_output(chemicalFE_thermodynamic_Noutput(instance),instance) = &
-                                                           IO_lc(IO_stringValue(line,chunkPos,2_pInt))
-             tempOutputID(chemicalFE_thermodynamic_Noutput(instance),instance) = chemicalPot_ID
            case ('chemicalconc')
              chemicalFE_thermodynamic_Noutput(instance) = chemicalFE_thermodynamic_Noutput(instance) + 1_pInt
              chemicalFE_thermodynamic_output(chemicalFE_thermodynamic_Noutput(instance),instance) = &
@@ -201,6 +198,12 @@ subroutine chemicalFE_thermodynamic_init(fileUnit)
 
 !--------------------------------------------------------------------------------------------------
 ! parameters depending on number of components
+       case ('component_tolerance')
+         param(instance)%aTol = IO_floatValue(line,chunkPos,2_pInt)
+         
+       case ('component_maxniter')
+         param(instance)%maxNIter = IO_intValue(line,chunkPos,2_pInt)
+         
        case ('component_mobility')
          if (chunkPos(1) /= phase_Ncomponents(phase) + 1_pInt) &
            call IO_error(150_pInt,ext_msg=trim(tag)//' ('//CHEMICALFE_THERMODYNAMIC_label//')')
@@ -208,7 +211,7 @@ subroutine chemicalFE_thermodynamic_init(fileUnit)
            tempMobility(j,instance) = IO_floatValue(line,chunkPos,1_pInt+j)
          enddo
          
-       case ('component_solutione')
+       case ('component_solutione','component_solutionenergy')
          if (chunkPos(1) /= phase_Ncomponents(phase) + 1_pInt) &
            call IO_error(150_pInt,ext_msg=trim(tag)//' ('//CHEMICALFE_THERMODYNAMIC_label//')')
          do j = 1_pInt, phase_Ncomponents(phase)
@@ -222,7 +225,14 @@ subroutine chemicalFE_thermodynamic_init(fileUnit)
            tempInitialConc(j,instance) = IO_floatValue(line,chunkPos,1_pInt+j)
          enddo
          
-       case ('component_interactione')
+       case ('component_gradcoeff','component_gradientcoeff')
+         if (chunkPos(1) /= phase_Ncomponents(phase) + 1_pInt) &
+           call IO_error(150_pInt,ext_msg=trim(tag)//' ('//CHEMICALFE_THERMODYNAMIC_label//')')
+         do j = 1_pInt, phase_Ncomponents(phase)
+           tempGradCoeff(j,instance) = IO_floatValue(line,chunkPos,1_pInt+j)
+         enddo
+         
+       case ('component_interactione','component_interactionenergy')
          if (chunkPos(1) /= phase_Ncomponents(phase)* &
                             (phase_Ncomponents(phase) + 1_pInt) + 1_pInt) &
            call IO_error(150_pInt,ext_msg=trim(tag)//' ('//CHEMICALFE_THERMODYNAMIC_label//')')
@@ -249,6 +259,7 @@ subroutine chemicalFE_thermodynamic_init(fileUnit)
      allocate(param(instance)%Mobility         (phase_Ncomponents(phase)))
      allocate(param(instance)%SolutionEnergy   (phase_Ncomponents(phase)))
      allocate(param(instance)%InitialConc      (phase_Ncomponents(phase)))
+     allocate(param(instance)%GradientCoeff    (phase_Ncomponents(phase)))
      allocate(param(instance)%InteractionEnergy(phase_Ncomponents(phase), &
                                                 phase_Ncomponents(phase)))
      param(instance)%Mobility          = tempMobility         (1:phase_Ncomponents(phase),instance)
@@ -272,9 +283,7 @@ subroutine chemicalFE_thermodynamic_init(fileUnit)
        select case(param(instance)%outputID(o))
          case(chemicalFE_ID)
            mySize = 1_pInt
-         case(chemicalPot_ID, &
-              chemicalConc_ID &
-              )
+         case(chemicalConc_ID)
            mySize = phase_Ncomponents(phase)
          case default
        end select
@@ -293,7 +302,7 @@ subroutine chemicalFE_thermodynamic_init(fileUnit)
      chemicalState(phase)%sizeDotState = sizeDotState
      chemicalState(phase)%sizeDeltaState = sizeDeltaState
      chemicalState(phase)%sizePostResults = chemicalFE_thermodynamic_sizePostResults(instance)
-     allocate(chemicalState(phase)%aTolState          (   sizeState),             source=0.0_pReal)
+     allocate(chemicalState(phase)%aTolState          (   sizeState),             source=param(instance)%aTol)
      allocate(chemicalState(phase)%state0             (   sizeState,NipcMyPhase), source=0.0_pReal)
      allocate(chemicalState(phase)%partionedState0    (   sizeState,NipcMyPhase), source=0.0_pReal)
      allocate(chemicalState(phase)%subState0          (   sizeState,NipcMyPhase), source=0.0_pReal)
@@ -314,8 +323,8 @@ subroutine chemicalFE_thermodynamic_init(fileUnit)
        chemicalState(phase)%subState0(j,1:NipcMyPhase) = param(instance)%InitialConc(j)
        chemicalState(phase)%state    (j,1:NipcMyPhase) = param(instance)%InitialConc(j)
        chemicalConc (j,phase)%p => chemicalState(phase)%state (j,1:NipcMyPhase)
+       chemicalConc0(j,phase)%p => chemicalState(phase)%state0(j,1:NipcMyPhase)
        allocate(chemicalConcRate(j,phase)%p(NipcMyPhase), source=0.0_pReal)
-       param(instance)%chemicalConc0 => chemicalState(phase)%state0
      enddo
    endif myPhase2
  enddo initializeInstances
@@ -401,152 +410,20 @@ function chemicalFE_thermodynamic_getEnergy(ipc,ip,el)
 
 end function chemicalFE_thermodynamic_getEnergy
 
-!--------------------------------------------------------------------------------------------------
-!> @brief returns the component chemical potential for a given instance of this model
-!--------------------------------------------------------------------------------------------------
-function chemicalFE_thermodynamic_getChemPot(ipc,ip,el)
- use material, only: &
-   material_phase, &
-   chemicalConc, &
-   chemConcMapping, &
-   material_homog, &
-   temperature, &
-   thermalMapping, &
-   phase_chemicalFEInstance, &
-   phase_Ncomponents
-
- implicit none
- integer(pInt), intent(in) :: &
-   ipc, ip, el
- real(pReal), dimension(phase_Ncomponents(material_phase(ipc,ip,el))) :: &
-   conc
- real(pReal) :: &
-   T
- real(pReal), dimension(phase_Ncomponents(material_phase(ipc,ip,el))) :: &
-   chemicalFE_thermodynamic_getChemPot
- integer(pInt) :: &
-   cpI, cpJ, &
-   phase, &
-   instance    
-
- phase = material_phase(ipc,ip,el)
- instance = phase_chemicalFEInstance(phase)
- conc = 0.0_pReal
- do cpI = 1_pInt, phase_Ncomponents(phase)
-   conc(cpI) = chemicalConc(cpI,phase)%p(chemConcMapping(phase)%p(ipc, ip, el))
- enddo
- T = temperature(material_homog(ip,el))%p(thermalMapping(material_homog(ip,el))%p(ip,el))
- chemicalFE_thermodynamic_getChemPot = 0.0_pReal
- do cpI = 1_pInt, phase_Ncomponents(phase)
-   chemicalFE_thermodynamic_getChemPot(cpI) = &
-     param(instance)%SolutionEnergy(cpI) + &
-     kB*T* &
-     log(conc(cpI)/(1.0_pReal - sum(conc(1:phase_Ncomponents(phase)))))
-   do cpJ = 1_pInt, phase_Ncomponents(phase)
-     chemicalFE_thermodynamic_getChemPot(cpI) = &
-       chemicalFE_thermodynamic_getChemPot(cpI) + &
-       param(instance)%InteractionEnergy(cpI,cpJ)*conc(cpJ)
-   enddo
- enddo
-
-end function chemicalFE_thermodynamic_getChemPot
-
-
-!--------------------------------------------------------------------------------------------------
-!> @brief returns the component concentration for a given instance of this model
-!--------------------------------------------------------------------------------------------------
-function chemicalFE_thermodynamic_getConc(chempot,ipc,ip,el)
- use material, only: &
-   material_phase, &
-   chemConcMapping, &
-   material_homog, &
-   temperature, &
-   thermalMapping, &
-   phase_chemicalFEInstance, &
-   phase_Ncomponents
-
- implicit none
- integer(pInt), intent(in) :: &
-   ipc, ip, el
- real(pReal), dimension(phase_Ncomponents(material_phase(ipc,ip,el))), intent(in) :: &
-   chempot
- real(pReal) :: &
-   T
- real(pReal), dimension(phase_Ncomponents(material_phase(ipc,ip,el))) :: &
-   conc0, &
-   chemicalFE_thermodynamic_getConc
- integer(pInt) :: &
-   cpI, cpJ, &
-   phase, &
-   instance    
-
- phase = material_phase(ipc,ip,el)
- instance = phase_chemicalFEInstance(phase)
- T = temperature(material_homog(ip,el))%p(thermalMapping(material_homog(ip,el))%p(ip,el))
- chemicalFE_thermodynamic_getConc = 0.0_pReal
- do cpI = 1_pInt, phase_Ncomponents(phase)
-   conc0(cpI) = param(instance)%chemicalConc0(cpI,chemConcMapping(phase)%p(ipc, ip, el))
- enddo
- do cpI = 1_pInt, phase_Ncomponents(phase)
-   chemicalFE_thermodynamic_getConc(cpI) = &
-     chempot(cpI) - param(instance)%SolutionEnergy(cpI)
-   do cpJ = 1_pInt, phase_Ncomponents(phase)
-     chemicalFE_thermodynamic_getConc(cpI) = &
-       chemicalFE_thermodynamic_getConc(cpI) - &
-       param(instance)%InteractionEnergy(cpI,cpJ)*conc0(cpJ)
-   enddo
- enddo
- chemicalFE_thermodynamic_getConc(1:phase_Ncomponents(phase)) = &
-   exp(chemicalFE_thermodynamic_getConc(1:phase_Ncomponents(phase))/(kB*T))
-
- chemicalFE_thermodynamic_getConc(1:phase_Ncomponents(phase)) = &
-   chemicalFE_thermodynamic_getConc(1:phase_Ncomponents(phase))/ &
-   (1.0_pReal + &
-    sum(chemicalFE_thermodynamic_getConc(1:phase_Ncomponents(phase))))
- 
-end function chemicalFE_thermodynamic_getConc
-
-
-!--------------------------------------------------------------------------------------------------
-!> @brief returns the component concentration for a given instance of this model
-!--------------------------------------------------------------------------------------------------
-subroutine chemicalFE_thermodynamic_putConc(chempot,ipc,ip,el)
- use material, only: &
-   material_phase, &
-   phase_chemicalFEInstance, &
-   phase_Ncomponents, &
-   chemConcMapping, &
-   chemicalConc
-
- implicit none
- integer(pInt), intent(in) :: &
-   ipc, ip, el
- real(pReal), dimension(phase_Ncomponents(material_phase(ipc,ip,el))), intent(in) :: &
-   chempot
- real(pReal), dimension(phase_Ncomponents(material_phase(ipc,ip,el))) :: &
-   conc
- integer(pInt) :: &
-   cp, &
-   phase, &
-   instance    
-
- phase = material_phase(ipc,ip,el)
- instance = phase_chemicalFEInstance(phase)
- conc = chemicalFE_thermodynamic_getConc(chempot,ipc,ip,el)
- do cp = 1_pInt, phase_Ncomponents(phase)
-   chemicalConc(cp,phase)%p(chemConcMapping(phase)%p(ipc,ip,el)) = &
-     conc(cp)
- enddo
- 
-end subroutine chemicalFE_thermodynamic_putConc
-
 
 !--------------------------------------------------------------------------------------------------
 !> @brief returns the component concentration tangent for a given instance of this model
 !--------------------------------------------------------------------------------------------------
-subroutine chemicalFE_thermodynamic_getConcTangent(dConcdChemPot,dConcdGradC,chempot,ipc,ip,el)
+subroutine chemicalFE_thermodynamic_calConcandTangent(Conc,dConcdChemPot,dConcdGradC, &
+                                                      ChemPot,GradC,ipc,ip,el)
+ use IO, only: &
+   IO_error
+ use numerics, only: &
+   charLength
  use material, only: &
    material_phase, &
+   chemicalState, &
+   chemicalConc0, &
    chemConcMapping, &
    material_homog, &
    temperature, &
@@ -557,8 +434,11 @@ subroutine chemicalFE_thermodynamic_getConcTangent(dConcdChemPot,dConcdGradC,che
  implicit none
  integer(pInt), intent(in) :: &
    ipc, ip, el
- real(pReal), dimension(phase_Ncomponents(material_phase(ipc,ip,el))), intent(in) :: &
-   chempot
+ real(pReal), dimension(phase_Ncomponents(material_phase(ipc,ip,el))), intent(in)  :: &
+   ChemPot, &
+   GradC
+ real(pReal), dimension(phase_Ncomponents(material_phase(ipc,ip,el))), intent(out) :: &
+   Conc
  real(pReal), dimension(phase_Ncomponents(material_phase(ipc,ip,el)), &
                         phase_Ncomponents(material_phase(ipc,ip,el))), intent(out) :: &
    dConcdChemPot, &
@@ -566,29 +446,56 @@ subroutine chemicalFE_thermodynamic_getConcTangent(dConcdChemPot,dConcdGradC,che
  real(pReal) :: &
    T
  real(pReal), dimension(phase_Ncomponents(material_phase(ipc,ip,el))) :: &
-   conc, conc0
+   Conc0, &
+   ConcLastIter, &
+   tempPerComponent, &
+   err_conc
  integer(pInt) :: &
+   iter = 0_pInt, &
    cpI, cpJ, &
    phase, &
-   instance    
+   instance
 
  phase = material_phase(ipc,ip,el)
  instance = phase_chemicalFEInstance(phase)
  T = temperature(material_homog(ip,el))%p(thermalMapping(material_homog(ip,el))%p(ip,el))
  do cpI = 1_pInt, phase_Ncomponents(phase)
-   conc0(cpI) = param(instance)%chemicalConc0(cpI,chemConcMapping(phase)%p(ipc, ip, el))
+   Conc0(cpI) = chemicalConc0(cpI,phase)%p(chemConcMapping(phase)%p(ipc,ip,el))
  enddo
- conc = chemicalFE_thermodynamic_getConc(chempot,ipc,ip,el)
+ Conc = Conc0
+ err_conc = huge(1.0_pReal)
+ do while (any(err_conc > chemicalState(phase)%aTolState) .or. iter < param(instance)%maxNIter)
+   iter = iter + 1_pInt
+   ConcLastIter = Conc
+   do cpI = 1_pInt, phase_Ncomponents(phase)
+     tempPerComponent(cpI) = &
+       ChemPot(cpI) - &
+       param(instance)%SolutionEnergy(cpI) - &
+       param(instance)%GradientCoeff(cpI)*(Conc(cpI) - GradC(cpI))/charLength/charLength
+     do cpJ = 1_pInt, phase_Ncomponents(phase)
+       tempPerComponent(cpI) = &
+         tempPerComponent(cpI) - &
+         param(instance)%InteractionEnergy(cpI,cpJ)*Conc0(cpJ)
+     enddo
+   enddo
+   Conc = exp(tempPerComponent(1:phase_Ncomponents(phase))/(kB*T))/ &
+          (1.0_pReal + sum(exp(tempPerComponent(1:phase_Ncomponents(phase))/(kB*T))))
+   err_conc = abs(Conc - ConcLastIter)
+ enddo  
+ if (iter == param(instance)%maxNIter) &
+   call IO_error(400_pInt,el=el,ip=ip,g=ipc,ext_msg='chemicalFE thermodynamic concentration calculation did not converge')
  
  dConcdChemPot = 0.0_pReal
  dConcdGradC = 0.0_pReal
  do cpI = 1_pInt, phase_Ncomponents(phase)
    do cpJ = 1_pInt, phase_Ncomponents(phase)
-     dConcdChemPot(cpI,cpJ) = conc(cpI) - conc(cpI)*conc(cpJ)
+     dConcdChemPot(cpI,cpJ) = (Conc(cpI) - Conc(cpI)*Conc(cpJ))/(kB*T)
+     dConcdGradC  (cpI,cpJ) = -param(instance)%GradientCoeff(cpI)*(Conc(cpI) - Conc(cpI)*Conc(cpJ))/ &
+                               charLength/charLength/(kB*T)
    enddo
  enddo
 
-end subroutine chemicalFE_thermodynamic_getConcTangent
+end subroutine chemicalFE_thermodynamic_calConcandTangent
 
 
 !--------------------------------------------------------------------------------------------------
@@ -630,9 +537,6 @@ function chemicalFE_thermodynamic_postResults(ipc,ip,el)
    material_phase, &
    chemicalConc, &
    chemConcMapping, &
-   material_homog, &
-   temperature, &
-   thermalMapping, &
    phase_chemicalFEInstance
 
  implicit none
@@ -640,16 +544,8 @@ function chemicalFE_thermodynamic_postResults(ipc,ip,el)
    ipc, &                                                                                           !< component-ID of integration point
    ip, &                                                                                            !< integration point
    el                                                                                               !< element                                                                                        !< microstructure state
- real(pReal), dimension(phase_Ncomponents(material_phase(ipc,ip,el))) :: &
-   conc
- real(pReal) :: &
-   T
-
  real(pReal), dimension(chemicalFE_thermodynamic_sizePostResults(phase_chemicalFEInstance(material_phase(ipc,ip,el)))) :: &
    chemicalFE_thermodynamic_postResults
- real(pReal), dimension(phase_Ncomponents(material_phase(ipc,ip,el))) :: &
-   tempPerComponent
-
  integer(pInt) :: &
    phase, &
    instance, &
@@ -657,28 +553,20 @@ function chemicalFE_thermodynamic_postResults(ipc,ip,el)
 
  phase = material_phase(ipc,ip,el)
  instance = phase_chemicalFEInstance(phase)
- do cp = 1_pInt, phase_Ncomponents(phase)
-   conc(cp) = chemicalConc(cp,phase)%p(chemConcMapping(phase)%p(ipc,ip,el))
- enddo
- T = temperature(material_homog(ip,el))%p(thermalMapping(material_homog(ip,el))%p(ip,el))
+
  chemicalFE_thermodynamic_postResults = 0.0_pReal
  c = 0_pInt
-
  outputsLoop: do o = 1_pInt,chemicalFE_thermodynamic_Noutput(instance)
    select case(param(instance)%outputID(o))
      case (chemicalFE_ID)
        chemicalFE_thermodynamic_postResults(c+1_pInt) = chemicalFE_thermodynamic_getEnergy(ipc,ip,el)
        c = c + 1_pInt
 
-     case (chemicalPot_ID)
-       tempPerComponent = chemicalFE_thermodynamic_getChemPot(ipc,ip,el)
-       chemicalFE_thermodynamic_postResults(c+1_pInt:c+phase_Ncomponents(phase)) = &
-         tempPerComponent(1_pInt:phase_Ncomponents(phase))
-       c = c + phase_Ncomponents(phase)
-
      case (chemicalConc_ID)
-       chemicalFE_thermodynamic_postResults(c+1_pInt:c+phase_Ncomponents(phase)) = &
-         conc(1_pInt:phase_Ncomponents(phase))
+       do cp = 1_pInt, phase_Ncomponents(phase)
+         chemicalFE_thermodynamic_postResults(c+cp) = &
+           chemicalConc(cp,phase)%p(chemConcMapping(phase)%p(ipc,ip,el))
+       enddo
        c = c + phase_Ncomponents(phase)
 
    end select
