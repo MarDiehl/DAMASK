@@ -6,14 +6,9 @@ module spectral_solute
  use prec, only: & 
    pInt, &
    pReal
- use math, only: &
-   math_I3
  use spectral_utilities, only: &
    tSolutionState, &
    tSolutionParams
- use numerics, only: &
-   worldrank, &
-   worldsize
 
  implicit none
  private
@@ -72,6 +67,9 @@ subroutine spectral_solute_init
    IO_intOut, &
    IO_read_realFile, &
    IO_timeStamp
+ use numerics, only: &
+   worldrank, &
+   worldsize
  use mesh, only: &
    geomSize, &
    grid, &
