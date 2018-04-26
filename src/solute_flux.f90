@@ -173,11 +173,11 @@ subroutine solute_flux_init(fileUnit)
 
 ! allocate state arrays
      sizeState = 0_pInt
-     soluteState(section)%sizeState = sizeState
-     soluteState(section)%sizePostResults = solute_flux_sizePostResults(instance)
-     allocate(soluteState(section)%state0   (sizeState,NofmySolute))
-     allocate(soluteState(section)%subState0(sizeState,NofmySolute))
-     allocate(soluteState(section)%state    (sizeState,NofmySolute))
+     soluteState(homog)%sizeState = sizeState
+     soluteState(homog)%sizePostResults = solute_flux_sizePostResults(instance)
+     allocate(soluteState(homog)%state0   (sizeState,NofmySolute))
+     allocate(soluteState(homog)%subState0(sizeState,NofmySolute))
+     allocate(soluteState(homog)%state    (sizeState,NofmySolute))
 
    endif mySolute
  enddo initializeInstances
@@ -322,8 +322,8 @@ function solute_flux_getComponentConc(ip,el)
  do gr = 1_pInt, homogenization_Ngrains(homog)
    phase = material_phase(gr,ip,el)
    do cp = 1_pInt, homogenization_maxNcomponents
-     solute_flux_getComponentConc = &
-       solute_flux_getComponentConc + &
+     solute_flux_getComponentConc(cp) = &
+       solute_flux_getComponentConc(cp) + &
        phasefrac(gr,homog)%p(phasefracMapping(homog)%p(ip,el))* &
        chemicalConc(cp,phase)%p(chemConcMapping(phase)%p(gr,ip,el))
    enddo

@@ -10,7 +10,7 @@ module chemicalFE_thermodynamic
  implicit none
  private
  real(pReal),                                          parameter,           private :: &
-   kB = 1.3806488e-23_pReal                                                                          !< Boltzmann constant in J/Kelvin
+   kB = 0.333333333e-2_pReal                                                                          !< Boltzmann constant in J/Kelvin
 
  integer(pInt),                       dimension(:),     allocatable,         public, protected :: &
    chemicalFE_thermodynamic_sizePostResults                                                       !< cumulative size of post results
@@ -140,12 +140,12 @@ subroutine chemicalFE_thermodynamic_init(fileUnit)
    write(6,'(a16,1x,i5,/)') '# instances:',maxNinstance
 
 
- allocate(chemicalFE_thermodynamic_sizePostResults(maxNinstance),                   source=0_pInt)
+ allocate(chemicalFE_thermodynamic_sizePostResults(maxNinstance),                source=0_pInt)
  allocate(chemicalFE_thermodynamic_sizePostResult(maxval(phase_Noutput),maxNinstance), &
                                                                                  source=0_pInt)
  allocate(chemicalFE_thermodynamic_output(maxval(phase_Noutput),maxNinstance))
           chemicalFE_thermodynamic_output               = ''
- allocate(chemicalFE_thermodynamic_Noutput(maxNinstance),                       source=0_pInt)
+ allocate(chemicalFE_thermodynamic_Noutput(maxNinstance),                        source=0_pInt)
  
  allocate(param(maxNinstance))
 
@@ -234,7 +234,7 @@ subroutine chemicalFE_thermodynamic_init(fileUnit)
          
        case ('component_interactione','component_interactionenergy')
          if (chunkPos(1) /= phase_Ncomponents(phase)* &
-                            (phase_Ncomponents(phase) + 1_pInt) + 1_pInt) &
+                            (phase_Ncomponents(phase) + 1_pInt)/2_pInt + 1_pInt) &
            call IO_error(150_pInt,ext_msg=trim(tag)//' ('//CHEMICALFE_THERMODYNAMIC_label//')')
          o = 0_pInt
          do j = 1_pInt, phase_Ncomponents(phase)
@@ -265,6 +265,7 @@ subroutine chemicalFE_thermodynamic_init(fileUnit)
      param(instance)%Mobility          = tempMobility         (1:phase_Ncomponents(phase),instance)
      param(instance)%SolutionEnergy    = tempSolutionEnergy   (1:phase_Ncomponents(phase),instance)
      param(instance)%InitialConc       = tempInitialConc      (1:phase_Ncomponents(phase),instance)
+     param(instance)%GradientCoeff     = tempGradCoeff        (1:phase_Ncomponents(phase),instance)
      param(instance)%InteractionEnergy = tempInteractionEnergy(1:phase_Ncomponents(phase), &
                                                                1:phase_Ncomponents(phase),instance)
      if (any(param(instance)%Mobility < 0.0_pReal)) &
@@ -451,7 +452,7 @@ subroutine chemicalFE_thermodynamic_calConcandTangent(Conc,dConcdChemPot,dConcdG
    tempPerComponent, &
    err_conc
  integer(pInt) :: &
-   iter = 0_pInt, &
+   iter, &
    cpI, cpJ, &
    phase, &
    instance
@@ -463,8 +464,9 @@ subroutine chemicalFE_thermodynamic_calConcandTangent(Conc,dConcdChemPot,dConcdG
    Conc0(cpI) = chemicalConc0(cpI,phase)%p(chemConcMapping(phase)%p(ipc,ip,el))
  enddo
  Conc = Conc0
+ iter = 0_pInt
  err_conc = huge(1.0_pReal)
- do while (any(err_conc > chemicalState(phase)%aTolState) .or. iter < param(instance)%maxNIter)
+ do while (any(err_conc > chemicalState(phase)%aTolState) .and. iter < param(instance)%maxNIter)
    iter = iter + 1_pInt
    ConcLastIter = Conc
    do cpI = 1_pInt, phase_Ncomponents(phase)
@@ -486,12 +488,16 @@ subroutine chemicalFE_thermodynamic_calConcandTangent(Conc,dConcdChemPot,dConcdG
    call IO_error(400_pInt,el=el,ip=ip,g=ipc,ext_msg='chemicalFE thermodynamic concentration calculation did not converge')
  
  dConcdChemPot = 0.0_pReal
- dConcdGradC = 0.0_pReal
+ dConcdGradC   = 0.0_pReal
  do cpI = 1_pInt, phase_Ncomponents(phase)
+   dConcdChemPot(cpI,cpI) =  Conc(cpI)/(kB*T)
+   dConcdGradC  (cpI,cpI) = -Conc(cpI)*param(instance)%GradientCoeff(cpI)/&
+                             charLength/charLength/(kB*T)
    do cpJ = 1_pInt, phase_Ncomponents(phase)
-     dConcdChemPot(cpI,cpJ) = (Conc(cpI) - Conc(cpI)*Conc(cpJ))/(kB*T)
-     dConcdGradC  (cpI,cpJ) = -param(instance)%GradientCoeff(cpI)*(Conc(cpI) - Conc(cpI)*Conc(cpJ))/ &
-                               charLength/charLength/(kB*T)
+     dConcdChemPot(cpI,cpJ) = dConcdChemPot(cpI,cpJ) - Conc(cpI)*Conc(cpJ)/(kB*T)
+     dConcdGradC  (cpI,cpJ) = dConcdGradC  (cpI,cpJ) + &
+                              param(instance)%GradientCoeff(cpI)*Conc(cpI)*Conc(cpJ)/ &
+                              charLength/charLength/(kB*T)
    enddo
  enddo
 

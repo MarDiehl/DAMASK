@@ -248,7 +248,7 @@ subroutine chemicalFE_quadenergy_init(fileUnit)
          
        case ('component_quadcoeff','component_quadraticcoeff')
          if (chunkPos(1) /= phase_Ncomponents(phase)* &
-                            (phase_Ncomponents(phase) + 1_pInt) + 1_pInt) &
+                            (phase_Ncomponents(phase) + 1_pInt)/2_pInt + 1_pInt) &
            call IO_error(150_pInt,ext_msg=trim(tag)//' ('//CHEMICALFE_QUADENERGY_label//')')
          o = 0_pInt
          do j = 1_pInt, phase_Ncomponents(phase)
@@ -483,9 +483,9 @@ subroutine chemicalFE_quadenergy_calConcandTangent(Conc,dConcdChemPot,dConcdGrad
                   GradC(cpJ)*param(instance)%GradientCoeff(cpJ)/charLength/charLength)
      dConcdChemPot(cpI,cpJ) = &
        param(instance)%QuadraticCoeffInv(cpI,cpJ)
-     dConcdChemPot(cpI,cpJ) = &
+     dConcdGradC  (cpI,cpJ) = &
        param(instance)%QuadraticCoeffInv(cpI,cpJ)* &
-       param(instance)%GradientCoeff(cpI)/charLength/charLength
+       param(instance)%GradientCoeff(cpJ)/charLength/charLength
    enddo
  enddo
 

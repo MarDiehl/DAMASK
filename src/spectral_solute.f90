@@ -427,15 +427,15 @@ subroutine spectral_solute_formJacobian(da_local,solution_current_local,Jac_pre,
      dConcdChemPot
    k_ele(4*Ncomponents+1:8*Ncomponents:4,4*Ncomponents+1:8*Ncomponents:4) = &
      k_ele(4*Ncomponents+1:8*Ncomponents:4,4*Ncomponents+1:8*Ncomponents:4) + &
-     math_identity2nd(Ncomponents)
+     math_identity2nd(Ncomponents) - dConcdGradC
    mobility = solute_flux_getComponentMobility(1,cell)
    do comp = 0, Ncomponents-1
      k_ele(4*(            comp)+1:4*(            comp+1),4*(            comp)+1:4*(            comp+1)) = &
        k_ele(4*(            comp)+1:4*(            comp+1),4*(            comp)+1:4*(            comp+1)) + &
-       params%timeinc*mobility(comp)*matmul(transpose(BMat),BMat)
+       params%timeinc*mobility(comp+1)*matmul(transpose(BMat),BMat)
      k_ele(4*(Ncomponents+comp)+1:4*(Ncomponents+comp+1),4*(Ncomponents+comp)+1:4*(Ncomponents+comp+1)) = &
        k_ele(4*(Ncomponents+comp)+1:4*(Ncomponents+comp+1),4*(Ncomponents+comp)+1:4*(Ncomponents+comp+1)) + &
-       charLength*charLength**matmul(transpose(BMat),BMat)
+       charLength*charLength*matmul(transpose(BMat),BMat)
    enddo  
    k_ele = transpose(k_ele)
    call MatSetValuesStencil(Jac,8*Ncomponents,col,8*Ncomponents,col,k_ele,ADD_VALUES,ierr)
