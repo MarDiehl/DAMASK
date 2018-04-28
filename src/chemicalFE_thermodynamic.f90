@@ -500,7 +500,7 @@ subroutine chemicalFE_thermodynamic_calConcandTangent(Conc,dConcdChemPot,dConcdG
               exp(TempPerComponent(1:phase_Ncomponents(phase))/(kB*T))/ &
               (1.0_pReal + sum(exp(TempPerComponent(1:phase_Ncomponents(phase))/(kB*T))))
 
-   call dgesv(phase_Ncomponents(phase),1,Jacobian,phase_Ncomponents(phase),ipiv,Residual,phase_Ncomponents(phase),ierr)                                                   ! solve dRLp/dLp * delta Lp = -res for delta Lp
+   call dgesv(phase_Ncomponents(phase),1,Jacobian,phase_Ncomponents(phase),ipiv,Residual,phase_Ncomponents(phase),ierr) 
    if (ierr /= 0_pInt) &
      call IO_error(400_pInt,el=el,ip=ip,g=ipc,ext_msg='chemicalFE thermodynamic concentration calculation did not invert')
    Conc = Conc - Residual
