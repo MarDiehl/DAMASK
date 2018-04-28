@@ -39,6 +39,7 @@ module material
    KINEMATICS_thermal_expansion_label   = 'thermal_expansion', &
    KINEMATICS_cleavage_opening_label    = 'cleavage_opening', &
    KINEMATICS_slipplane_opening_label   = 'slipplane_opening', &
+   KINEMATICS_solute_strain_label       = 'solute_strain', &
    THERMAL_isothermal_label             = 'isothermal', &
    THERMAL_adiabatic_label              = 'adiabatic', &
    THERMAL_conduction_label             = 'conduction', &
@@ -82,7 +83,8 @@ module material
    enumerator :: KINEMATICS_undefined_ID, &
                  KINEMATICS_cleavage_opening_ID, &
                  KINEMATICS_slipplane_opening_ID, &
-                 KINEMATICS_thermal_expansion_ID
+                 KINEMATICS_thermal_expansion_ID, &
+                 KINEMATICS_solute_strain_ID
  end enum
 
  enum, bind(c)
@@ -291,6 +293,7 @@ module material
    KINEMATICS_cleavage_opening_ID, &
    KINEMATICS_slipplane_opening_ID, &
    KINEMATICS_thermal_expansion_ID, &
+   KINEMATICS_solute_strain_ID, &
    THERMAL_isothermal_ID, &
    THERMAL_adiabatic_ID, &
    THERMAL_conduction_ID, &
@@ -914,6 +917,8 @@ subroutine material_parsePhase(fileUnit,myPart)
              phase_kinematics(kinematicsCtr,section) = KINEMATICS_slipplane_opening_ID
            case (KINEMATICS_thermal_expansion_label)
              phase_kinematics(kinematicsCtr,section) = KINEMATICS_thermal_expansion_ID
+           case (KINEMATICS_solute_strain_label)
+             phase_kinematics(kinematicsCtr,section) = KINEMATICS_solute_strain_ID
          end select
        case ('(stiffness_modifier)')
          stiffDegradationCtr = stiffDegradationCtr + 1_pInt

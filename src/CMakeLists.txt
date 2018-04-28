@@ -89,7 +89,8 @@ list(APPEND OBJECTFILES $<TARGET_OBJECTS:CHEMICAL>)
 add_library (KINEMATICS OBJECT
   "kinematics_cleavage_opening.f90"
   "kinematics_slipplane_opening.f90"
-  "kinematics_thermal_expansion.f90")
+  "kinematics_thermal_expansion.f90"
+  "kinematics_solute_strain.f90")
 add_dependencies(KINEMATICS DAMASK_HELPERS)
 list(APPEND OBJECTFILES $<TARGET_OBJECTS:KINEMATICS>)
 
