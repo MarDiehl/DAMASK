@@ -14,6 +14,7 @@
 #include "kinematics_cleavage_opening.f90"
 #include "kinematics_slipplane_opening.f90"
 #include "kinematics_thermal_expansion.f90"
+#include "kinematics_solute_strain.f90"
 #include "plastic_none.f90"
 #include "plastic_isotropic.f90"
 #include "plastic_phenopowerlaw.f90"
