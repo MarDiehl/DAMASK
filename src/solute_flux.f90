@@ -235,7 +235,14 @@ subroutine solute_flux_calComponentConcandTangent(Conc,dConcdChemPot,dConcdGradC
    CHEMICALFE_quadenergy_ID, &
    CHEMICALFE_thermodynamic_ID, &
    phasefracMapping, &
-   phasefrac
+   phasefrac, &
+   phase_Nkinematics, &
+   phase_kinematics, &
+   KINEMATICS_solute_strain_ID
+ use crystallite, only: &
+   crystallite_Tstar_v
+ use kinematics_solute_strain, only: &
+   kinematics_solute_strain_getMechanicalComponentPotential
  use chemicalFE_quadenergy, only: &
    chemicalFE_quadenergy_calConcandTangent  
  use chemicalFE_thermodynamic, only: &
@@ -254,13 +261,14 @@ subroutine solute_flux_calComponentConcandTangent(Conc,dConcdChemPot,dConcdGradC
    dConcdChemPot, &
    dConcdGradC
  real(pReal), dimension(homogenization_maxNcomponents) :: &
+   MechChemPot, &
    Conc_local
  real(pReal), dimension(homogenization_maxNcomponents, &
                         homogenization_maxNcomponents) :: &
    dConcdChemPot_local, &
    dConcdGradC_local
  integer(pInt) :: &
-   gr, &
+   gr, k, &
    homog, & 
    offset
 
@@ -270,14 +278,25 @@ subroutine solute_flux_calComponentConcandTangent(Conc,dConcdChemPot,dConcdGradC
  dConcdChemPot = 0.0_pReal
  dConcdGradC = 0.0_pReal
  do gr = 1_pInt, homogenization_Ngrains(homog)
+   MechChemPot = 0.0_pReal
+   KinematicsLoop: do k = 1_pInt, phase_Nkinematics(material_phase(gr,ip,el))
+     kinematicsType: select case (phase_kinematics(k,material_phase(gr,ip,el)))
+       case (KINEMATICS_solute_strain_ID) kinematicsType
+         MechChemPot = MechChemPot + &
+           kinematics_solute_strain_getMechanicalComponentPotential(crystallite_Tstar_v(1:6,gr,ip,el), &
+                                                                    gr,ip,el)
+
+     end select kinematicsType
+   enddo KinematicsLoop
+
    chemicalFEType: select case (phase_chemicalFE(material_phase(gr,ip,el)))
      case (CHEMICALFE_quadenergy_ID) chemicalFEType
        call chemicalFE_quadenergy_calConcandTangent(Conc_local,dConcdChemPot_local,dConcdGradC_local, & 
-                                                    ChemPot,GradC,gr,ip,el)
+                                                    ChemPot,GradC,MechChemPot,gr,ip,el)
 
      case (CHEMICALFE_thermodynamic_ID) chemicalFEType
        call chemicalFE_thermodynamic_calConcandTangent(Conc_local,dConcdChemPot_local,dConcdGradC_local, & 
-                                                       ChemPot,GradC,gr,ip,el)
+                                                       ChemPot,GradC,MechChemPot,gr,ip,el)
 
      case default
        Conc_local = 0.0_pReal

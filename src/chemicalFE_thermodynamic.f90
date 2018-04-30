@@ -416,7 +416,7 @@ end function chemicalFE_thermodynamic_getEnergy
 !> @brief returns the component concentration tangent for a given instance of this model
 !--------------------------------------------------------------------------------------------------
 subroutine chemicalFE_thermodynamic_calConcandTangent(Conc,dConcdChemPot,dConcdGradC, &
-                                                      ChemPot,GradC,ipc,ip,el)
+                                                      ChemPot,GradC,MechChemPot,ipc,ip,el)
  use IO, only: &
    IO_error
  use numerics, only: &
@@ -437,7 +437,8 @@ subroutine chemicalFE_thermodynamic_calConcandTangent(Conc,dConcdChemPot,dConcdG
    ipc, ip, el
  real(pReal), dimension(phase_Ncomponents(material_phase(ipc,ip,el))), intent(in)  :: &
    ChemPot, &
-   GradC
+   GradC, &
+   MechChemPot
  real(pReal), dimension(phase_Ncomponents(material_phase(ipc,ip,el))), intent(out) :: &
    Conc
  real(pReal), dimension(phase_Ncomponents(material_phase(ipc,ip,el)), &
@@ -485,7 +486,8 @@ subroutine chemicalFE_thermodynamic_calConcandTangent(Conc,dConcdChemPot,dConcdG
      TempPerComponent(cpI) = &
        ChemPot(cpI) - &
        param(instance)%SolutionEnergy(cpI) - &
-       param(instance)%GradientCoeff(cpI)*(Conc(cpI) - GradC(cpI))/charLength/charLength
+       param(instance)%GradientCoeff(cpI)*(Conc(cpI) - GradC(cpI))/charLength/charLength - &
+       MechChemPot(cpI)
      do cpJ = 1_pInt, phase_Ncomponents(phase)
        Jacobian(cpI,cpJ) = &
          Jacobian(cpI,cpJ) - & 
