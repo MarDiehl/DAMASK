@@ -10,7 +10,7 @@ module chemicalFE_thermodynamic
  implicit none
  private
  real(pReal),                                          parameter,           private :: &
-   kB = 1.3806503e-23_pReal                                                                       !< Boltzmann constant in J/Kelvin
+   R = 8.314459848_pReal                                                                          !< Universal gas constant in J/(mol Kelvin)
 
  integer(pInt),                       dimension(:),     allocatable,         public, protected :: &
    chemicalFE_thermodynamic_sizePostResults                                                       !< cumulative size of post results
@@ -36,6 +36,7 @@ module chemicalFE_thermodynamic
    integer(pInt) :: &
      maxNIter = 20_pInt
    real(pReal) :: &
+     MolarVolume, &
      aTol = 1e-12_pReal
    real(pReal), dimension(:,:), allocatable :: &
      InteractionEnergy
@@ -203,6 +204,9 @@ subroutine chemicalFE_thermodynamic_init(fileUnit)
          
        case ('component_maxniter')
          param(instance)%maxNIter = IO_intValue(line,chunkPos,2_pInt)
+         
+       case ('molarvolume')
+         param(instance)%MolarVolume = IO_floatValue(line,chunkPos,2_pInt)
          
        case ('component_mobility')
          if (chunkPos(1) /= phase_Ncomponents(phase) + 1_pInt) &
@@ -395,13 +399,13 @@ function chemicalFE_thermodynamic_getEnergy(ipc,ip,el)
    conc(cpI) = chemicalConc(cpI,phase)%p(chemConcMapping(phase)%p(ipc, ip, el))
  enddo
  chemicalFE_thermodynamic_getEnergy = &
-   kB*T*(1.0_pReal - sum(conc(1:phase_Ncomponents(phase))))* &
+   R*T*(1.0_pReal - sum(conc(1:phase_Ncomponents(phase))))* &
    log(1.0_pReal - sum(conc(1:phase_Ncomponents(phase))))
  do cpI = 1_pInt, phase_Ncomponents(phase)
    chemicalFE_thermodynamic_getEnergy = &
      chemicalFE_thermodynamic_getEnergy + &
      param(instance)%SolutionEnergy(cpI)*conc(cpI) + &
-     kB*T*conc(cpI)*log(conc(cpI))
+     R*T*conc(cpI)*log(conc(cpI))
    do cpJ = 1_pInt, phase_Ncomponents(phase)  
      chemicalFE_thermodynamic_getEnergy = &
        chemicalFE_thermodynamic_getEnergy + &
@@ -482,25 +486,25 @@ subroutine chemicalFE_thermodynamic_calConcandTangent(Conc,dConcdChemPot,dConcdG
    do cpI = 1_pInt, phase_Ncomponents(phase)
      Jacobian(cpI,cpI) = &
        1.0_pReal + &
-       Conc(cpI)*param(instance)%GradientCoeff(cpI)/charLength/charLength/(kB*T)
+       Conc(cpI)*param(instance)%GradientCoeff(cpI)/charLength/charLength/(R*T)
      TempPerComponent(cpI) = &
        ChemPot(cpI) - &
        param(instance)%SolutionEnergy(cpI) - &
        param(instance)%GradientCoeff(cpI)*(Conc(cpI) - GradC(cpI))/charLength/charLength - &
-       MechChemPot(cpI)
+       param(instance)%MolarVolume*MechChemPot(cpI)
      do cpJ = 1_pInt, phase_Ncomponents(phase)
        Jacobian(cpI,cpJ) = &
          Jacobian(cpI,cpJ) - & 
          Conc(cpI)*Conc(cpJ)* &
-         param(instance)%GradientCoeff(cpJ)/charLength/charLength/(kB*T)
+         param(instance)%GradientCoeff(cpJ)/charLength/charLength/(R*T)
        TempPerComponent(cpI) = &
          tempPerComponent(cpI) - &
          param(instance)%InteractionEnergy(cpI,cpJ)*Conc0(cpJ)
      enddo
    enddo
    Residual = Conc - &
-              exp(TempPerComponent(1:phase_Ncomponents(phase))/(kB*T))/ &
-              (1.0_pReal + sum(exp(TempPerComponent(1:phase_Ncomponents(phase))/(kB*T))))
+              exp(TempPerComponent(1:phase_Ncomponents(phase))/(R*T))/ &
+              (1.0_pReal + sum(exp(TempPerComponent(1:phase_Ncomponents(phase))/(R*T))))
 
    call dgesv(phase_Ncomponents(phase),1,Jacobian,phase_Ncomponents(phase),ipiv,Residual,phase_Ncomponents(phase),ierr) 
    if (ierr /= 0_pInt) &
@@ -511,7 +515,7 @@ subroutine chemicalFE_thermodynamic_calConcandTangent(Conc,dConcdChemPot,dConcdG
    call IO_error(400_pInt,el=el,ip=ip,g=ipc,ext_msg='chemicalFE thermodynamic concentration calculation did not converge')
  
  do cpI = 1_pInt, phase_Ncomponents(phase)
-   TempPerComponent(cpI) = Conc(cpI)/(kB*T + Conc(cpI)*param(instance)%GradientCoeff(cpI)/charLength/charLength)
+   TempPerComponent(cpI) = Conc(cpI)/(R*T + Conc(cpI)*param(instance)%GradientCoeff(cpI)/charLength/charLength)
  enddo
 
  dConcdChemPot   = 0.0_pReal
@@ -520,9 +524,9 @@ subroutine chemicalFE_thermodynamic_calConcandTangent(Conc,dConcdChemPot,dConcdG
    do cpJ = 1_pInt, phase_Ncomponents(phase)
      dConcdChemPot(cpI,cpJ) = &
        dConcdChemPot(cpI,cpJ) - & 
-       TempPerComponent(cpI)*TempPerComponent(cpJ)*(kB*T)/ &
+       TempPerComponent(cpI)*TempPerComponent(cpJ)*(R*T)/ &
        (1.0_pReal - sum(Conc))/ &
-       (1.0_pReal + sum(TempPerComponent)*(kB*T)/(1.0_pReal - sum(Conc)))
+       (1.0_pReal + sum(TempPerComponent)*(R*T)/(1.0_pReal - sum(Conc)))
    enddo
  enddo
  dConcdGradC   = 0.0_pReal
@@ -532,9 +536,9 @@ subroutine chemicalFE_thermodynamic_calConcandTangent(Conc,dConcdChemPot,dConcdG
    do cpJ = 1_pInt, phase_Ncomponents(phase)
      dConcdGradC(cpI,cpJ) = &
        dConcdGradC(cpI,cpJ) - & 
-       TempPerComponent(cpI)*TempPerComponent(cpJ)*(kB*T)/ &
+       TempPerComponent(cpI)*TempPerComponent(cpJ)*(R*T)/ &
        (1.0_pReal - sum(Conc))/ &
-       (1.0_pReal + sum(TempPerComponent)*(kB*T)/(1.0_pReal - sum(Conc)))* &
+       (1.0_pReal + sum(TempPerComponent)*(R*T)/(1.0_pReal - sum(Conc)))* &
        param(instance)%GradientCoeff(cpJ)/charLength/charLength
    enddo
  enddo
