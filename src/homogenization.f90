@@ -93,6 +93,7 @@ subroutine homogenization_init
 #else
  use constitutive, only: &
    constitutive_plasticity_maxSizePostResults, &
+   constitutive_chemicalFE_maxSizePostResults, &
    constitutive_source_maxSizePostResults
  use crystallite, only: &
    crystallite_maxSizePostResults
@@ -312,6 +313,7 @@ subroutine homogenization_init
                                + solute_maxSizePostResults         &
                            + homogenization_maxNgrains * (1 + crystallite_maxSizePostResults &      ! crystallite size & crystallite results
                                                         + 1 + constitutive_plasticity_maxSizePostResults &     ! constitutive size & constitutive results
+                                                            + constitutive_chemicalFE_maxSizePostResults &
                                                             + constitutive_source_maxSizePostResults)
  allocate(materialpoint_results(materialpoint_sizeResults,mesh_maxNips,mesh_NcpElems))
 #endif
@@ -1094,6 +1096,7 @@ function homogenization_postResults(ip,el)
    soluteState, &
    homogenization_type, &
    thermal_type, &
+   solute_type, &
    HOMOGENIZATION_NONE_ID, &
    HOMOGENIZATION_ISOSTRAIN_ID, &
    HOMOGENIZATION_MULTIPHASE_ID, &
@@ -1176,7 +1179,7 @@ function homogenization_postResults(ip,el)
 
  startPos = endPos + 1_pInt
  endPos   = endPos + soluteState(mappingHomogenization(2,ip,el))%sizePostResults
- chosenSolute: select case (thermal_type(mesh_element(3,el)))
+ chosenSolute: select case (solute_type(mesh_element(3,el)))
    case (SOLUTE_isoconc_ID) chosenSolute
      homogenization_postResults(startPos:endPos) = &
        solute_isoconc_postResults(ip, el)
