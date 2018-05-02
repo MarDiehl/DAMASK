@@ -350,7 +350,7 @@ subroutine numerics_init
 !--------------------------------------------------------------------------------------------------
 ! random seeding parameter
        case ('random_seed','fixed_seed')
-         randomSeed = IO_intValue(line,chunkPos,2_pInt)
+         randomSeed = IO_intValue(line,chunkPos,2_pInt) + worldrank
 
 !--------------------------------------------------------------------------------------------------
 ! gradient parameter
