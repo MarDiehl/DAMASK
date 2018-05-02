@@ -43,7 +43,8 @@ module chemicalFE_thermodynamic
    real(pReal), dimension(:  ), allocatable :: &
      Mobility, &
      SolutionEnergy, &
-     InitialConc, &
+     InitialAvgConc, &
+     InitialDeltaConc, &
      GradientCoeff
  end type
 
@@ -123,10 +124,14 @@ subroutine chemicalFE_thermodynamic_init(fileUnit)
  real(pReal), dimension(:,:), allocatable :: &
    tempMobility, &
    tempSolutionEnergy, &
-   tempInitialConc, &
+   tempInitialAvgConc, &
+   tempInitialDeltaConc, &
    tempGradCoeff
  real(pReal), dimension(:,:,:), allocatable :: &
    tempInteractionEnergy
+ real(pReal) :: &
+   randNum, &
+   InitialConc
  integer(kind(undefined_ID)), dimension(:,:), allocatable :: & 
    tempOutputID
 
@@ -153,7 +158,8 @@ subroutine chemicalFE_thermodynamic_init(fileUnit)
  allocate(tempOutputID         (maxval(phase_Noutput)  ,maxNinstance))
  allocate(tempMobility         (phase_maxNcomponents,maxNinstance),source=0.0_pReal)
  allocate(tempSolutionEnergy   (phase_maxNcomponents,maxNinstance),source=0.0_pReal)
- allocate(tempInitialConc      (phase_maxNcomponents,maxNinstance),source=0.0_pReal)
+ allocate(tempInitialAvgConc   (phase_maxNcomponents,maxNinstance),source=0.0_pReal)
+ allocate(tempInitialDeltaConc (phase_maxNcomponents,maxNinstance),source=0.0_pReal)
  allocate(tempGradCoeff        (phase_maxNcomponents,maxNinstance),source=0.0_pReal)
  allocate(tempInteractionEnergy(phase_maxNcomponents, &
                                 phase_maxNcomponents,maxNinstance),source=0.0_pReal)
@@ -222,11 +228,18 @@ subroutine chemicalFE_thermodynamic_init(fileUnit)
            tempSolutionEnergy(j,instance) = IO_floatValue(line,chunkPos,1_pInt+j)
          enddo
          
-       case ('component_initialconc')
+       case ('component_initialavgconc')
          if (chunkPos(1) /= phase_Ncomponents(phase) + 1_pInt) &
            call IO_error(150_pInt,ext_msg=trim(tag)//' ('//CHEMICALFE_THERMODYNAMIC_label//')')
          do j = 1_pInt, phase_Ncomponents(phase)
-           tempInitialConc(j,instance) = IO_floatValue(line,chunkPos,1_pInt+j)
+           tempInitialAvgConc(j,instance) = IO_floatValue(line,chunkPos,1_pInt+j)
+         enddo
+         
+       case ('component_initialdeltaconc')
+         if (chunkPos(1) /= phase_Ncomponents(phase) + 1_pInt) &
+           call IO_error(150_pInt,ext_msg=trim(tag)//' ('//CHEMICALFE_THERMODYNAMIC_label//')')
+         do j = 1_pInt, phase_Ncomponents(phase)
+           tempInitialDeltaConc(j,instance) = IO_floatValue(line,chunkPos,1_pInt+j)
          enddo
          
        case ('component_gradcoeff','component_gradientcoeff')
@@ -262,13 +275,15 @@ subroutine chemicalFE_thermodynamic_init(fileUnit)
      param(instance)%OutputID = tempOutputID(1:chemicalFE_thermodynamic_Noutput(instance),instance)
      allocate(param(instance)%Mobility         (phase_Ncomponents(phase)))
      allocate(param(instance)%SolutionEnergy   (phase_Ncomponents(phase)))
-     allocate(param(instance)%InitialConc      (phase_Ncomponents(phase)))
+     allocate(param(instance)%InitialAvgConc   (phase_Ncomponents(phase)))
+     allocate(param(instance)%InitialDeltaConc (phase_Ncomponents(phase)))
      allocate(param(instance)%GradientCoeff    (phase_Ncomponents(phase)))
      allocate(param(instance)%InteractionEnergy(phase_Ncomponents(phase), &
                                                 phase_Ncomponents(phase)))
      param(instance)%Mobility          = tempMobility         (1:phase_Ncomponents(phase),instance)
      param(instance)%SolutionEnergy    = tempSolutionEnergy   (1:phase_Ncomponents(phase),instance)
-     param(instance)%InitialConc       = tempInitialConc      (1:phase_Ncomponents(phase),instance)
+     param(instance)%InitialAvgConc    = tempInitialAvgConc   (1:phase_Ncomponents(phase),instance)
+     param(instance)%InitialDeltaConc  = tempInitialDeltaConc (1:phase_Ncomponents(phase),instance)
      param(instance)%GradientCoeff     = tempGradCoeff        (1:phase_Ncomponents(phase),instance)
      param(instance)%InteractionEnergy = tempInteractionEnergy(1:phase_Ncomponents(phase), &
                                                                1:phase_Ncomponents(phase),instance)
@@ -324,9 +339,13 @@ subroutine chemicalFE_thermodynamic_init(fileUnit)
        allocate(chemicalState(phase)%RKCK45dotState (6,sizeDotState,NipcMyPhase), source=0.0_pReal)
      chemConcMapping(phase)%p => phasememberAt
      do j = 1_pInt, phase_Ncomponents(phase)
-       chemicalState(phase)%state0   (j,1:NipcMyPhase) = param(instance)%InitialConc(j)
-       chemicalState(phase)%subState0(j,1:NipcMyPhase) = param(instance)%InitialConc(j)
-       chemicalState(phase)%state    (j,1:NipcMyPhase) = param(instance)%InitialConc(j)
+       do o = 1_pInt, NipcMyPhase
+         call random_number(randNum)
+         InitialConc = param(instance)%InitialAvgConc(j) + param(instance)%InitialDeltaConc(j)*(randNum - 0.5_pReal)
+         chemicalState(phase)%state0   (j,o) = InitialConc
+         chemicalState(phase)%subState0(j,o) = InitialConc
+         chemicalState(phase)%state    (j,o) = InitialConc
+       enddo  
        chemicalConc (j,phase)%p => chemicalState(phase)%state (j,1:NipcMyPhase)
        chemicalConc0(j,phase)%p => chemicalState(phase)%state0(j,1:NipcMyPhase)
        allocate(chemicalConcRate(j,phase)%p(NipcMyPhase), source=0.0_pReal)
