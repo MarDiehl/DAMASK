@@ -166,7 +166,7 @@ subroutine spectral_multiphase_init
    cell = cell + 1_pInt
    homog = material_homog(1,cell)
    do phase = 1, NActivePhases
-     x_scal(phase-1,i,j,k) =  phasefrac(phase,homog)%p(phasefracMapping(homog)%p(1,cell))
+     x_scal(phase-1,i,j,k) =  phasefrac(homog)%p(phase,phasefracMapping(homog)%p(1,cell))
    enddo
  enddo; enddo; enddo
  call DMDAVecRestoreArrayF90(multiphase_grid,solution_current,x_scal,ierr)
@@ -258,7 +258,7 @@ type(tSolutionState) function spectral_multiphase_solution(timeinc,timeinc_old)
    cell = cell + 1
    homog = material_homog(1,cell)
    do phase = 1, NActivePhases
-     phi_stagInc(phase) = phasefrac(phase,homog)%p(phasefracMapping(homog)%p(1,cell))
+     phi_stagInc(phase) = phasefrac(homog)%p(phase,phasefracMapping(homog)%p(1,cell))
      phi_current(phase) = x_scal_current(phase-1,i,j,k)
      phi_lastInc(phase) = x_scal_lastInc(phase-1,i,j,k)
    enddo

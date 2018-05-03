@@ -34,7 +34,7 @@ module prec
 
  type, public :: p_2Dvec                                                
    real(pReal), dimension(:,:), pointer :: p
- end type p_vec
+ end type p_2Dvec
 
  type, public :: p_intvec
    integer(pInt), dimension(:), pointer :: p

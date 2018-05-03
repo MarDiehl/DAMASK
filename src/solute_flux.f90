@@ -304,9 +304,9 @@ subroutine solute_flux_calComponentConcandTangent(Conc,dConcdChemPot,dConcdGradC
        dConcdGradC_local = 0.0_pReal
        
    end select chemicalFEType
-   Conc = Conc + phasefrac(gr,homog)%p(offset)*Conc_local
-   dConcdChemPot = dConcdChemPot + phasefrac(gr,homog)%p(offset)*dConcdChemPot_local
-   dConcdGradC = dConcdGradC + phasefrac(gr,homog)%p(offset)*dConcdGradC_local
+   Conc = Conc + phasefrac(homog)%p(gr,offset)*Conc_local
+   dConcdChemPot = dConcdChemPot + phasefrac(homog)%p(gr,offset)*dConcdChemPot_local
+   dConcdGradC = dConcdGradC + phasefrac(homog)%p(gr,offset)*dConcdGradC_local
  enddo
 
 end subroutine solute_flux_calComponentConcandTangent
@@ -343,7 +343,7 @@ function solute_flux_getComponentConc(ip,el)
    do cp = 1_pInt, homogenization_maxNcomponents
      solute_flux_getComponentConc(cp) = &
        solute_flux_getComponentConc(cp) + &
-       phasefrac(gr,homog)%p(phasefracMapping(homog)%p(ip,el))* &
+       phasefrac(homog)%p(gr,phasefracMapping(homog)%p(ip,el))* &
        chemicalConc(cp,phase)%p(chemConcMapping(phase)%p(gr,ip,el))
    enddo
  enddo
@@ -388,13 +388,13 @@ function solute_flux_getComponentMobility(ip,el)
      case (CHEMICALFE_quadenergy_ID) chemicalFEType
        solute_flux_getComponentMobility = &
          solute_flux_getComponentMobility + &
-         phasefrac(gr,homog)%p(offset)* &
+         phasefrac(homog)%p(gr,offset)* &
          chemicalFE_quadenergy_getMobility(gr,ip,el)
 
      case (CHEMICALFE_thermodynamic_ID) chemicalFEType
        solute_flux_getComponentMobility = &
          solute_flux_getComponentMobility + &
-         phasefrac(gr,homog)%p(offset)* &
+         phasefrac(homog)%p(gr,offset)* &
          chemicalFE_thermodynamic_getMobility(gr,ip,el)
 
    end select chemicalFEType

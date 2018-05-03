@@ -73,7 +73,6 @@ subroutine homogenization_isostrain_init(fileUnit)
    homog, &
    instance
  integer :: &
-   grI, &
    NofMyHomog                                                                                       ! no pInt (stores a system dependen value from 'count'
  character(len=65536) :: &
    tag  = '', &
@@ -195,9 +194,8 @@ subroutine homogenization_isostrain_init(fileUnit)
      allocate(homogState(homog)%state    (0_pInt,NofMyHomog), source=0.0_pReal)
 
      phasefracMapping(homog)%p => mappingHomogenizationConst
-     do grI = 1_pInt, homogenization_Ngrains(homog)
-       allocate  (phasefrac(grI,homog)%p(1), source = 1.0_pReal/real(homogenization_Ngrains(homog),pReal))
-     enddo  
+     allocate  (phasefrac(homog)%p(homogenization_Ngrains(homog),1), &
+                  source = 1.0_pReal/real(homogenization_Ngrains(homog),pReal))
 
    endif myHomog
  enddo initializeInstances

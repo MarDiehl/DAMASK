@@ -16,6 +16,7 @@ module material
    tHomogMapping, &
    tPhaseMapping, &
    p_vec, &
+   p_2Dvec, &
    p_intvec
 
  implicit none
@@ -267,8 +268,10 @@ module material
    temperature, &                                                                                   !< temperature field
    temperatureRate                                                                                  !< temperature change rate field
 
+ type(p_2Dvec),                             dimension(:),  allocatable,  public            :: &
+   phasefrac                                                                                        !< phase fraction field
+
  type(p_vec),                             dimension(:,:),  allocatable,  public            :: &
-   phasefrac, &                                                                                     !< phase fraction field
    chemicalConc, &                                                                                  !< current component concentration field
    chemicalConc0, &                                                                                 !< previous component concentration field
    chemicalConcRate                                                                                 !< component concentration rate field
@@ -401,8 +404,7 @@ subroutine material_init()
  allocate(temperature        (material_Nhomogenization))
  allocate(temperatureRate    (material_Nhomogenization))
  allocate(phasefracMapping   (material_Nhomogenization))
- allocate(phasefrac          (homogenization_maxNgrains,&
-                              material_Nhomogenization))
+ allocate(phasefrac          (material_Nhomogenization))
 
  do m = 1_pInt,material_Nmicrostructure
    if(microstructure_crystallite(m) < 1_pInt .or. &
