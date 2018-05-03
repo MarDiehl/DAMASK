@@ -149,7 +149,6 @@ if ("${PROJECT_NAME}" STREQUAL "DAMASK_spectral")
       "spectral_multiphase.f90"
       "spectral_thermal.f90"
       "spectral_solute.f90"
-      "spectral_mech_AL.f90"
       "spectral_mech_Polarisation.f90"
       "spectral_mech_Basic.f90"
       "spectral_mech_FEM.f90")

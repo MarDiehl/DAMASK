@@ -121,12 +121,23 @@ subroutine basicPETSc_init
  integer(pInt), dimension(:), allocatable :: localK  
  integer(pInt) :: proc
  character(len=1024) :: rankStr
-
- mainProcess: if (worldrank == 0_pInt) then
-   write(6,'(/,a)') ' <<<+-  spectral_mech_basicPETSc init  -+>>>'
-   write(6,'(a15,a)')   ' Current time: ',IO_timeStamp()
+ 
+ external :: &
+   SNESCreate, &
+   SNESSetOptionsPrefix, &
+   DMDACreate3D, &
+   SNESSetDM, &
+   DMCreateGlobalVector, &
+   DMDASNESSetFunctionLocal, &
+   SNESGetConvergedReason, &
+   SNESSetConvergenceTest, &
+   SNESSetFromOptions
+   
+ write(6,'(/,a)') ' <<<+-  DAMASK_spectral_solverBasicPETSc init  -+>>>'
+ write(6,'(/,a)') ' Shanthraj et al., International Journal of Plasticity, 66:31–45, 2015'
+ write(6,'(/,a)') ' https://doi.org/10.1016/j.ijplas.2014.02.006'
+ write(6,'(a15,a)') ' Current time: ',IO_timeStamp()
 #include "compilation_info.f90"
- endif mainProcess
 
 !--------------------------------------------------------------------------------------------------
 ! allocate global fields

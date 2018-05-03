@@ -84,7 +84,6 @@ program DAMASK_spectral
    FIELD_SOLUTE_ID, &
    FIELD_MULTIPHASE_ID
  use spectral_mech_Basic
- use spectral_mech_AL
  use spectral_mech_Polarisation
  use spectral_mech_FEM
  use spectral_thermal
@@ -167,6 +166,7 @@ program DAMASK_spectral
 ! init DAMASK (all modules)
  call CPFEM_initAll(el = 1_pInt, ip = 1_pInt)
  write(6,'(/,a)')   ' <<<+-  DAMASK_spectral init  -+>>>'
+ write(6,'(/,a)')   ' Roters et al., Computational Materials Science, 2018'
  write(6,'(a15,a)') ' Current time: ',IO_timeStamp()
 #include "compilation_info.f90"
 
@@ -380,11 +380,7 @@ program DAMASK_spectral
        select case (spectral_solver)
          case (DAMASK_spectral_SolverBasicPETSc_label)
            call basicPETSc_init
-         case (DAMASK_spectral_SolverAL_label)
-           if(iand(debug_level(debug_spectral),debug_levelBasic)/= 0) &
-           call IO_warning(42_pInt, ext_msg='debug Divergence')
-           call AL_init
-
+           
          case (DAMASK_spectral_SolverPolarisation_label)
            if(iand(debug_level(debug_spectral),debug_levelBasic)/= 0) &
            call IO_warning(42_pInt, ext_msg='debug Divergence')
@@ -553,12 +549,6 @@ program DAMASK_spectral
                        deformation_BC     = loadCases(currentLoadCase)%deformation, &
                        stress_BC          = loadCases(currentLoadCase)%stress, &
                        rotation           = loadCases(currentLoadCase)%rotation)
-                 case (DAMASK_spectral_SolverAL_label)
-                   call AL_forward (&
-                       guess,timeinc,timeIncOld,remainingLoadCaseTime, &
-                       deformation_BC     = loadCases(currentLoadCase)%deformation, &
-                       stress_BC          = loadCases(currentLoadCase)%stress, &
-                       rotation_BC        = loadCases(currentLoadCase)%rotation)
                  case (DAMASK_spectral_SolverPolarisation_label)
                    call Polarisation_forward (&
                        guess,timeinc,timeIncOld,remainingLoadCaseTime, &
@@ -596,12 +586,6 @@ program DAMASK_spectral
                          incInfo,timeinc,timeIncOld,remainingLoadCaseTime, &
                          stress_BC          = loadCases(currentLoadCase)%stress, &
                          rotation           = loadCases(currentLoadCase)%rotation)
-
-                   case (DAMASK_spectral_SolverAL_label)
-                     solres(field) = AL_solution (&
-                         incInfo,timeinc,timeIncOld, &
-                         stress_BC          = loadCases(currentLoadCase)%stress, &
-                         rotation_BC        = loadCases(currentLoadCase)%rotation)
 
                    case (DAMASK_spectral_SolverPolarisation_label)
                      solres(field) = Polarisation_solution (&
@@ -740,8 +724,6 @@ subroutine quit(stop_id)
    pInt
  use spectral_mech_Basic, only: &
    BasicPETSC_destroy
- use spectral_mech_AL, only: &
-   AL_destroy
  use spectral_mech_Polarisation, only: &
    Polarisation_destroy
  use spectral_mech_FEM, only: &
@@ -769,7 +751,6 @@ subroutine quit(stop_id)
    MPI_finalize
 
  call BasicPETSC_destroy()
- call AL_destroy()
  call Polarisation_destroy()
  call FEM_destroy()
  call spectral_thermal_destroy()
