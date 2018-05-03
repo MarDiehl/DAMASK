@@ -344,9 +344,9 @@ subroutine constitutive_init()
    constitutive_plasticity_maxSizePostResults = max(constitutive_plasticity_maxSizePostResults, &
                                                     plasticState(p)%sizePostResults)
    constitutive_chemicalFE_maxSizeDotState    = max(constitutive_chemicalFE_maxSizeDotState,    &
-                                                    plasticState(p)%sizeDotState)
+                                                    chemicalState(p)%sizeDotState)
    constitutive_chemicalFE_maxSizePostResults = max(constitutive_chemicalFE_maxSizePostResults, &
-                                                    plasticState(p)%sizePostResults)
+                                                    chemicalState(p)%sizePostResults)
    constitutive_source_maxSizeDotState        = max(constitutive_source_maxSizeDotState, &
                                                     maxval(sourceState(p)%p(:)%sizeDotState))
    constitutive_source_maxSizePostResults     = max(constitutive_source_maxSizePostResults, &
