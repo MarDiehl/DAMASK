@@ -158,11 +158,11 @@ subroutine solute_isoconc_init(fileUnit)
 
 ! allocate state arrays
      sizeState = 0_pInt
-     soluteState(section)%sizeState = sizeState
-     soluteState(section)%sizePostResults = solute_isoconc_sizePostResults(instance)
-     allocate(soluteState(section)%state0   (sizeState,NofmySolute))
-     allocate(soluteState(section)%subState0(sizeState,NofmySolute))
-     allocate(soluteState(section)%state    (sizeState,NofmySolute))
+     soluteState(homog)%sizeState = sizeState
+     soluteState(homog)%sizePostResults = solute_isoconc_sizePostResults(instance)
+     allocate(soluteState(homog)%state0   (sizeState,NofmySolute))
+     allocate(soluteState(homog)%subState0(sizeState,NofmySolute))
+     allocate(soluteState(homog)%state    (sizeState,NofmySolute))
 
    endif mySolute
  enddo initializeInstances
