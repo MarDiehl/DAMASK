@@ -384,7 +384,7 @@ subroutine basicPETSc_formResidual(da_local,x_local,f_local,dummy,ierr)
 ! constructing residual
  vectorField_real = 0.0_pReal
  tensorField_real = 0.0_pReal
- tensorField_real = P_current
+ tensorField_real(1:3,1:3,1:grid(1),1:grid(2),1:grid3) = P_current
  call utilities_FFTtensorForward
  err_div = utilities_divergenceRMS()
  call utilities_fourierTensorDivergence
