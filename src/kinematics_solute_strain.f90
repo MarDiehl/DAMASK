@@ -176,7 +176,7 @@ pure function kinematics_solute_strain_initialStrain(ipc, ip, el)
      kinematics_solute_strain_initialStrain + &
      param(instance)%StrainCoeff(cp)* &
      ( &
-      chemicalConc(cp,phase)%p(chemConcMapping(phase)%p(ipc,ip,el)) - &
+      chemicalConc(phase)%p(cp,chemConcMapping(phase)%p(ipc,ip,el)) - &
       param(instance)%EqConc(cp) &
      )*math_I3
  enddo
@@ -215,7 +215,7 @@ subroutine kinematics_solute_strain_LiAndItsTangent(Li, dLi_dTstar3333, ipc, ip,
  do cp = 1_pInt, phase_Ncomponents(phase)
    Li = Li + &
         param(instance)%StrainCoeff(cp)* &
-        chemicalConcRate(cp,phase)%p(chemConcMapping(phase)%p(ipc,ip,el))
+        chemicalConcRate(phase)%p(cp,chemConcMapping(phase)%p(ipc,ip,el))
  enddo
  dLi_dTstar3333 = 0.0_pReal 
   

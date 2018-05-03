@@ -57,7 +57,6 @@ subroutine chemicalFE_none_init
  integer(pInt) :: &
    maxNinstance, &
    phase, &
-   comp, &
    NofMyPhase, &
    sizeState, &
    sizeDotState, &
@@ -101,10 +100,8 @@ subroutine chemicalFE_none_init
      if (any(numerics_integrator == 5_pInt)) &
        allocate(chemicalState(phase)%RKCK45dotState (6,sizeDotState,NofMyPhase))
      chemConcMapping(phase)%p => phaseconstmemberAt
-     do comp = 1_pInt, phase_Ncomponents(phase)
-       allocate(chemicalConc    (comp,phase)%p(1), source=0.0_pReal)
-       allocate(chemicalConcRate(comp,phase)%p(1), source=0.0_pReal)
-     enddo
+     allocate(chemicalConc    (phase)%p(phase_Ncomponents(phase),1), source=0.0_pReal)
+     allocate(chemicalConcRate(phase)%p(phase_Ncomponents(phase),1), source=0.0_pReal)
    endif
  enddo initializeInstances
 

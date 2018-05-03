@@ -269,9 +269,7 @@ module material
    temperatureRate                                                                                  !< temperature change rate field
 
  type(p_2Dvec),                             dimension(:),  allocatable,  public            :: &
-   phasefrac                                                                                        !< phase fraction field
-
- type(p_vec),                             dimension(:,:),  allocatable,  public            :: &
+   phasefrac, &                                                                                     !< phase fraction field
    chemicalConc, &                                                                                  !< current component concentration field
    chemicalConc0, &                                                                                 !< previous component concentration field
    chemicalConcRate                                                                                 !< component concentration rate field
@@ -389,12 +387,9 @@ subroutine material_init()
    allocate(sourceState(myPhase)%p(phase_Nsources(myPhase)))
  enddo
  allocate(chemConcMapping    (material_Nphase))
- allocate(chemicalConc       (phase_maxNcomponents,&
-                              material_Nphase))
- allocate(chemicalConc0      (phase_maxNcomponents,&
-                              material_Nphase))
- allocate(chemicalConcRate   (phase_maxNcomponents,&
-                              material_Nphase))
+ allocate(chemicalConc       (material_Nphase))
+ allocate(chemicalConc0      (material_Nphase))
+ allocate(chemicalConcRate   (material_Nphase))
 
  allocate(homogState         (material_Nhomogenization))
  allocate(thermalState       (material_Nhomogenization))

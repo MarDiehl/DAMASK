@@ -344,7 +344,7 @@ function solute_flux_getComponentConc(ip,el)
      solute_flux_getComponentConc(cp) = &
        solute_flux_getComponentConc(cp) + &
        phasefrac(homog)%p(gr,phasefracMapping(homog)%p(ip,el))* &
-       chemicalConc(cp,phase)%p(chemConcMapping(phase)%p(gr,ip,el))
+       chemicalConc(phase)%p(cp,chemConcMapping(phase)%p(gr,ip,el))
    enddo
  enddo
 
@@ -441,8 +441,8 @@ subroutine solute_flux_calAndPutComponentConcRate(ChemPot,GradC,dt,ip,el)
    call solute_flux_calComponentConcandTangent(Conc,dConcdChemPot,dConcdGradC, & 
                                                ChemPot,GradC,ip,el)
    do cp = 1_pInt, homogenization_maxNcomponents
-     chemicalConcRate(cp,phase)%p(chemConcMapping(phase)%p(gr,ip,el)) = &
-       (Conc(cp) - chemicalConc0(cp,phase)%p(chemConcMapping(phase)%p(gr,ip,el)))/dt
+     chemicalConcRate(phase)%p(cp,chemConcMapping(phase)%p(gr,ip,el)) = &
+       (Conc(cp) - chemicalConc0(phase)%p(cp,chemConcMapping(phase)%p(gr,ip,el)))/dt
    enddo
  enddo
 

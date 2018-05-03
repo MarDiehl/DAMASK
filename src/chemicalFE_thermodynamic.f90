@@ -338,18 +338,18 @@ subroutine chemicalFE_thermodynamic_init(fileUnit)
      if (any(numerics_integrator == 5_pInt)) &
        allocate(chemicalState(phase)%RKCK45dotState (6,sizeDotState,NipcMyPhase), source=0.0_pReal)
      chemConcMapping(phase)%p => phasememberAt
-     do j = 1_pInt, phase_Ncomponents(phase)
-       do o = 1_pInt, NipcMyPhase
+     do o = 1_pInt, NipcMyPhase
+       do j = 1_pInt, phase_Ncomponents(phase)
          call random_number(randNum)
          InitialConc = param(instance)%InitialAvgConc(j) + param(instance)%InitialDeltaConc(j)*(randNum - 0.5_pReal)
          chemicalState(phase)%state0   (j,o) = InitialConc
          chemicalState(phase)%subState0(j,o) = InitialConc
          chemicalState(phase)%state    (j,o) = InitialConc
        enddo  
-       chemicalConc (j,phase)%p => chemicalState(phase)%state (j,1:NipcMyPhase)
-       chemicalConc0(j,phase)%p => chemicalState(phase)%state0(j,1:NipcMyPhase)
-       allocate(chemicalConcRate(j,phase)%p(NipcMyPhase), source=0.0_pReal)
      enddo
+     chemicalConc (phase)%p => chemicalState(phase)%state 
+     chemicalConc0(phase)%p => chemicalState(phase)%state0
+     allocate(chemicalConcRate(phase)%p(phase_Ncomponents(phase),NipcMyPhase), source=0.0_pReal)
    endif myPhase2
  enddo initializeInstances
 
@@ -377,7 +377,7 @@ subroutine chemicalFE_thermodynamic_dotState(ipc,ip,el)
  phase = material_phase(ipc,ip,el) 
  do cp = 1_pInt, phase_Ncomponents(phase)
    chemicalState(phase)%dotState(cp,chemConcMapping(phase)%p(ipc,ip,el)) = &
-     chemicalConcRate(cp,phase)%p(chemConcMapping(phase)%p(ipc,ip,el))
+     chemicalConcRate(phase)%p(cp,chemConcMapping(phase)%p(ipc,ip,el))
  enddo
 
 end subroutine chemicalFE_thermodynamic_dotState
@@ -415,7 +415,7 @@ function chemicalFE_thermodynamic_getEnergy(ipc,ip,el)
  T = temperature(material_homog(ip,el))%p(thermalMapping(material_homog(ip,el))%p(ip,el))
  conc = 0.0_pReal
  do cpI = 1_pInt, phase_Ncomponents(phase)
-   conc(cpI) = chemicalConc(cpI,phase)%p(chemConcMapping(phase)%p(ipc, ip, el))
+   conc(cpI) = chemicalConc(phase)%p(cpI,chemConcMapping(phase)%p(ipc, ip, el))
  enddo
  chemicalFE_thermodynamic_getEnergy = &
    R*T*(1.0_pReal - sum(conc(1:phase_Ncomponents(phase))))* &
@@ -493,7 +493,7 @@ subroutine chemicalFE_thermodynamic_calConcandTangent(Conc,dConcdChemPot,dConcdG
  instance = phase_chemicalFEInstance(phase)
  T = temperature(material_homog(ip,el))%p(thermalMapping(material_homog(ip,el))%p(ip,el))
  do cpI = 1_pInt, phase_Ncomponents(phase)
-   Conc0(cpI) = chemicalConc0(cpI,phase)%p(chemConcMapping(phase)%p(ipc,ip,el))
+   Conc0(cpI) = chemicalConc0(phase)%p(cpI,chemConcMapping(phase)%p(ipc,ip,el))
  enddo
  Conc = Conc0
  iter = 0_pInt
@@ -632,7 +632,7 @@ function chemicalFE_thermodynamic_postResults(ipc,ip,el)
      case (chemicalConc_ID)
        do cp = 1_pInt, phase_Ncomponents(phase)
          chemicalFE_thermodynamic_postResults(c+cp) = &
-           chemicalConc(cp,phase)%p(chemConcMapping(phase)%p(ipc,ip,el))
+           chemicalConc(phase)%p(cp,chemConcMapping(phase)%p(ipc,ip,el))
        enddo
        c = c + phase_Ncomponents(phase)
 

@@ -36,7 +36,8 @@ module chemicalFE_quadenergy
    real(pReal), dimension(:  ), allocatable :: &
      Mobility, &
      EqConc, &
-     InitialConc, &
+     InitialAvgConc, &
+     InitialDeltaConc, &
      LinearCoeff, &
      GradientCoeff
    real(pReal) :: &
@@ -123,12 +124,16 @@ subroutine chemicalFE_quadenergy_init(fileUnit)
  real(pReal), dimension(:,:), allocatable :: &
    tempMobility, &
    tempEqConc, &
-   tempInitialConc, &
+   tempInitialAvgConc, &
+   tempInitialDeltaConc, &
    tempLinCoeff, &
    tempGradCoeff
  real(pReal), dimension(:,:,:), allocatable :: &
    tempQuadCoeff, &
    tempQuadCoeffInv
+ real(pReal) :: &
+   randNum, &
+   InitialConc
  integer(kind(undefined_ID)), dimension(:,:), allocatable :: & 
    tempOutputID
  logical :: error  
@@ -153,16 +158,17 @@ subroutine chemicalFE_quadenergy_init(fileUnit)
  
  allocate(param(maxNinstance))
  
- allocate(tempOutputID   (maxval(phase_Noutput)  ,maxNinstance))
- allocate(tempMobility   (phase_maxNcomponents,maxNinstance),source=0.0_pReal)
- allocate(tempEqConc     (phase_maxNcomponents,maxNinstance),source=0.0_pReal)
- allocate(tempInitialConc(phase_maxNcomponents,maxNinstance),source=0.0_pReal)
- allocate(tempLinCoeff   (phase_maxNcomponents,maxNinstance),source=0.0_pReal)
- allocate(tempGradCoeff  (phase_maxNcomponents,maxNinstance),source=0.0_pReal)
- allocate(tempQuadCoeff  (phase_maxNcomponents, &
-                          phase_maxNcomponents,maxNinstance),source=0.0_pReal)
- allocate(tempQuadCoeffInv(phase_maxNcomponents, &
-                           phase_maxNcomponents,maxNinstance),source=0.0_pReal)
+ allocate(tempOutputID        (maxval(phase_Noutput)  ,maxNinstance))
+ allocate(tempMobility        (phase_maxNcomponents,maxNinstance),source=0.0_pReal)
+ allocate(tempEqConc          (phase_maxNcomponents,maxNinstance),source=0.0_pReal)
+ allocate(tempInitialAvgConc  (phase_maxNcomponents,maxNinstance),source=0.0_pReal)
+ allocate(tempInitialDeltaConc(phase_maxNcomponents,maxNinstance),source=0.0_pReal)
+ allocate(tempLinCoeff        (phase_maxNcomponents,maxNinstance),source=0.0_pReal)
+ allocate(tempGradCoeff       (phase_maxNcomponents,maxNinstance),source=0.0_pReal)
+ allocate(tempQuadCoeff       (phase_maxNcomponents, &
+                               phase_maxNcomponents,maxNinstance),source=0.0_pReal)
+ allocate(tempQuadCoeffInv    (phase_maxNcomponents, &
+                               phase_maxNcomponents,maxNinstance),source=0.0_pReal)
 
  rewind(fileUnit)
  phase = 0_pInt
@@ -222,11 +228,18 @@ subroutine chemicalFE_quadenergy_init(fileUnit)
            tempEqConc(j,instance) = IO_floatValue(line,chunkPos,1_pInt+j)
          enddo
          
-       case ('component_initialconc')
+       case ('component_initialavgconc')
          if (chunkPos(1) /= phase_Ncomponents(phase) + 1_pInt) &
            call IO_error(150_pInt,ext_msg=trim(tag)//' ('//CHEMICALFE_QUADENERGY_label//')')
          do j = 1_pInt, phase_Ncomponents(phase)
-           tempInitialConc(j,instance) = IO_floatValue(line,chunkPos,1_pInt+j)
+           tempInitialAvgConc(j,instance) = IO_floatValue(line,chunkPos,1_pInt+j)
+         enddo
+         
+       case ('component_initialdeltaconc')
+         if (chunkPos(1) /= phase_Ncomponents(phase) + 1_pInt) &
+           call IO_error(150_pInt,ext_msg=trim(tag)//' ('//CHEMICALFE_QUADENERGY_label//')')
+         do j = 1_pInt, phase_Ncomponents(phase)
+           tempInitialDeltaConc(j,instance) = IO_floatValue(line,chunkPos,1_pInt+j)
          enddo
          
        case ('component_constcoeff','component_constantcoeff')
@@ -272,20 +285,22 @@ subroutine chemicalFE_quadenergy_init(fileUnit)
      param(instance)%OutputID = tempOutputID(1:chemicalFE_quadenergy_Noutput(instance),instance)
      allocate(param(instance)%Mobility         (phase_Ncomponents(phase)))
      allocate(param(instance)%EqConc           (phase_Ncomponents(phase)))
-     allocate(param(instance)%InitialConc      (phase_Ncomponents(phase)))
+     allocate(param(instance)%InitialAvgConc   (phase_Ncomponents(phase)))
+     allocate(param(instance)%InitialDeltaConc (phase_Ncomponents(phase)))
      allocate(param(instance)%LinearCoeff      (phase_Ncomponents(phase)))
      allocate(param(instance)%GradientCoeff    (phase_Ncomponents(phase)))
      allocate(param(instance)%QuadraticCoeff   (phase_Ncomponents(phase), &
                                                 phase_Ncomponents(phase)))
      allocate(param(instance)%QuadraticCoeffInv(phase_Ncomponents(phase), &
                                                 phase_Ncomponents(phase)))
-     param(instance)%Mobility       = tempMobility   (1:phase_Ncomponents(phase),instance)
-     param(instance)%EqConc         = tempEqConc     (1:phase_Ncomponents(phase),instance)
-     param(instance)%InitialConc    = tempInitialConc(1:phase_Ncomponents(phase),instance)
-     param(instance)%LinearCoeff    = tempLinCoeff   (1:phase_Ncomponents(phase),instance)
-     param(instance)%GradientCoeff  = tempGradCoeff  (1:phase_Ncomponents(phase),instance)
-     param(instance)%QuadraticCoeff = tempQuadCoeff  (1:phase_Ncomponents(phase), &
-                                                      1:phase_Ncomponents(phase),instance)
+     param(instance)%Mobility        = tempMobility        (1:phase_Ncomponents(phase),instance)
+     param(instance)%EqConc          = tempEqConc          (1:phase_Ncomponents(phase),instance)
+     param(instance)%InitialAvgConc  = tempInitialAvgConc  (1:phase_Ncomponents(phase),instance)
+     param(instance)%InitialDeltaConc= tempInitialDeltaConc(1:phase_Ncomponents(phase),instance)
+     param(instance)%LinearCoeff     = tempLinCoeff        (1:phase_Ncomponents(phase),instance)
+     param(instance)%GradientCoeff   = tempGradCoeff       (1:phase_Ncomponents(phase),instance)
+     param(instance)%QuadraticCoeff  = tempQuadCoeff       (1:phase_Ncomponents(phase), &
+                                                            1:phase_Ncomponents(phase),instance)
      do j = 1_pInt, phase_Ncomponents(phase)
        tempQuadCoeff(j,j,instance) = tempQuadCoeff(j,j,instance) + &
                                      param(instance)%GradientCoeff(j)/charLength/charLength 
@@ -351,14 +366,18 @@ subroutine chemicalFE_quadenergy_init(fileUnit)
        allocate(chemicalState(phase)%RKCK45dotState (6,sizeDotState,NipcMyPhase), source=0.0_pReal)
 
      chemConcMapping(phase)%p => phasememberAt
-     do j = 1_pInt, phase_Ncomponents(phase)
-       chemicalState(phase)%state0   (j,1:NipcMyPhase) = param(instance)%InitialConc(j)
-       chemicalState(phase)%subState0(j,1:NipcMyPhase) = param(instance)%InitialConc(j)
-       chemicalState(phase)%state    (j,1:NipcMyPhase) = param(instance)%InitialConc(j)
-       chemicalConc (j,phase)%p => chemicalState(phase)%state (j,1:NipcMyPhase)
-       chemicalConc0(j,phase)%p => chemicalState(phase)%state0(j,1:NipcMyPhase)
-       allocate(chemicalConcRate(j,phase)%p(NipcMyPhase), source=0.0_pReal)
+     do o = 1_pInt, NipcMyPhase
+       do j = 1_pInt, phase_Ncomponents(phase)
+         call random_number(randNum)
+         InitialConc = param(instance)%InitialAvgConc(j) + param(instance)%InitialDeltaConc(j)*(randNum - 0.5_pReal)
+         chemicalState(phase)%state0   (j,o) = InitialConc
+         chemicalState(phase)%subState0(j,o) = InitialConc
+         chemicalState(phase)%state    (j,o) = InitialConc
+       enddo  
      enddo
+     chemicalConc (phase)%p => chemicalState(phase)%state 
+     chemicalConc0(phase)%p => chemicalState(phase)%state0
+     allocate(chemicalConcRate(phase)%p(phase_Ncomponents(phase),NipcMyPhase), source=0.0_pReal)
    endif myPhase2
  enddo initializeInstances   
 
@@ -386,7 +405,7 @@ subroutine chemicalFE_quadenergy_dotState(ipc,ip,el)
  phase = material_phase(ipc,ip,el) 
  do cp = 1_pInt, phase_Ncomponents(phase)
    chemicalState(phase)%dotState(cp,chemConcMapping(phase)%p(ipc,ip,el)) = &
-     chemicalConcRate(cp,phase)%p(chemConcMapping(phase)%p(ipc,ip,el))
+     chemicalConcRate(phase)%p(cp,chemConcMapping(phase)%p(ipc,ip,el))
  enddo
 
 end subroutine chemicalFE_quadenergy_dotState
@@ -418,7 +437,7 @@ function chemicalFE_quadenergy_getEnergy(ipc,ip,el)
  instance = phase_chemicalFEInstance(phase)
  conc = 0.0_pReal
  do cpI = 1_pInt, phase_Ncomponents(phase)
-   conc(cpI) = chemicalConc(cpI,phase)%p(chemConcMapping(phase)%p(ipc, ip, el))
+   conc(cpI) = chemicalConc(phase)%p(cpI,chemConcMapping(phase)%p(ipc, ip, el))
  enddo
  chemicalFE_quadenergy_getEnergy = &
    param(instance)%ConstantCoeff
@@ -561,7 +580,7 @@ function chemicalFE_quadenergy_postResults(ipc,ip,el)
      case (chemicalConc_ID)
        do cp = 1_pInt, phase_Ncomponents(phase)
          chemicalFE_quadenergy_postResults(c+cp) = &
-           chemicalConc(cp,phase)%p(chemConcMapping(phase)%p(ipc,ip,el))
+           chemicalConc(phase)%p(cp,chemConcMapping(phase)%p(ipc,ip,el))
        enddo
        c = c + phase_Ncomponents(phase)
 
