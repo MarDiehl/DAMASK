@@ -320,19 +320,23 @@ subroutine spectral_solute_formResidual(da_local,solution_current_local,residual
    conc_current(1:Ncomponents,i,j,k) = Conc
    
    residual_current_elem = 0.0_pReal
+   
    residual_current_elem(1  ,            1:  Ncomponents) = &
-     residual_current_elem(1  ,            1:  Ncomponents) + &
+   residual_current_elem(1  ,            1:  Ncomponents) + &
      conc_current(1:Ncomponents,i,j,k) - &
      conc_lastInc(1:Ncomponents,i,j,k)
+   
    residual_current_elem(1:4,            1:  Ncomponents) = &
-     residual_current_elem(1:4,            1:  Ncomponents) + &
+   residual_current_elem(1:4,            1:  Ncomponents) + &
      params%timeinc*transpose(spread(solute_flux_getComponentMobility(1,cell),dim=2,ncopies=4))* &
      matmul(transpose(BMat),matmul(BMat,solution_current_elem(1:4,            1:  Ncomponents)))
+   
    residual_current_elem(1  ,Ncomponents+1:2*Ncomponents) = &
-     residual_current_elem(1  ,Ncomponents+1:2*Ncomponents) + &
+   residual_current_elem(1  ,Ncomponents+1:2*Ncomponents) + &
      solution_current_elem(1  ,Ncomponents+1:2*Ncomponents) - conc_current(1:Ncomponents,i,j,k)
+   
    residual_current_elem(1:4,Ncomponents+1:2*Ncomponents) = &
-     residual_current_elem(1:4,Ncomponents+1:2*Ncomponents) + &
+   residual_current_elem(1:4,Ncomponents+1:2*Ncomponents) + &
      charLength*charLength* &
      matmul(transpose(BMat),matmul(BMat,solution_current_elem(1:4,Ncomponents+1:2*Ncomponents)))
      
