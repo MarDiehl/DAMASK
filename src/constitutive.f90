@@ -78,6 +78,7 @@ subroutine constitutive_init()
    PLASTICITY_none_ID, &
    PLASTICITY_isotropic_ID, &
    PLASTICITY_phenopowerlaw_ID, &
+   PLASTICITY_kinehardening_ID, &
    PLASTICITY_dislotwin_ID, &
    PLASTICITY_disloucla_ID, &
    PLASTICITY_nonlocal_ID ,&
@@ -97,6 +98,7 @@ subroutine constitutive_init()
    PLASTICITY_NONE_label, &
    PLASTICITY_ISOTROPIC_label, &
    PLASTICITY_PHENOPOWERLAW_label, &
+   PLASTICITY_KINEHARDENING_label, &
    PLASTICITY_DISLOTWIN_label, &
    PLASTICITY_DISLOUCLA_label, &
    PLASTICITY_NONLOCAL_label, &
@@ -115,6 +117,7 @@ subroutine constitutive_init()
  use plastic_none
  use plastic_isotropic
  use plastic_phenopowerlaw
+ use plastic_kinehardening
  use plastic_dislotwin
  use plastic_disloucla
  use plastic_nonlocal
@@ -156,6 +159,7 @@ subroutine constitutive_init()
  if (any(phase_plasticity == PLASTICITY_NONE_ID))          call plastic_none_init
  if (any(phase_plasticity == PLASTICITY_ISOTROPIC_ID))     call plastic_isotropic_init(FILEUNIT)
  if (any(phase_plasticity == PLASTICITY_PHENOPOWERLAW_ID)) call plastic_phenopowerlaw_init(FILEUNIT)
+ if (any(phase_plasticity == PLASTICITY_KINEHARDENING_ID)) call plastic_kinehardening_init(FILEUNIT)
  if (any(phase_plasticity == PLASTICITY_DISLOTWIN_ID))     call plastic_dislotwin_init(FILEUNIT)
  if (any(phase_plasticity == PLASTICITY_DISLOUCLA_ID))     call plastic_disloucla_init(FILEUNIT)
  if (any(phase_plasticity == PLASTICITY_NONLOCAL_ID)) then
@@ -215,6 +219,11 @@ subroutine constitutive_init()
            thisNoutput => plastic_phenopowerlaw_Noutput
            thisOutput => plastic_phenopowerlaw_output
            thisSize   => plastic_phenopowerlaw_sizePostResult
+         case (PLASTICITY_KINEHARDENING_ID) plasticityType
+           outputName = PLASTICITY_KINEHARDENING_label
+           thisNoutput => plastic_kinehardening_Noutput
+           thisOutput => plastic_kinehardening_output
+           thisSize   => plastic_kinehardening_sizePostResult  
          case (PLASTICITY_DISLOTWIN_ID) plasticityType
            outputName = PLASTICITY_DISLOTWIN_label
            thisNoutput => plastic_dislotwin_Noutput
@@ -499,6 +508,7 @@ subroutine constitutive_LpAndItsTangent(Lp, dLp_dTstar3333, dLp_dFi3333, Tstar_v
    PLASTICITY_NONE_ID, &
    PLASTICITY_ISOTROPIC_ID, &
    PLASTICITY_PHENOPOWERLAW_ID, &
+   PLASTICITY_KINEHARDENING_ID, &
    PLASTICITY_DISLOTWIN_ID, &
    PLASTICITY_DISLOUCLA_ID, &
    PLASTICITY_NONLOCAL_ID
@@ -506,6 +516,8 @@ subroutine constitutive_LpAndItsTangent(Lp, dLp_dTstar3333, dLp_dFi3333, Tstar_v
    plastic_isotropic_LpAndItsTangent
  use plastic_phenopowerlaw, only: &
    plastic_phenopowerlaw_LpAndItsTangent
+ use plastic_kinehardening, only: &
+   plastic_kinehardening_LpAndItsTangent  
  use plastic_dislotwin, only: &
    plastic_dislotwin_LpAndItsTangent
  use plastic_disloucla, only: &
@@ -549,18 +561,20 @@ subroutine constitutive_LpAndItsTangent(Lp, dLp_dTstar3333, dLp_dFi3333, Tstar_v
      Lp = 0.0_pReal
      dLp_dMstar = 0.0_pReal
    case (PLASTICITY_ISOTROPIC_ID) plasticityType
-     call plastic_isotropic_LpAndItsTangent(Lp,dLp_dMstar,Mstar_v,ipc,ip,el)
+     call plastic_isotropic_LpAndItsTangent       (Lp,dLp_dMstar,Mstar_v,ipc,ip,el)
    case (PLASTICITY_PHENOPOWERLAW_ID) plasticityType
-     call plastic_phenopowerlaw_LpAndItsTangent(Lp,dLp_dMstar,Mstar_v,ipc,ip,el)
+     call plastic_phenopowerlaw_LpAndItsTangent   (Lp,dLp_dMstar,Mstar_v,ipc,ip,el)
+   case (PLASTICITY_KINEHARDENING_ID) plasticityType
+     call plastic_kinehardening_LpAndItsTangent   (Lp,dLp_dMstar,Mstar_v,ipc,ip,el)  
    case (PLASTICITY_NONLOCAL_ID) plasticityType
-     call plastic_nonlocal_LpAndItsTangent(Lp,dLp_dMstar,Mstar_v, &
-                                           temperature(ho)%p(tme),ip,el)
+     call plastic_nonlocal_LpAndItsTangent        (Lp,dLp_dMstar,Mstar_v, &
+                                                   temperature(ho)%p(tme),ip,el)
    case (PLASTICITY_DISLOTWIN_ID) plasticityType
-     call plastic_dislotwin_LpAndItsTangent(Lp,dLp_dMstar,Mstar_v, &
-                                            temperature(ho)%p(tme),ipc,ip,el)
+     call plastic_dislotwin_LpAndItsTangent       (Lp,dLp_dMstar,Mstar_v, &
+                                                   temperature(ho)%p(tme),ipc,ip,el)
    case (PLASTICITY_DISLOUCLA_ID) plasticityType
-     call plastic_disloucla_LpAndItsTangent(Lp,dLp_dMstar,Mstar_v, &
-                                            temperature(ho)%p(tme), ipc,ip,el)
+     call plastic_disloucla_LpAndItsTangent       (Lp,dLp_dMstar,Mstar_v, &
+                                                   temperature(ho)%p(tme), ipc,ip,el)
  end select plasticityType
 
  dLp_dTstar3333 = math_Plain99to3333(dLp_dMstar)
@@ -733,7 +747,7 @@ end function constitutive_initialFi
 !--------------------------------------------------------------------------------------------------
 !> @brief returns the 2nd Piola-Kirchhoff stress tensor and its tangent with respect to
 !> the elastic deformation gradient depending on the selected elastic law (so far no case switch
-!! because only hooke is implemented
+!! because only Hooke is implemented
 !--------------------------------------------------------------------------------------------------
 subroutine constitutive_TandItsTangent(T, dT_dFe, dT_dFi, Fe, Fi, ipc, ip, el)
  use prec, only: &
@@ -834,6 +848,7 @@ subroutine constitutive_collectDotState(Tstar_v, FeArray, FpArray, subdt, subfra
    PLASTICITY_none_ID, &
    PLASTICITY_isotropic_ID, &
    PLASTICITY_phenopowerlaw_ID, &
+   PLASTICITY_kinehardening_ID, &
    PLASTICITY_dislotwin_ID, &
    PLASTICITY_disloucla_ID, &
    PLASTICITY_nonlocal_ID, &
@@ -844,6 +859,8 @@ subroutine constitutive_collectDotState(Tstar_v, FeArray, FpArray, subdt, subfra
    plastic_isotropic_dotState
  use plastic_phenopowerlaw, only: &
    plastic_phenopowerlaw_dotState
+ use plastic_kinehardening, only: &
+   plastic_kinehardening_dotState  
  use plastic_dislotwin, only: &
    plastic_dislotwin_dotState
  use plastic_disloucla, only: &
@@ -892,6 +909,8 @@ subroutine constitutive_collectDotState(Tstar_v, FeArray, FpArray, subdt, subfra
      call plastic_isotropic_dotState    (Tstar_v,ipc,ip,el)
    case (PLASTICITY_PHENOPOWERLAW_ID) plasticityType
      call plastic_phenopowerlaw_dotState(Tstar_v,ipc,ip,el)
+   case (PLASTICITY_KINEHARDENING_ID) plasticityType
+     call plastic_kinehardening_dotState(Tstar_v,ipc,ip,el)
    case (PLASTICITY_DISLOTWIN_ID) plasticityType
      call plastic_dislotwin_dotState    (Tstar_v,temperature(ho)%p(tme), &
                                          ipc,ip,el)
@@ -945,7 +964,10 @@ subroutine constitutive_collectDeltaState(Tstar_v, Fe, ipc, ip, el)
  use material, only: &
    phase_plasticity, &
    material_phase, &
+   PLASTICITY_KINEHARDENING_ID, &
    PLASTICITY_NONLOCAL_ID
+ use plastic_kinehardening, only: &
+   plastic_kinehardening_deltaState   
  use plastic_nonlocal, only: &
    plastic_nonlocal_deltaState
 
@@ -966,8 +988,12 @@ subroutine constitutive_collectDeltaState(Tstar_v, Fe, ipc, ip, el)
  if (iand(debug_level(debug_constitutive), debug_levelBasic) /= 0_pInt) &
    call system_clock(count=tick,count_rate=tickrate,count_max=maxticks)
 
- if(phase_plasticity(material_phase(ipc,ip,el)) == PLASTICITY_NONLOCAL_ID) &
-   call plastic_nonlocal_deltaState(Tstar_v,ip,el)
+ plasticityType: select case (phase_plasticity(material_phase(ipc,ip,el)))
+   case (PLASTICITY_KINEHARDENING_ID) plasticityType
+     call plastic_kinehardening_deltaState(Tstar_v,ipc,ip,el)
+   case (PLASTICITY_NONLOCAL_ID) plasticityType
+     call plastic_nonlocal_deltaState(Tstar_v,ip,el)
+ end select plasticityType
 
  if (iand(debug_level(debug_constitutive), debug_levelBasic) /= 0_pInt) then
    call system_clock(count=tock,count_rate=tickrate,count_max=maxticks)
@@ -1007,6 +1033,7 @@ function constitutive_postResults(Tstar_v, FeArray, ipc, ip, el)
    PLASTICITY_NONE_ID, &
    PLASTICITY_ISOTROPIC_ID, &
    PLASTICITY_PHENOPOWERLAW_ID, &
+   PLASTICITY_KINEHARDENING_ID, &
    PLASTICITY_DISLOTWIN_ID, &
    PLASTICITY_DISLOUCLA_ID, &
    PLASTICITY_NONLOCAL_ID, &
@@ -1016,6 +1043,8 @@ function constitutive_postResults(Tstar_v, FeArray, ipc, ip, el)
    plastic_isotropic_postResults
  use plastic_phenopowerlaw, only: &
    plastic_phenopowerlaw_postResults
+ use plastic_kinehardening, only: &
+   plastic_kinehardening_postResults
  use plastic_dislotwin, only: &
    plastic_dislotwin_postResults
  use plastic_disloucla, only: &
@@ -1061,6 +1090,9 @@ function constitutive_postResults(Tstar_v, FeArray, ipc, ip, el)
    case (PLASTICITY_PHENOPOWERLAW_ID) plasticityType
      constitutive_postResults(startPos:endPos) = &
        plastic_phenopowerlaw_postResults(Tstar_v,ipc,ip,el)
+   case (PLASTICITY_KINEHARDENING_ID) plasticityType
+     constitutive_postResults(startPos:endPos) = &
+       plastic_kinehardening_postResults(Tstar_v,ipc,ip,el)    
    case (PLASTICITY_DISLOTWIN_ID) plasticityType
      constitutive_postResults(startPos:endPos) = &
        plastic_dislotwin_postResults(Tstar_v,temperature(ho)%p(tme),ipc,ip,el)
