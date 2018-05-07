@@ -158,7 +158,7 @@ subroutine basicPETSc_init
         DMDA_STENCIL_BOX, &                                                                         ! Moore (26) neighborhood around central point
         grid(1),grid(2),grid(3), &                                                                  ! global grid
         1, 1, worldsize, &
-        3, 1, &                                                                                     ! #dof (F tensor), ghost boundary width (domain overlap)
+        3, 0, &                                                                                     ! #dof (F tensor), ghost boundary width (domain overlap)
         grid (1),grid (2),localK, &                                                                 ! local grid
         mech_grid,ierr)                                                                             ! handle, error
  CHKERRQ(ierr)
@@ -375,7 +375,7 @@ subroutine basicPETSc_formResidual(da_local,x_local,f_local,dummy,ierr)
  call utilities_fourierVectorGradient
  call utilities_FFTtensorBackward
  do k = 1_pInt, grid3; do j = 1_pInt, grid(2); do i = 1_pInt, grid(1)
-   F_current(1:3,1:3,i,j,k) = F_aim + tensorField_real(1:3,1:3,i,j,k) 
+   F_current(1:3,1:3,i,j,k) = math_rotate_backward33(F_aim,params%rotation_BC) + tensorField_real(1:3,1:3,i,j,k) 
  enddo; enddo; enddo
 
 !--------------------------------------------------------------------------------------------------
@@ -476,10 +476,14 @@ end subroutine basicPETSc_converged
 subroutine basicPETSc_forward(guess,timeinc,timeinc_old,loadCaseTime,deformation_BC,stress_BC,rotation)
  use math, only: &
    math_mul33x33
+  use numerics, only: &
+    worldrank 
  use spectral_utilities, only: &
    utilities_updateIPcoords, &
    tBoundaryCondition, &
    cutBack
+  use IO, only: &
+    IO_write_JobRealFile
   use homogenization, only: &
     materialpoint_F0
   use mesh, only: &
@@ -487,6 +491,8 @@ subroutine basicPETSc_forward(guess,timeinc,timeinc_old,loadCaseTime,deformation
     grid3
   use CPFEM2, only: &
     CPFEM_age
+  use FEsolving, only: &
+    restartWrite
 
  implicit none
  real(pReal), intent(in) :: &
@@ -501,9 +507,33 @@ subroutine basicPETSc_forward(guess,timeinc,timeinc_old,loadCaseTime,deformation
    guess
  PetscErrorCode :: ierr
 
+ character(len=32) :: rankStr
+
   if (cutBack) then
     C_volAvg    = C_volAvgLastInc                                                                  ! QUESTION: where is this required?
   else
+!--------------------------------------------------------------------------------------------------
+! restart information for spectral solver
+    if (restartWrite) then                                                                           ! QUESTION: where is this logical properly set?
+      write(6,'(/,a)') ' writing converged results for restart'
+      flush(6)
+
+      if (worldrank == 0_pInt) then
+        call IO_write_jobRealFile(777,'C_volAvg',size(C_volAvg))
+        write (777,rec=1) C_volAvg; close(777)
+        call IO_write_jobRealFile(777,'C_volAvgLastInc',size(C_volAvgLastInc))
+        write (777,rec=1) C_volAvgLastInc; close(777)
+        call IO_write_jobRealFile(777,'F_aimDot',size(F_aimDot))
+        write (777,rec=1) F_aimDot; close(777)
+      endif
+
+      write(rankStr,'(a1,i0)')'_',worldrank
+      call IO_write_jobRealFile(777,'F'//trim(rankStr),size(F_current))                                      ! writing deformation gradient field to file
+      write (777,rec=1) F_current; close (777)
+      call IO_write_jobRealFile(777,'F_lastInc'//trim(rankStr),size(F_lastInc))                      ! writing F_lastInc field to file
+      write (777,rec=1) F_lastInc; close (777)
+    endif
+
     call CPFEM_age()                                                                                 ! age state and kinematics
     call utilities_updateIPcoords(F_current)
 
