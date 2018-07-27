@@ -254,7 +254,7 @@ function kinematics_solute_strain_getMechanicalComponentPotential(Tstar_v, ipc, 
  kinematics_solute_strain_getMechanicalComponentPotential = 0.0_pReal
  do cp = 1_pInt, phase_Ncomponents(phase)
    kinematics_solute_strain_getMechanicalComponentPotential(cp) = &
-        param(instance)%StrainCoeff(cp)* &
+      - param(instance)%StrainCoeff(cp)* &
         math_trace33(math_Mandel6to33(Tstar_v))
  enddo
   
