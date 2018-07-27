@@ -152,12 +152,14 @@ pure function kinematics_thermal_expansion_initialStrain(ipc, ip, el)
  use material, only: &
    material_phase, &
    material_homog, &
-   temperature, &
-   thermalMapping
+   thermal_initialT
  use lattice, only: &
    lattice_thermalExpansion33, &
    lattice_referenceTemperature
  
+ use math, only: &
+   math_I3,math_mul3x3
+
  implicit none
  integer(pInt), intent(in) :: &
    ipc, &                                                                                           !< grain number
@@ -167,19 +169,19 @@ pure function kinematics_thermal_expansion_initialStrain(ipc, ip, el)
    kinematics_thermal_expansion_initialStrain                                                       !< initial thermal strain (should be small strain, though)
  integer(pInt) :: &
    phase, &
-   homog, offset
+   homog
+ real(pReal) :: &
+   T, TRef 
    
  phase = material_phase(ipc,ip,el)
  homog = material_homog(ip,el)
- offset = thermalMapping(homog)%p(ip,el)
+ T    = thermal_initialT(homog)
+ TRef = lattice_referenceTemperature(phase) 
  
  kinematics_thermal_expansion_initialStrain = &
-   (temperature(homog)%p(offset) - lattice_referenceTemperature(phase))**1 / 1. * &
-   lattice_thermalExpansion33(1:3,1:3,1,phase) + &                                                  ! constant  coefficient
-   (temperature(homog)%p(offset) - lattice_referenceTemperature(phase))**2 / 2. * &
-   lattice_thermalExpansion33(1:3,1:3,2,phase) + &                                                  ! linear    coefficient
-   (temperature(homog)%p(offset) - lattice_referenceTemperature(phase))**3 / 3. * &
-   lattice_thermalExpansion33(1:3,1:3,3,phase)                                                      ! quadratic coefficient
+     lattice_thermalExpansion33(1:3,1:3,1,phase)*(T - TRef)**1 / 1_pReal &                            ! constant  coefficient
+   + lattice_thermalExpansion33(1:3,1:3,2,phase)*(T - TRef)**2 / 2_pReal &                            ! linear    coefficient
+   + lattice_thermalExpansion33(1:3,1:3,3,phase)*(T - TRef)**3 / 3_pReal                              ! quadratic coefficient
   
 end function kinematics_thermal_expansion_initialStrain
 
