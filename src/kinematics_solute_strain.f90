@@ -86,18 +86,23 @@ subroutine kinematics_solute_strain_init(fileUnit)
  if (iand(debug_level(debug_constitutive),debug_levelBasic) /= 0_pInt) &
    write(6,'(a16,1x,i5,/)') '# instances:',maxNinstance
  
+ allocate(param(maxNinstance))
  allocate(kinematics_solute_strain_offset(material_Nphase), source=0_pInt)
  allocate(kinematics_solute_strain_instance(material_Nphase), source=0_pInt)
+
  do phase = 1, material_Nphase
    kinematics_solute_strain_instance(phase) = count(phase_kinematics(:,1:phase) == kinematics_solute_strain_ID)
+   if (any(phase_kinematics(:,phase) == KINEMATICS_solute_strain_ID)) then
+     allocate(param(kinematics_solute_strain_instance(phase))%StrainCoeff(phase_Ncomponents(phase)), source=0.0_pReal)
+     allocate(param(kinematics_solute_strain_instance(phase))%EqConc(phase_Ncomponents(phase)), source=0.0_pReal)
+   endif
+
    do kinematics = 1, phase_Nkinematics(phase)
      if (phase_kinematics(kinematics,phase) == kinematics_solute_strain_ID) &
        kinematics_solute_strain_offset(phase) = kinematics
-   enddo    
+   enddo
  enddo
-   
- allocate(param(maxNinstance))
-
+ 
  rewind(fileUnit)
  phase = 0_pInt
  do while (trim(line) /= IO_EOF .and. IO_lc(IO_getTag(line,'<','>')) /= MATERIAL_partPhase)         ! wind forward to <phase>
@@ -117,8 +122,6 @@ subroutine kinematics_solute_strain_init(fileUnit)
    endif
    if (phase > 0_pInt ) then; if (any(phase_kinematics(:,phase) == KINEMATICS_solute_strain_ID)) then         ! do not short-circuit here (.and. with next if statemen). It's not safe in Fortran
      instance = kinematics_solute_strain_instance(phase)                                                         ! which instance of my damage is present phase
-     allocate(param(instance)%StrainCoeff(phase_Ncomponents(phase)), source=0.0_pReal)
-     allocate(param(instance)%EqConc     (phase_Ncomponents(phase)), source=0.0_pReal)
      chunkPos = IO_stringPos(line)
      tag = IO_lc(IO_stringValue(line,chunkPos,1_pInt))                                             ! extract key...
      select case(tag)
