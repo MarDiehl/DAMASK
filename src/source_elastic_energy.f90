@@ -53,9 +53,11 @@ subroutine source_elastic_energy_init
    phase_Noutput, &
    SOURCE_elastic_energy_label, &
    SOURCE_elastic_energy_ID, &
-   material_Nphase, &
    material_phase, &  
    sourceState
+ use config, only: &
+   material_Nphase, &
+   MATERIAL_partPhase
  use numerics,only: &
    numerics_integrator
 

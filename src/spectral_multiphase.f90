@@ -4,6 +4,10 @@
 !> @brief Multiphase PETSc solver
 !--------------------------------------------------------------------------------------------------
 module spectral_multiphase
+#include <petsc/finclude/petscsnes.h>
+#include <petsc/finclude/petscdmda.h>
+ use PETScdmda
+ use PETScsnes
  use prec, only: & 
    pInt, &
    pReal
@@ -18,7 +22,6 @@ module spectral_multiphase
 
  implicit none
  private
-#include <petsc/finclude/petsc.h90>
 
 !--------------------------------------------------------------------------------------------------
 ! derived types
@@ -38,27 +41,9 @@ module spectral_multiphase
  public :: &
    spectral_multiphase_init, &
    spectral_multiphase_solution, &
-   spectral_multiphase_forward, &
-   spectral_multiphase_destroy
+   spectral_multiphase_forward
  external :: &
-   VecDestroy, &
-   DMDestroy, &
-   DMDACreate3D, &
-   DMCreateGlobalVector, &
-   DMDASNESSetFunctionLocal, &
-   PETScFinalize, &
-   SNESDestroy, &
-   SNESGetNumberFunctionEvals, &
-   SNESGetIterationNumber, &
-   SNESSolve, &
-   SNESSetDM, &
-   SNESGetConvergedReason, &
-   SNESSetConvergenceTest, &
-   SNESSetFromOptions, &
-   SNESCreate, &
-   MPI_Abort, &
-   MPI_Bcast, &
-   MPI_Allreduce
+   PETScErrorF
 
 contains
 
@@ -81,9 +66,10 @@ subroutine spectral_multiphase_init
    homogenization_maxNgrains, &
    homogenization_active, &
    material_homog, &   
-   material_Nhomogenization, &
    phasefracMapping, &
    phasefrac
+ use config, only: &  
+   material_Nhomogenization
    
  implicit none
  DM :: multiphase_grid
@@ -125,15 +111,17 @@ subroutine spectral_multiphase_init
         grid(1),grid(2),grid(3), &                                                                  ! global grid
         1, 1, worldsize, &
         NActivePhases, 1, &                                                                         ! #dof, ghost boundary width
-        grid (1),grid(2),localK, &                                                                  ! local grid
+        [grid(1)],[grid(2)],localK, &                                                                  ! local grid
         multiphase_grid,ierr)                                                                       ! handle, error
  CHKERRQ(ierr)
  call SNESSetDM(multiphase_snes,multiphase_grid,ierr); CHKERRQ(ierr)
+ call DMsetFromOptions(multiphase_grid,ierr); CHKERRQ(ierr)
+ call DMsetUp(multiphase_grid,ierr); CHKERRQ(ierr)
  call DMCreateGlobalVector(multiphase_grid,solution_current,ierr); CHKERRQ(ierr)                    ! current phase field vector 
  call DMCreateGlobalVector(multiphase_grid,solution_lastInc,ierr); CHKERRQ(ierr)                    ! last increment phase field vector 
- call DMSNESSetFunctionLocal(multiphase_grid,spectral_multiphase_formResidual,PETSC_NULL_OBJECT,ierr)! residual vector of same shape as solution vector
+ call DMSNESSetFunctionLocal(multiphase_grid,spectral_multiphase_formResidual,PETSC_NULL_SNES,ierr) ! residual vector of same shape as solution vector
  CHKERRQ(ierr) 
- call DMSNESSetJacobianLocal(multiphase_grid,spectral_multiphase_formJacobian,PETSC_NULL_OBJECT,ierr)! function to evaluate stiffness matrix
+ call DMSNESSetJacobianLocal(multiphase_grid,spectral_multiphase_formJacobian,PETSC_NULL_SNES,ierr) ! function to evaluate stiffness matrix
  CHKERRQ(ierr)
  call SNESSetMaxLinearSolveFailures(multiphase_snes, huge(1), ierr); CHKERRQ(ierr)                  ! ignore linear solve failures 
  call SNESSetFromOptions(multiphase_snes,ierr); CHKERRQ(ierr)                                       ! pull it all together with additional cli arguments
@@ -229,7 +217,7 @@ type(tSolutionState) function spectral_multiphase_solution(timeinc,timeinc_old)
 
 !--------------------------------------------------------------------------------------------------
 ! solve BVP 
- call SNESSolve(multiphase_snes,PETSC_NULL_OBJECT,solution_current,ierr)
+ call SNESSolve(multiphase_snes,PETSC_NULL_VEC,solution_current,ierr)
  CHKERRQ(ierr)
  call SNESGetConvergedReason(multiphase_snes,reason,ierr); CHKERRQ(ierr)
  spectral_multiphase_solution%converged = reason > 0
@@ -544,19 +532,5 @@ subroutine spectral_multiphase_forward()
  endif
 
 end subroutine spectral_multiphase_forward
-
-!--------------------------------------------------------------------------------------------------
-!> @brief destroy routine
-!--------------------------------------------------------------------------------------------------
-subroutine spectral_multiphase_destroy()
-
- implicit none
- PetscErrorCode :: ierr
-
- call VecDestroy(solution_current,ierr); CHKERRQ(ierr)
- call VecDestroy(solution_lastInc,ierr); CHKERRQ(ierr)
- call SNESDestroy(multiphase_snes,ierr); CHKERRQ(ierr)
-
-end subroutine spectral_multiphase_destroy
 
 end module spectral_multiphase

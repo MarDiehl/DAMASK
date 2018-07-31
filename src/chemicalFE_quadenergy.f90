@@ -103,7 +103,8 @@ subroutine chemicalFE_quadenergy_init(fileUnit)
    material_phase, &
    phase_Ncomponents, &
    phase_maxNcomponents, &
-   chemicalState, &
+   chemicalState
+ use config, only: &
    MATERIAL_partPhase
  use numerics,only: &
    charLength, &

@@ -59,6 +59,7 @@ subroutine solute_flux_init(fileUnit)
    debug_levelBasic
  use IO
  use material
+ use config
  use mesh, only: &
    FE_Nips, &
    FE_geomtype, &

@@ -104,7 +104,8 @@ subroutine chemicalFE_thermodynamic_init(fileUnit)
    CHEMICALFE_THERMODYNAMIC_ID, &
    material_phase, &
    chemicalState, &
-   phase_Ncomponents, &
+   phase_Ncomponents
+ use config, only: &
    MATERIAL_partPhase
  use numerics,only: &
    numerics_integrator

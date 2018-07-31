@@ -3,6 +3,10 @@
 !> @brief FEM PETSc solver
 !--------------------------------------------------------------------------------------------------
 module spectral_mech_FEM
+#include <petsc/finclude/petscsnes.h>
+#include <petsc/finclude/petscdmda.h>
+ use PETScdmda
+ use PETScsnes
  use prec, only: & 
    pInt, &
    pReal
@@ -14,7 +18,6 @@ module spectral_mech_FEM
 
  implicit none
  private
-#include <petsc/finclude/petsc.h90>
 
  character (len=*), parameter, public :: &
    DAMASK_spectral_SolverFEM_label = 'fem'
@@ -58,27 +61,9 @@ module spectral_mech_FEM
  public :: &
    FEM_init, &
    FEM_solution, &
-   FEM_forward, &
-   FEM_destroy
+   FEM_forward
  external :: &
-   VecDestroy, &
-   DMDestroy, &
-   DMDACreate3D, &
-   DMCreateGlobalVector, &
-   DMDASNESSetFunctionLocal, &
-   PETScFinalize, &
-   SNESDestroy, &
-   SNESGetNumberFunctionEvals, &
-   SNESGetIterationNumber, &
-   SNESSolve, &
-   SNESSetDM, &
-   SNESGetConvergedReason, &
-   SNESSetConvergenceTest, &
-   SNESSetFromOptions, &
-   SNESCreate, &
-   MPI_Abort, &
-   MPI_Bcast, &
-   MPI_Allreduce
+   PETScErrorF
 
 contains
 
@@ -149,20 +134,22 @@ subroutine FEM_init
         grid(1),grid(2),grid(3), &                                                                  ! global grid
         1, 1, worldsize, &
         3, 1, &                                                                                     ! #dof (F tensor), ghost boundary width (domain overlap)
-        grid (1),grid (2),localK, &                                                                 ! local grid
+        [grid(1)],[grid(2)],localK, &                                                                 ! local grid
         mech_grid,ierr)                                                                             ! handle, error
  CHKERRQ(ierr)
  call DMDASetUniformCoordinates(mech_grid,0.0,geomSize(1),0.0,geomSize(2),0.0,geomSize(3),ierr)     ! set dimensions of grid
  CHKERRQ(ierr)
  call SNESSetDM(mech_snes,mech_grid,ierr); CHKERRQ(ierr)
+ call DMsetFromOptions(mech_grid,ierr); CHKERRQ(ierr)
+ call DMsetUp(mech_grid,ierr); CHKERRQ(ierr)
  call DMCreateGlobalVector(mech_grid,solution_current,ierr); CHKERRQ(ierr)                          ! current global displacement vector 
  call DMCreateGlobalVector(mech_grid,solution_lastInc,ierr); CHKERRQ(ierr)                          ! last increment global displacement vector 
  call DMCreateGlobalVector(mech_grid,solution_rate   ,ierr); CHKERRQ(ierr)                          ! current global velocity vector 
- call DMSNESSetFunctionLocal(mech_grid,FEM_formResidual,PETSC_NULL_OBJECT,ierr)              ! residual vector of same shape as solution vector
+ call DMSNESSetFunctionLocal(mech_grid,FEM_formResidual,PETSC_NULL_SNES,ierr)                       ! residual vector of same shape as solution vector
  CHKERRQ(ierr) 
- call DMSNESSetJacobianLocal(mech_grid,FEM_formJacobian,PETSC_NULL_OBJECT,ierr)              ! function to evaluate stiffness matrix
+ call DMSNESSetJacobianLocal(mech_grid,FEM_formJacobian,PETSC_NULL_SNES,ierr)                       ! function to evaluate stiffness matrix
  CHKERRQ(ierr)
- call SNESSetConvergenceTest(mech_snes,FEM_converged,PETSC_NULL_OBJECT,PETSC_NULL_FUNCTION,ierr) 
+ call SNESSetConvergenceTest(mech_snes,FEM_converged,PETSC_NULL_SNES,PETSC_NULL_FUNCTION,ierr) 
  CHKERRQ(ierr)                                                                                      ! specify custom convergence check function "_converged"
  call SNESSetMaxLinearSolveFailures(mech_snes, huge(1), ierr); CHKERRQ(ierr)                        ! ignore linear solve failures 
  call SNESSetFromOptions(mech_snes,ierr); CHKERRQ(ierr)                                             ! pull it all together with additional cli arguments
@@ -297,7 +284,7 @@ type(tSolutionState) function &
 
 !--------------------------------------------------------------------------------------------------
 ! solve BVP 
- call SNESSolve(mech_snes,PETSC_NULL_OBJECT,solution_current,ierr)
+ call SNESSolve(mech_snes,PETSC_NULL_VEC,solution_current,ierr)
  CHKERRQ(ierr)
 
 !--------------------------------------------------------------------------------------------------
@@ -524,7 +511,7 @@ subroutine FEM_formJacobian(da_local,x_local,Jac_pre,Jac,dummy,ierr)
  diag = (C_volAvg(1,1,1,1)/delta(1)/delta(1) + &
          C_volAvg(2,2,2,2)/delta(2)/delta(2) + &
          C_volAvg(3,3,3,3)/delta(3)/delta(3))*detJ
- call MatZeroRowsColumns(Jac,nrows,rows,diag,PETSC_NULL_OBJECT,PETSC_NULL_OBJECT,ierr)
+ call MatZeroRowsColumns(Jac,nrows,rows,diag,PETSC_NULL_VEC,PETSC_NULL_VEC,ierr)
  CHKERRQ(ierr)
  call DMGetGlobalVector(da_local,coordinates,ierr);CHKERRQ(ierr)
  call DMDAVecGetArrayF90(da_local,coordinates,x_scal,ierr);CHKERRQ(ierr)
@@ -680,21 +667,5 @@ subroutine FEM_forward(guess,timeinc,timeinc_old,loadCaseTime,deformation_BC,str
   call VecAXPY(solution_current,timeinc,solution_rate,ierr); CHKERRQ(ierr)
   
 end subroutine FEM_forward
-
-!--------------------------------------------------------------------------------------------------
-!> @brief destroy routine
-!--------------------------------------------------------------------------------------------------
-subroutine FEM_destroy()
-
- implicit none
- PetscErrorCode :: ierr
-
- call VecDestroy(solution_current,ierr); CHKERRQ(ierr)
- call VecDestroy(solution_lastInc,ierr); CHKERRQ(ierr)
- call VecDestroy(solution_rate   ,ierr); CHKERRQ(ierr)
- call SNESDestroy(mech_snes,ierr); CHKERRQ(ierr)
- call DMDestroy(mech_grid,ierr); CHKERRQ(ierr)
-
-end subroutine FEM_destroy
 
 end module spectral_mech_FEM
