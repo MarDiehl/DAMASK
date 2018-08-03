@@ -2282,7 +2282,7 @@ function homogenization_multiphase_getPhaseSource(phi,ip,el)
          localSource = 0.0_pReal
        
      end select
-     selfSource(grI) = selfSource(grI) + (param(instance)%InterfaceWidth/8.0_pReal)*localSource
+     selfSource(grI) = selfSource(grI) - (param(instance)%InterfaceWidth/8.0_pReal)*localSource
    enddo  
  enddo
  
