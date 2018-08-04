@@ -1248,7 +1248,7 @@ subroutine lattice_init
    IO_stringPos, &
    IO_stringValue, &
    IO_floatValue
- use material, only: &
+ use config, only: &
    material_configfile, &
    material_localFileExt, &
    material_partPhase

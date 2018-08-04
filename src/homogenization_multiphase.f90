@@ -83,7 +83,7 @@ contains
 !> @brief allocates all neccessary fields, reads information from material configuration file
 !--------------------------------------------------------------------------------------------------
 subroutine homogenization_multiphase_init(fileUnit)
-#ifdef __GFORTRAN__
+#if defined(__GFORTRAN__) || __INTEL_COMPILER >= 1800
  use, intrinsic :: iso_fortran_env, only: &
    compiler_version, &
    compiler_options
@@ -103,6 +103,7 @@ subroutine homogenization_multiphase_init(fileUnit)
  use lattice, only: &
    lattice_initialPlasticStrain
  use material
+ use config
  use mesh, only: &
    FE_Nips, &
    FE_geomtype, &
@@ -189,31 +190,19 @@ subroutine homogenization_multiphase_init(fileUnit)
        tag = IO_lc(IO_stringValue(line,chunkPos,1_pInt))                                            ! extract key
        select case(tag)
          case ('(output)')
+           homogenization_multiphase_Noutput(i) = homogenization_multiphase_Noutput(i) + 1_pInt
+           homogenization_multiphase_output(homogenization_multiphase_Noutput(i),i) = &
+             IO_lc(IO_stringValue(line,chunkPos,2_pInt))
            select case(IO_lc(IO_stringValue(line,chunkPos,2_pInt)))
              case('nconstituents','ngrains')
-               homogenization_multiphase_Noutput(i) = homogenization_multiphase_Noutput(i) + 1_pInt
-               homogenization_multiphase_output(homogenization_multiphase_Noutput(i),i) = &
-                 IO_lc(IO_stringValue(line,chunkPos,2_pInt))
                param(i)%outputID(homogenization_multiphase_Noutput(i)) = nconstituents_ID
              case('ipcoords')
-               homogenization_multiphase_Noutput(i) = homogenization_multiphase_Noutput(i) + 1_pInt
-               homogenization_multiphase_output(homogenization_multiphase_Noutput(i),i) = &
-                 IO_lc(IO_stringValue(line,chunkPos,2_pInt))
                param(i)%outputID(homogenization_multiphase_Noutput(i)) = ipcoords_ID
              case('avgdefgrad','avgf')
-               homogenization_multiphase_Noutput(i) = homogenization_multiphase_Noutput(i) + 1_pInt
-               homogenization_multiphase_output(homogenization_multiphase_Noutput(i),i) = &
-                 IO_lc(IO_stringValue(line,chunkPos,2_pInt))
                param(i)%outputID(homogenization_multiphase_Noutput(i)) = avgdefgrad_ID
              case('avgp','avgfirstpiola','avg1stpiola')
-               homogenization_multiphase_Noutput(i) = homogenization_multiphase_Noutput(i) + 1_pInt
-               homogenization_multiphase_output(homogenization_multiphase_Noutput(i),i) = &
-                 IO_lc(IO_stringValue(line,chunkPos,2_pInt))
                param(i)%outputID(homogenization_multiphase_Noutput(i)) = avgfirstpiola_ID
              case('phasefrac','phasefraction')
-               homogenization_multiphase_Noutput(i) = homogenization_multiphase_Noutput(i) + 1_pInt
-               homogenization_multiphase_output(homogenization_multiphase_Noutput(i),i) = &
-                 IO_lc(IO_stringValue(line,chunkPos,2_pInt))
                param(i)%outputID(homogenization_multiphase_Noutput(i)) = phasefrac_ID
 
            end select

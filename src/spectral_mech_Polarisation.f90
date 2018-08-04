@@ -5,6 +5,10 @@
 !> @brief Polarisation scheme solver
 !--------------------------------------------------------------------------------------------------
 module spectral_mech_Polarisation
+#include <petsc/finclude/petscsnes.h>
+#include <petsc/finclude/petscdmda.h>
+ use PETScdmda
+ use PETScsnes
  use prec, only: & 
    pInt, &
    pReal
@@ -16,7 +20,6 @@ module spectral_mech_Polarisation
 
  implicit none
  private
-#include <petsc/finclude/petsc.h90>
 
  character (len=*), parameter, public :: &
    DAMASK_spectral_solverPolarisation_label = 'polarisation'
@@ -24,7 +27,6 @@ module spectral_mech_Polarisation
 !--------------------------------------------------------------------------------------------------
 ! derived types
  type(tSolutionParams), private :: params
- real(pReal), private, dimension(3,3) :: mask_stress = 0.0_pReal
 
 !--------------------------------------------------------------------------------------------------
 ! PETSc data
@@ -70,13 +72,9 @@ module spectral_mech_Polarisation
  public :: &
    Polarisation_init, &
    Polarisation_solution, &
-   Polarisation_forward, &
-   Polarisation_destroy
+   Polarisation_forward
  external :: &
-   PETScFinalize, &
-   MPI_Abort, &
-   MPI_Bcast, &
-   MPI_Allreduce
+   PETScErrorF                                                                                      ! is called in the CHKERRQ macro
 
 contains
 
@@ -125,28 +123,21 @@ subroutine Polarisation_init
 
  PetscErrorCode :: ierr
  PetscScalar, pointer, dimension(:,:,:,:) :: &
-   FandF_tau, &                                                                                                    ! overall pointer to solution data
-   F, &                                                                                                         ! specific (sub)pointer
-   F_tau                                                                                                     ! specific (sub)pointer
-
- integer(pInt), dimension(:), allocatable :: localK  
+   FandF_tau, &                                                                                     ! overall pointer to solution data
+   F, &                                                                                             ! specific (sub)pointer
+   F_tau                                                                                            ! specific (sub)pointer
+ PetscInt, dimension(:), allocatable :: localK 
  integer(pInt) :: proc
  character(len=1024) :: rankStr
  
  external :: &
-   SNESCreate, &
    SNESSetOptionsPrefix, &
-   DMDACreate3D, &
-   SNESSetDM, &
-   DMCreateGlobalVector, &
-   DMDASNESSetFunctionLocal, &
-   SNESGetConvergedReason, &
    SNESSetConvergenceTest, &
-   SNESSetFromOptions
+   DMDASNESsetFunctionLocal
    
  write(6,'(/,a)') ' <<<+-  DAMASK_spectral_solverPolarisation init  -+>>>'
  write(6,'(/,a)') ' Shanthraj et al., International Journal of Plasticity, 66:31–45, 2015'
- write(6,'(/,a)') ' https://doi.org/10.1016/j.ijplas.2014.02.006'
+ write(6,'(a,/)') ' https://doi.org/10.1016/j.ijplas.2014.02.006'
  write(6,'(a15,a)') ' Current time: ',IO_timeStamp()
 #include "compilation_info.f90"
 
@@ -171,16 +162,18 @@ subroutine Polarisation_init
         grid(1),grid(2),grid(3), &                                                                  ! global grid
         1 , 1, worldsize, &
         18, 0, &                                                                                    ! #dof (F tensor), ghost boundary width (domain overlap)
-        grid(1),grid(2),localK, &                                                                   ! local grid
+        [grid(1)],[grid(2)],localK, &                                                               ! local grid
         da,ierr)                                                                                    ! handle, error
  CHKERRQ(ierr)
  call SNESSetDM(snes,da,ierr); CHKERRQ(ierr)                                                        ! connect snes to da
- call DMCreateGlobalVector(da,solution_vec,ierr); CHKERRQ(ierr)                                     ! global solution vector (grid x 9, i.e. every def grad tensor)
- call DMDASNESSetFunctionLocal(da,INSERT_VALUES,Polarisation_formResidual,PETSC_NULL_OBJECT,ierr)   ! residual vector of same shape as solution vector
+ call DMsetFromOptions(da,ierr); CHKERRQ(ierr)
+ call DMsetUp(da,ierr); CHKERRQ(ierr)
+ call DMcreateGlobalVector(da,solution_vec,ierr); CHKERRQ(ierr)                                     ! global solution vector (grid x 18, i.e. every def grad tensor)
+ call DMDASNESsetFunctionLocal(da,INSERT_VALUES,Polarisation_formResidual,PETSC_NULL_SNES,ierr)     ! residual vector of same shape as solution vector
  CHKERRQ(ierr) 
- call SNESSetConvergenceTest(snes,Polarisation_converged,PETSC_NULL_OBJECT,PETSC_NULL_FUNCTION,ierr)  ! specify custom convergence check function "_converged"
+ call SNESsetConvergenceTest(snes,Polarisation_converged,PETSC_NULL_SNES,PETSC_NULL_FUNCTION,ierr)  ! specify custom convergence check function "_converged"
  CHKERRQ(ierr)
- call SNESSetFromOptions(snes,ierr); CHKERRQ(ierr)                                                  ! pull it all together with additional cli arguments
+ call SNESsetFromOptions(snes,ierr); CHKERRQ(ierr)                                                  ! pull it all together with additional CLI arguments
 
 !--------------------------------------------------------------------------------------------------
 ! init fields                 
@@ -280,8 +273,7 @@ type(tSolutionState) function Polarisation_solution(incInfoIn,timeinc,timeinc_ol
  SNESConvergedReason :: reason
 
  external :: &
-   SNESSolve, &
-   SNESGetConvergedReason
+   SNESSolve
 
  incInfo = incInfoIn
 
@@ -296,7 +288,7 @@ type(tSolutionState) function Polarisation_solution(incInfoIn,timeinc,timeinc_ol
 
 !--------------------------------------------------------------------------------------------------
 ! set module wide availabe data
- mask_stress        = stress_BC%maskFloat
+ params%stress_mask = stress_BC%maskFloat
  params%stress_BC   = stress_BC%values
  params%rotation_BC = rotation_BC
  params%timeinc     = timeinc
@@ -304,7 +296,7 @@ type(tSolutionState) function Polarisation_solution(incInfoIn,timeinc,timeinc_ol
 
 !--------------------------------------------------------------------------------------------------
 ! solve BVP 
- call SNESSolve(snes,PETSC_NULL_OBJECT,solution_vec,ierr); CHKERRQ(ierr)
+ call SNESsolve(snes,PETSC_NULL_VEC,solution_vec,ierr); CHKERRQ(ierr)
 
 !--------------------------------------------------------------------------------------------------
 ! check convergence
@@ -322,7 +314,11 @@ end function Polarisation_solution
 !--------------------------------------------------------------------------------------------------
 !> @brief forms the Polarisation residual vector
 !--------------------------------------------------------------------------------------------------
-subroutine Polarisation_formResidual(in,x_scal,f_scal,dummy,ierr)
+subroutine Polarisation_formResidual(in, &                                                         ! DMDA info (needs to be named "in" for XRANGE, etc. macros to work)
+                                     FandF_tau, &                                                  ! defgrad fields on grid
+                                     residuum, &                                                   ! residuum fields on grid
+                                     dummy, &
+                                     ierr)
  use numerics, only: &
    itmax, &
    itmin, &
@@ -359,9 +355,9 @@ subroutine Polarisation_formResidual(in,x_scal,f_scal,dummy,ierr)
  implicit none
  DMDALocalInfo, dimension(DMDA_LOCAL_INFO_SIZE) :: in
  PetscScalar, &
-   target, dimension(3,3,2, XG_RANGE,YG_RANGE,ZG_RANGE), intent(in) :: x_scal
+   target, dimension(3,3,2, XG_RANGE,YG_RANGE,ZG_RANGE), intent(in) :: FandF_tau
  PetscScalar, &
-   target, dimension(3,3,2,  X_RANGE, Y_RANGE, Z_RANGE), intent(out) :: f_scal
+   target, dimension(3,3,2,  X_RANGE, Y_RANGE, Z_RANGE), intent(out) :: residuum
  PetscScalar, pointer, dimension(:,:,:,:,:) :: &
    F, &
    F_tau, &
@@ -375,24 +371,20 @@ subroutine Polarisation_formResidual(in,x_scal,f_scal,dummy,ierr)
  integer(pInt) :: &
    i, j, k, e
 
- external :: &
-   SNESGetNumberFunctionEvals, &
-   SNESGetIterationNumber
-
- F                 => x_scal(1:3,1:3,1,&
-                             XG_RANGE,YG_RANGE,ZG_RANGE)
- F_tau             => x_scal(1:3,1:3,2,&
-                             XG_RANGE,YG_RANGE,ZG_RANGE)
- residual_F        => f_scal(1:3,1:3,1,&
-                              X_RANGE, Y_RANGE, Z_RANGE)
- residual_F_tau    => f_scal(1:3,1:3,2,&
-                              X_RANGE, Y_RANGE, Z_RANGE)
+ F                 => FandF_tau(1:3,1:3,1,&
+                                XG_RANGE,YG_RANGE,ZG_RANGE)
+ F_tau             => FandF_tau(1:3,1:3,2,&
+                                XG_RANGE,YG_RANGE,ZG_RANGE)
+ residual_F        => residuum(1:3,1:3,1,&
+                                X_RANGE, Y_RANGE, Z_RANGE)
+ residual_F_tau    => residuum(1:3,1:3,2,&
+                                X_RANGE, Y_RANGE, Z_RANGE)
 
  F_av = sum(sum(sum(F,dim=5),dim=4),dim=3) * wgt
  call MPI_Allreduce(MPI_IN_PLACE,F_av,9,MPI_DOUBLE,MPI_SUM,PETSC_COMM_WORLD,ierr)
  
  call SNESGetNumberFunctionEvals(snes,nfuncs,ierr); CHKERRQ(ierr)
- call SNESGetIterationNumber(snes,PETScIter,ierr); CHKERRQ(ierr)
+ call SNESGetIterationNumber(snes,PETScIter,ierr);  CHKERRQ(ierr)
 
  if (nfuncs == 0 .and. PETScIter == 0) totalIter = -1_pInt                                            ! new increment
 !--------------------------------------------------------------------------------------------------
@@ -505,8 +497,8 @@ subroutine Polarisation_converged(snes_local,PETScIter,xnorm,snorm,fnorm,reason,
 !--------------------------------------------------------------------------------------------------
 ! stress BC handling
  F_aim = F_aim - math_mul3333xx33(S, ((P_av - params%stress_BC)))                                   ! S = 0.0 for no bc
- err_BC = maxval(abs((1.0_pReal-mask_stress) * math_mul3333xx33(C_scale,F_aim-F_av) + &
-                                mask_stress  * (P_av-params%stress_BC)))                            ! mask = 0.0 for no bc
+ err_BC = maxval(abs((1.0_pReal-params%stress_mask) * math_mul3333xx33(C_scale,F_aim-F_av) + &
+                                params%stress_mask  * (P_av-params%stress_BC)))                     ! mask = 0.0 for no bc
 
 !--------------------------------------------------------------------------------------------------
 ! error calculation
@@ -684,26 +676,5 @@ subroutine Polarisation_forward(guess,timeinc,timeinc_old,loadCaseTime,deformati
  call DMDAVecRestoreArrayF90(da,solution_vec,FandF_tau,ierr); CHKERRQ(ierr)
 
 end subroutine Polarisation_forward
-
-!--------------------------------------------------------------------------------------------------
-!> @brief destroy routine
-!--------------------------------------------------------------------------------------------------
-subroutine Polarisation_destroy()
- use spectral_utilities, only: &
-   Utilities_destroy
-
- implicit none
- PetscErrorCode :: ierr
-
- external :: &
-   VecDestroy, &
-   SNESDestroy, &
-   DMDestroy
-
- call VecDestroy(solution_vec,ierr); CHKERRQ(ierr)
- call SNESDestroy(snes,ierr); CHKERRQ(ierr)
- call DMDestroy(da,ierr); CHKERRQ(ierr)
-
-end subroutine Polarisation_destroy
 
 end module spectral_mech_Polarisation

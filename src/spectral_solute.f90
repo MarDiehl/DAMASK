@@ -3,6 +3,10 @@
 !> @brief Multiphase PETSc solver
 !--------------------------------------------------------------------------------------------------
 module spectral_solute
+#include <petsc/finclude/petscsnes.h>
+#include <petsc/finclude/petscdmda.h>
+ use PETScdmda
+ use PETScsnes
  use prec, only: & 
    pInt, &
    pReal
@@ -12,7 +16,6 @@ module spectral_solute
 
  implicit none
  private
-#include <petsc/finclude/petsc.h90>
 
 !--------------------------------------------------------------------------------------------------
 ! derived types
@@ -33,27 +36,9 @@ module spectral_solute
  public :: &
    spectral_solute_init, &
    spectral_solute_solution, &
-   spectral_solute_forward, &
-   spectral_solute_destroy
+   spectral_solute_forward
  external :: &
-   VecDestroy, &
-   DMDestroy, &
-   DMDACreate3D, &
-   DMCreateGlobalVector, &
-   DMDASNESSetFunctionLocal, &
-   PETScFinalize, &
-   SNESDestroy, &
-   SNESGetNumberFunctionEvals, &
-   SNESGetIterationNumber, &
-   SNESSolve, &
-   SNESSetDM, &
-   SNESGetConvergedReason, &
-   SNESSetConvergenceTest, &
-   SNESSetFromOptions, &
-   SNESCreate, &
-   MPI_Abort, &
-   MPI_Bcast, &
-   MPI_Allreduce
+   PETScErrorF
 
 contains
 
@@ -61,7 +46,11 @@ contains
 !> @brief allocates all neccessary fields and fills them with data, potentially from restart info
 !--------------------------------------------------------------------------------------------------
 subroutine spectral_solute_init
- use, intrinsic :: iso_fortran_env                                                                  ! to get compiler_version and compiler_options (at least for gfortran >4.6 at the moment)
+#if defined(__GFORTRAN__) || __INTEL_COMPILER >= 1800
+ use, intrinsic :: iso_fortran_env, only: &
+   compiler_version, &
+   compiler_options
+#endif
  use IO, only: &
    IO_error, &
    IO_intOut, &
@@ -78,7 +67,8 @@ subroutine spectral_solute_init
    homogenization_Ncomponents, &
    homogenization_maxNcomponents, &
    homogenization_active, &
-   material_homog, &   
+   material_homog   
+ use config, only: &  
    material_Nhomogenization
  use solute_flux, only: &
    solute_flux_getInitialComponentPotential, &
@@ -120,18 +110,20 @@ subroutine spectral_solute_init
         grid(1),grid(2),grid(3), &                                                                  ! global grid
         1, 1, worldsize, &
         2*Ncomponents, 1, &                                                                         ! #dof, ghost boundary width
-        grid (1),grid(2),localK, &                                                                  ! local grid
+        [grid(1)],[grid(2)],localK, &                                                                  ! local grid
         solute_grid,ierr)                                                                           ! handle, error
  CHKERRQ(ierr)
  call SNESSetDM(solute_snes,solute_grid,ierr); CHKERRQ(ierr)
- call DMCreateGlobalVector(solute_grid,solution_current,ierr); CHKERRQ(ierr)                    ! current phase field vector 
- call DMCreateGlobalVector(solute_grid,solution_lastInc,ierr); CHKERRQ(ierr)                    ! last increment phase field vector 
- call DMSNESSetFunctionLocal(solute_grid,spectral_solute_formResidual,PETSC_NULL_OBJECT,ierr)! residual vector of same shape as solution vector
+ call DMsetFromOptions(solute_grid,ierr); CHKERRQ(ierr)
+ call DMsetUp(solute_grid,ierr); CHKERRQ(ierr)
+ call DMCreateGlobalVector(solute_grid,solution_current,ierr); CHKERRQ(ierr)                        ! current phase field vector 
+ call DMCreateGlobalVector(solute_grid,solution_lastInc,ierr); CHKERRQ(ierr)                        ! last increment phase field vector 
+ call DMSNESSetFunctionLocal(solute_grid,spectral_solute_formResidual,PETSC_NULL_SNES,ierr)         ! residual vector of same shape as solution vector
  CHKERRQ(ierr) 
- call DMSNESSetJacobianLocal(solute_grid,spectral_solute_formJacobian,PETSC_NULL_OBJECT,ierr)! function to evaluate stiffness matrix
+ call DMSNESSetJacobianLocal(solute_grid,spectral_solute_formJacobian,PETSC_NULL_SNES,ierr)         ! function to evaluate stiffness matrix
  CHKERRQ(ierr)
- call SNESSetMaxLinearSolveFailures(solute_snes, huge(1), ierr); CHKERRQ(ierr)                  ! ignore linear solve failures 
- call SNESSetFromOptions(solute_snes,ierr); CHKERRQ(ierr)                                       ! pull it all together with additional cli arguments
+ call SNESSetMaxLinearSolveFailures(solute_snes, huge(1), ierr); CHKERRQ(ierr)                      ! ignore linear solve failures 
+ call SNESSetFromOptions(solute_snes,ierr); CHKERRQ(ierr)                                           ! pull it all together with additional cli arguments
 
 !--------------------------------------------------------------------------------------------------
 ! init fields                 
@@ -207,7 +199,7 @@ type(tSolutionState) function spectral_solute_solution(timeinc,timeinc_old)
 
 !--------------------------------------------------------------------------------------------------
 ! solve BVP 
- call SNESSolve(solute_snes,PETSC_NULL_OBJECT,solution_current,ierr)
+ call SNESSolve(solute_snes,PETSC_NULL_VEC,solution_current,ierr)
  CHKERRQ(ierr)
  call SNESGetConvergedReason(solute_snes,reason,ierr); CHKERRQ(ierr)
  spectral_solute_solution%converged = reason > 0
@@ -474,19 +466,5 @@ subroutine spectral_solute_forward()
  endif
 
 end subroutine spectral_solute_forward
-
-!--------------------------------------------------------------------------------------------------
-!> @brief destroy routine
-!--------------------------------------------------------------------------------------------------
-subroutine spectral_solute_destroy()
-
- implicit none
- PetscErrorCode :: ierr
-
- call VecDestroy(solution_current,ierr); CHKERRQ(ierr)
- call VecDestroy(solution_lastInc,ierr); CHKERRQ(ierr)
- call SNESDestroy(solute_snes,ierr); CHKERRQ(ierr)
-
-end subroutine spectral_solute_destroy
 
 end module spectral_solute

@@ -10,9 +10,6 @@ module numerics
 
  implicit none
  private
-#ifdef PETSc
-#include <petsc/finclude/petsc.h90>
-#endif
  character(len=64), parameter, private :: &
    numerics_CONFIGFILE        = 'numerics.config'                                                   !< name of configuration file
 
@@ -101,7 +98,7 @@ module numerics
  character(len=64), private :: &
    fftw_plan_mode             = 'FFTW_PATIENT'                                                      !< reads the planing-rigor flag, see manual on www.fftw.org, Default FFTW_PATIENT: use patient planner flag
  character(len=64), protected, public :: & 
-   spectral_solver            = 'basicpetsc'  , &                                                   !< spectral solution method 
+   spectral_solver            = 'basic', &                                                          !< spectral solution method 
    spectral_derivative        = 'continuous'                                                        !< spectral spatial derivative method
  character(len=1024), protected, public :: &
    petsc_defaultOptions       = '-mech_snes_type ngmres &
@@ -206,12 +203,16 @@ subroutine numerics_init
    IO_warning, &
    IO_timeStamp, &
    IO_EOF
-#if defined(Spectral) || defined(FEM)
-!$ use OMP_LIB, only: omp_set_num_threads                                                           ! Use the standard conforming module file for omp if using the spectral solver
+#ifdef PETSc
+#include <petsc/finclude/petscsys.h>
+   use petscsys
+#endif
+#if !defined(Marc4DAMASK)
+!$ use OMP_LIB, only: omp_set_num_threads                                                           ! Standard conforming module
  implicit none
 #else  
  implicit none
-!$ include "omp_lib.h"                                                                              ! use the not F90 standard conforming include file to prevent crashes with some versions of MSC.Marc
+!$ include "omp_lib.h"                                                                              ! MSC.Marc includes this file on !its own, avoid conflict with the OMP_LIB module
 #endif
  integer(pInt), parameter ::                 FILEUNIT = 300_pInt
 !$ integer ::                                gotDAMASK_NUM_THREADS = 1
@@ -222,9 +223,7 @@ subroutine numerics_init
    line
 !$ character(len=6) DAMASK_NumThreadsString                                                         ! environment variable DAMASK_NUM_THREADS
  external :: &
-   MPI_Comm_rank, &
-   MPI_Comm_size, &
-   MPI_Abort
+   PETScErrorF                                                                                      ! is called in the CHKERRQ macro
 
 #ifdef PETSc
  call MPI_Comm_rank(PETSC_COMM_WORLD,worldrank,ierr);CHKERRQ(ierr)

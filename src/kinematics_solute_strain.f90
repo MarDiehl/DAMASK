@@ -63,7 +63,8 @@ subroutine kinematics_solute_strain_init(fileUnit)
    phase_Nkinematics, &
    phase_Ncomponents, &
    KINEMATICS_solute_strain_label, &
-   KINEMATICS_solute_strain_ID, &
+   KINEMATICS_solute_strain_ID
+ use config, only: &
    material_Nphase, &
    MATERIAL_partPhase
 

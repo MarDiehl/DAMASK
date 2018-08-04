@@ -48,7 +48,7 @@ contains
 !> @brief allocates all neccessary fields, reads information from material configuration file
 !--------------------------------------------------------------------------------------------------
 subroutine solute_flux_init(fileUnit)
-#ifdef __GFORTRAN__
+#if defined(__GFORTRAN__) || __INTEL_COMPILER >= 1800
  use, intrinsic :: iso_fortran_env, only: &
    compiler_version, &
    compiler_options
@@ -59,6 +59,7 @@ subroutine solute_flux_init(fileUnit)
    debug_levelBasic
  use IO
  use material
+ use config
  use mesh, only: &
    FE_Nips, &
    FE_geomtype, &
