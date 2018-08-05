@@ -225,6 +225,7 @@ subroutine CPFEM_age()
  use material, only: &
    plasticState, &
    chemicalState, &
+   heatfluxState, &
    sourceState, &
    homogState, &
    thermalState, &
@@ -272,6 +273,7 @@ crystallite_Tstar0_v = crystallite_Tstar_v                                      
 
 forall (i = 1:size(plasticState )) plasticState (i)%state0 = plasticState (i)%state         ! copy state in this lengthy way because: A component cannot be an array if the encompassing structure is an array
 forall (i = 1:size(chemicalState)) chemicalState(i)%state0 = chemicalState(i)%state         ! copy state in this lengthy way because: A component cannot be an array if the encompassing structure is an array
+forall (i = 1:size(heatfluxState)) heatfluxState(i)%state0 = heatfluxState(i)%state         ! copy state in this lengthy way because: A component cannot be an array if the encompassing structure is an array
 
 do i = 1, size(sourceState)
   do mySource = 1,phase_Nsources(i)

@@ -300,6 +300,7 @@ subroutine homogenization_init
  do p = 1, material_Nphase; do e = 1, homogenization_maxNgrains
    phaseOutput(p,e)%sizeResults = plasticState    (p)%sizePostResults + &
                                   chemicalState   (p)%sizePostResults + &
+                                  heatfluxState   (p)%sizePostResults + &
                                   sum(sourceState (p)%p(:)%sizePostResults)
    phaseOutput(p,e)%sizeIpCells = count(material_phase(e,:,:) == p)
    allocate(phaseOutput(p,e)%output(phaseOutput(p,e)%sizeResults,phaseOutput(p,e)%sizeIpCells))
@@ -373,6 +374,7 @@ subroutine materialpoint_stressAndItsTangent(updateJaco,dt)
  use material, only: &
    plasticState, &
    chemicalState, &
+   heatfluxState, &
    sourceState, &
    homogState, &
    thermalState, &
@@ -454,6 +456,8 @@ subroutine materialpoint_stressAndItsTangent(updateJaco,dt)
      plasticState    (phaseAt(g,i,e))%state0(         :,phasememberAt(g,i,e))
      chemicalState   (phaseAt(g,i,e))%partionedState0(:,phasememberAt(g,i,e)) = &
      chemicalState   (phaseAt(g,i,e))%state0(         :,phasememberAt(g,i,e))
+     heatfluxState   (phaseAt(g,i,e))%partionedState0(:,phasememberAt(g,i,e)) = &
+     heatfluxState   (phaseAt(g,i,e))%state0(         :,phasememberAt(g,i,e))
      do mySource = 1_pInt, phase_Nsources(phaseAt(g,i,e))
        sourceState(phaseAt(g,i,e))%p(mySource)%partionedState0(:,phasememberAt(g,i,e)) = &
        sourceState(phaseAt(g,i,e))%p(mySource)%state0(         :,phasememberAt(g,i,e))
@@ -546,6 +550,8 @@ subroutine materialpoint_stressAndItsTangent(updateJaco,dt)
              plasticState    (phaseAt(g,i,e))%state(          :,phasememberAt(g,i,e))
              chemicalState   (phaseAt(g,i,e))%partionedState0(:,phasememberAt(g,i,e)) = &
              chemicalState   (phaseAt(g,i,e))%state(          :,phasememberAt(g,i,e))
+             heatfluxState   (phaseAt(g,i,e))%partionedState0(:,phasememberAt(g,i,e)) = &
+             heatfluxState   (phaseAt(g,i,e))%state(          :,phasememberAt(g,i,e))
              do mySource = 1_pInt, phase_Nsources(phaseAt(g,i,e))
                sourceState(phaseAt(g,i,e))%p(mySource)%partionedState0(:,phasememberAt(g,i,e)) = &
                sourceState(phaseAt(g,i,e))%p(mySource)%state(          :,phasememberAt(g,i,e))
@@ -614,6 +620,8 @@ subroutine materialpoint_stressAndItsTangent(updateJaco,dt)
              plasticState    (phaseAt(g,i,e))%partionedState0(:,phasememberAt(g,i,e))
              chemicalState   (phaseAt(g,i,e))%state(          :,phasememberAt(g,i,e)) = &
              chemicalState   (phaseAt(g,i,e))%partionedState0(:,phasememberAt(g,i,e))
+             heatfluxState   (phaseAt(g,i,e))%state(          :,phasememberAt(g,i,e)) = &
+             heatfluxState   (phaseAt(g,i,e))%partionedState0(:,phasememberAt(g,i,e))
              do mySource = 1_pInt, phase_Nsources(phaseAt(g,i,e))
                sourceState(phaseAt(g,i,e))%p(mySource)%state(          :,phasememberAt(g,i,e)) = &
                sourceState(phaseAt(g,i,e))%p(mySource)%partionedState0(:,phasememberAt(g,i,e))
@@ -757,6 +765,7 @@ subroutine materialpoint_postResults
 #endif
    plasticState, &
    chemicalState, &
+   heatfluxState, &
    sourceState, &
    material_phase, &
    homogenization_Ngrains, &
@@ -811,6 +820,7 @@ subroutine materialpoint_postResults
        crystalliteResults(1:1+crystallite_sizePostResults(myCrystallite) + &
                             1+plasticState(myPhase)%sizePostResults + &
                               chemicalState(myPhase)%sizePostResults + &
+                              heatfluxState(myPhase)%sizePostResults + &
                               sum(sourceState(myPhase)%p(:)%sizePostResults)) = crystallite_postResults(g,i,e)
        if (microstructure_crystallite(mesh_element(4,e)) == myCrystallite .and. &
            homogenization_Ngrains    (mesh_element(3,e)) >= g) then
@@ -827,6 +837,7 @@ subroutine materialpoint_postResults
                                 1 + crystalliteOutput(myCrystallite,g)%sizeResults + &
                                 1 + plasticState    (myphase)%sizePostResults + &
                                     chemicalState   (myPhase)%sizePostResults + &
+                                    heatfluxState   (myPhase)%sizePostResults + &
                                     sum(sourceState(myphase)%p(:)%sizePostResults))
        endif
      enddo grainLooping
@@ -859,6 +870,7 @@ subroutine materialpoint_postResults
          theSize = 1 + crystallite_sizePostResults(myCrystallite) + &
                    1 + plasticState    (material_phase(g,i,e))%sizePostResults + &                    !ToDo
                        chemicalState   (material_phase(g,i,e))%sizePostResults + &
+                       heatfluxState   (material_phase(g,i,e))%sizePostResults + &
                        sum(sourceState(material_phase(g,i,e))%p(:)%sizePostResults)
          materialpoint_results(thePos+1:thePos+theSize,i,e) = crystallite_postResults(g,i,e)        ! tell crystallite results
          thePos = thePos + theSize

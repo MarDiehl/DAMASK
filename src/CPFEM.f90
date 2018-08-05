@@ -301,6 +301,7 @@ subroutine CPFEM_general(mode, parallelExecution, ffn, ffn1, temperature_inp, dt
    microstructure_elemhomo, &
    plasticState, &
    chemicalState, &
+   heatfluxState, &
    sourceState, &
    homogState, &
    thermalState, &
@@ -313,7 +314,8 @@ subroutine CPFEM_general(mode, parallelExecution, ffn, ffn1, temperature_inp, dt
    thermal_type, &
    THERMAL_conduction_ID, &
    phase_Nsources, &
-   material_homog
+   material_homog, &
+   homogenization_Ngrains
  use config, only: &
    material_Nhomogenization
  use crystallite, only: &
@@ -404,6 +406,7 @@ subroutine CPFEM_general(mode, parallelExecution, ffn, ffn1, temperature_inp, dt
 
    forall ( i = 1:size(plasticState    )) plasticState (i)%state0    = plasticState (i)%state  ! copy state in this lenghty way because: A component cannot be an array if the encompassing structure is an array
    forall ( i = 1:size(chemicalState   )) chemicalState(i)%state0    = chemicalState(i)%state  ! copy state in this lenghty way because: A component cannot be an array if the encompassing structure is an array
+   forall ( i = 1:size(heatfluxState   )) heatfluxState(i)%state0    = heatfluxState(i)%state  ! copy state in this lenghty way because: A component cannot be an array if the encompassing structure is an array
    do i = 1, size(sourceState)
      do mySource = 1,phase_Nsources(i)
        sourceState(i)%p(mySource)%state0 = sourceState(i)%p(mySource)%state                    ! copy state in this lenghty way because: A component cannot be an array if the encompassing structure is an array
@@ -501,8 +504,10 @@ subroutine CPFEM_general(mode, parallelExecution, ffn, ffn1, temperature_inp, dt
  if (.not. parallelExecution) then
    chosenThermal1: select case (thermal_type(mesh_element(3,elCP)))
      case (THERMAL_conduction_ID) chosenThermal1
-       temperature(material_homog(ip,elCP))%p(thermalMapping(material_homog(ip,elCP))%p(ip,elCP)) = &
+       do i = 1_pInt, homogenization_Ngrains(mesh_element(3,elCP))
+         temperature(material_phase(i,ip,elCP))%p(thermalMapping(material_phase(i,ip,elCP))%p(i,ip,elCP)) = &
          temperature_inp
+       enddo
      end select chosenThermal1
    materialpoint_F0(1:3,1:3,ip,elCP) = ffn
    materialpoint_F(1:3,1:3,ip,elCP) = ffn1
@@ -514,8 +519,10 @@ subroutine CPFEM_general(mode, parallelExecution, ffn, ffn1, temperature_inp, dt
    CPFEM_dcsde(1:6,1:6,ip,elCP) = CPFEM_odd_jacobian * math_identity2nd(6)
    chosenThermal2: select case (thermal_type(mesh_element(3,elCP)))
      case (THERMAL_conduction_ID) chosenThermal2
-       temperature(material_homog(ip,elCP))%p(thermalMapping(material_homog(ip,elCP))%p(ip,elCP)) = &
+       do i = 1_pInt, homogenization_Ngrains(mesh_element(3,elCP))
+         temperature(material_phase(i,ip,elCP))%p(thermalMapping(material_phase(i,ip,elCP))%p(i,ip,elCP)) = &
          temperature_inp
+       enddo
      end select chosenThermal2
    materialpoint_F0(1:3,1:3,ip,elCP) = ffn
    materialpoint_F(1:3,1:3,ip,elCP) = ffn1
