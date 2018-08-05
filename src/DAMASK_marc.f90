@@ -393,7 +393,7 @@ subroutine flux(f,ts,n,time)
    pReal, &
    pInt
  use thermal_conduction, only: &
-   thermal_conduction_getSourceAndItsTangent
+   thermal_conduction_getHeatSource
  use mesh, only: &
    mesh_FEasCP
 
@@ -407,7 +407,8 @@ subroutine flux(f,ts,n,time)
  real(pReal),   dimension(2),           intent(out) :: &
    f
 
- call thermal_conduction_getSourceAndItsTangent(f(1), f(2), ts(3), n(3),mesh_FEasCP('elem',n(1)))
+ f(1) = thermal_conduction_getHeatSource(n(3),mesh_FEasCP('elem',n(1)))
+ f(2) = 0.0_pReal
 
  end subroutine flux
 
