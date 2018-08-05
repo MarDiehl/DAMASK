@@ -94,6 +94,7 @@ subroutine homogenization_init
  use constitutive, only: &
    constitutive_plasticity_maxSizePostResults, &
    constitutive_chemicalFE_maxSizePostResults, &
+   constitutive_heatflux_maxSizePostResults, &
    constitutive_source_maxSizePostResults
  use crystallite, only: &
    crystallite_maxSizePostResults
@@ -313,6 +314,7 @@ subroutine homogenization_init
                            + homogenization_maxNgrains * (1 + crystallite_maxSizePostResults &      ! crystallite size & crystallite results
                                                         + 1 + constitutive_plasticity_maxSizePostResults &     ! constitutive size & constitutive results
                                                             + constitutive_chemicalFE_maxSizePostResults &
+                                                            + constitutive_heatflux_maxSizePostResults &
                                                             + constitutive_source_maxSizePostResults)
  allocate(materialpoint_results(materialpoint_sizeResults,mesh_maxNips,mesh_NcpElems))
 #endif
