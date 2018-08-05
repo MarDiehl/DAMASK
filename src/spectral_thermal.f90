@@ -44,7 +44,7 @@ module spectral_thermal
 ! reference diffusion tensor, mobility etc. 
  integer(pInt),               private :: totalIter = 0_pInt                                         !< total iteration in current increment
  real(pReal), dimension(3,3), private :: D_ref
- real(pReal), private                 :: mobility_ref
+ real(pReal), private                 :: viscosity_ref
  
  public :: &
    spectral_thermal_init, &
@@ -74,13 +74,9 @@ subroutine spectral_thermal_init
    grid, &
    grid3
  use thermal_conduction, only: &
-   thermal_conduction_getConductivity33, &
-   thermal_conduction_getMassDensity, &
-   thermal_conduction_getSpecificHeat
- use material, only: &
-   mappingHomogenization, &
-   temperature, &
-   thermalMapping
+   thermal_conduction_getInitialTemperature, &
+   thermal_conduction_getHeatFluxTangent, &
+   thermal_conduction_getThermalViscosity
    
  implicit none
  integer(pInt), dimension(:), allocatable :: localK  
@@ -122,8 +118,7 @@ subroutine spectral_thermal_init
  call DMsetFromOptions(thermal_grid,ierr); CHKERRQ(ierr)
  call DMsetUp(thermal_grid,ierr); CHKERRQ(ierr)
  call DMCreateGlobalVector(thermal_grid,solution        ,ierr); CHKERRQ(ierr)                       ! global solution vector (grid x 1, i.e. every def grad tensor)
- call DMDASNESSetFunctionLocal(thermal_grid,INSERT_VALUES,spectral_thermal_formResidual,&
-                                                                            PETSC_NULL_SNES,ierr)   ! residual vector of same shape as solution vector
+ call DMSNESSetFunctionLocal(thermal_grid,spectral_thermal_formResidual,PETSC_NULL_SNES,ierr)       ! residual vector of same shape as solution vector
  CHKERRQ(ierr) 
  call SNESSetFromOptions(thermal_snes,ierr); CHKERRQ(ierr)                                          ! pull it all together with additional CLI arguments
 
@@ -140,8 +135,7 @@ subroutine spectral_thermal_init
  cell = 0_pInt
  do k = 1_pInt, grid3;  do j = 1_pInt, grid(2);  do i = 1_pInt,grid(1)
    cell = cell + 1_pInt
-   temperature_current(i,j,k) = temperature(mappingHomogenization(2,1,cell))% &
-                                  p(thermalMapping(mappingHomogenization(2,1,cell))%p(1,cell))
+   temperature_current(i,j,k) = thermal_conduction_getInitialTemperature(1,cell)
    temperature_lastInc(i,j,k) = temperature_current(i,j,k)
    temperature_stagInc(i,j,k) = temperature_current(i,j,k)
  enddo; enddo; enddo
@@ -153,17 +147,16 @@ subroutine spectral_thermal_init
 ! thermal reference diffusion update
  cell = 0_pInt
  D_ref = 0.0_pReal
- mobility_ref = 0.0_pReal
+ viscosity_ref = 0.0_pReal
  do k = 1_pInt, grid3;  do j = 1_pInt, grid(2);  do i = 1_pInt,grid(1)
    cell = cell + 1_pInt
-   D_ref = D_ref + thermal_conduction_getConductivity33(1,cell)
-   mobility_ref = mobility_ref + thermal_conduction_getMassDensity(1,cell)* &
-                                 thermal_conduction_getSpecificHeat(1,cell)
+   D_ref = D_ref + thermal_conduction_getHeatFluxTangent(1,cell)
+   viscosity_ref = viscosity_ref + thermal_conduction_getThermalViscosity(1,cell)
  enddo; enddo; enddo
  D_ref = D_ref*wgt
  call MPI_Allreduce(MPI_IN_PLACE,D_ref,9,MPI_DOUBLE,MPI_SUM,PETSC_COMM_WORLD,ierr)
- mobility_ref = mobility_ref*wgt
- call MPI_Allreduce(MPI_IN_PLACE,mobility_ref,1,MPI_DOUBLE,MPI_SUM,PETSC_COMM_WORLD,ierr)
+ viscosity_ref = viscosity_ref*wgt
+ call MPI_Allreduce(MPI_IN_PLACE,viscosity_ref,1,MPI_DOUBLE,MPI_SUM,PETSC_COMM_WORLD,ierr)
 
 end subroutine spectral_thermal_init
   
@@ -179,7 +172,7 @@ type(tSolutionState) function spectral_thermal_solution(timeinc,timeinc_old,load
    grid, &
    grid3
  use thermal_conduction, only: &
-   thermal_conduction_putTemperatureAndItsRate
+   thermal_conduction_putTemperatureRate
 
  implicit none
 
@@ -233,9 +226,8 @@ type(tSolutionState) function spectral_thermal_solution(timeinc,timeinc_old,load
  cell = 0_pInt                                                                                      !< material point = 0
  do k = 1_pInt, grid3;  do j = 1_pInt, grid(2);  do i = 1_pInt,grid(1)
    cell = cell + 1_pInt                                                                             !< material point increase
-   call thermal_conduction_putTemperatureAndItsRate(temperature_current(i,j,k), &
-                                                    (temperature_current(i,j,k)-temperature_lastInc(i,j,k))/params%timeinc, &
-                                                    1,cell)
+   call thermal_conduction_putTemperatureRate((temperature_current(i,j,k)-temperature_lastInc(i,j,k))/params%timeinc, &
+                                              1,cell)
  enddo; enddo; enddo
 
  call VecMin(solution,position,minTemperature,ierr); CHKERRQ(ierr)
@@ -253,7 +245,7 @@ end function spectral_thermal_solution
 !--------------------------------------------------------------------------------------------------
 !> @brief forms the spectral thermal residual vector
 !--------------------------------------------------------------------------------------------------
-subroutine spectral_thermal_formResidual(in,x_scal,f_scal,dummy,ierr)
+subroutine spectral_thermal_formResidual(da_local,x_local,f_local,dummy,ierr)
  use mesh, only: &
    grid, &
    grid3
@@ -270,26 +262,21 @@ subroutine spectral_thermal_formResidual(in,x_scal,f_scal,dummy,ierr)
    utilities_fourierScalarGradient, &
    utilities_fourierVectorDivergence
  use thermal_conduction, only: &
-   thermal_conduction_getSourceAndItsTangent, &
-   thermal_conduction_getConductivity33, &
-   thermal_conduction_getMassDensity, &
-   thermal_conduction_getSpecificHeat
+   thermal_conduction_getHeatSource, &
+   thermal_conduction_getHeatFlux, &
+   thermal_conduction_getThermalViscosity
 
  implicit none
- DMDALocalInfo, dimension(DMDA_LOCAL_INFO_SIZE) :: &
-   in
- PetscScalar, dimension( &
-   XG_RANGE,YG_RANGE,ZG_RANGE), intent(in) :: &
-   x_scal
- PetscScalar, dimension( &
-   X_RANGE,Y_RANGE,Z_RANGE), intent(out) :: &
-   f_scal
+ DM :: da_local
+ Vec :: x_local, f_local
+ PetscScalar, pointer :: x_scal(:,:,:), f_scal(:,:,:)
  PetscObject :: dummy
  PetscErrorCode :: ierr
  integer(pInt) :: i, j, k, cell
- real(pReal)   :: Tdot, dTdot_dT
 
+ call DMDAVecGetArrayF90(da_local,x_local,x_scal,ierr);CHKERRQ(ierr)
  temperature_current = x_scal 
+ call DMDAVecRestoreArrayF90(da_local,x_local,x_scal,ierr);CHKERRQ(ierr)
 !--------------------------------------------------------------------------------------------------
 ! evaluate polarization field
  scalarField_real = 0.0_pReal
@@ -300,8 +287,8 @@ subroutine spectral_thermal_formResidual(in,x_scal,f_scal,dummy,ierr)
  cell = 0_pInt
  do k = 1_pInt, grid3;  do j = 1_pInt, grid(2);  do i = 1_pInt,grid(1)
    cell = cell + 1_pInt
-   vectorField_real(1:3,i,j,k) = math_mul33x3(thermal_conduction_getConductivity33(1,cell) - D_ref, &
-                                              vectorField_real(1:3,i,j,k))
+   vectorField_real(1:3,i,j,k) = thermal_conduction_getHeatFlux(vectorField_real(1:3,i,j,k),1,cell) - &
+                                 math_mul33x3(D_ref,vectorField_real(1:3,i,j,k))
  enddo; enddo; enddo
  call utilities_FFTvectorForward()
  call utilities_fourierVectorDivergence()                                                           !< calculate damage divergence in fourier field
@@ -309,24 +296,24 @@ subroutine spectral_thermal_formResidual(in,x_scal,f_scal,dummy,ierr)
  cell = 0_pInt
  do k = 1_pInt, grid3;  do j = 1_pInt, grid(2);  do i = 1_pInt,grid(1)
    cell = cell + 1_pInt
-   call thermal_conduction_getSourceAndItsTangent(Tdot, dTdot_dT, temperature_current(i,j,k), 1, cell)
    scalarField_real(i,j,k) = params%timeinc*scalarField_real(i,j,k) + &
-                             params%timeinc*Tdot + &
-                             thermal_conduction_getMassDensity (1,cell)* &
-                             thermal_conduction_getSpecificHeat(1,cell)*(temperature_lastInc(i,j,k)  - &
-                                                                         temperature_current(i,j,k)) + &
-                             mobility_ref*temperature_current(i,j,k)
+                             params%timeinc*thermal_conduction_getHeatSource(1,cell) + &
+                             thermal_conduction_getThermalViscosity(1,cell)*(temperature_lastInc(i,j,k)  - &
+                                                                             temperature_current(i,j,k)) + &
+                             viscosity_ref*temperature_current(i,j,k)
  enddo; enddo; enddo
 
 !--------------------------------------------------------------------------------------------------
 ! convolution of damage field with green operator
  call utilities_FFTscalarForward()
- call utilities_fourierGreenConvolution(D_ref, mobility_ref, params%timeinc)
+ call utilities_fourierGreenConvolution(D_ref, viscosity_ref, params%timeinc)
  call utilities_FFTscalarBackward()
  
 !--------------------------------------------------------------------------------------------------
 ! constructing residual
+ call DMDAVecGetArrayF90(da_local,f_local,f_scal,ierr);CHKERRQ(ierr)
  f_scal = temperature_current - scalarField_real(1:grid(1),1:grid(2),1:grid3)
+ call DMDAVecRestoreArrayF90(da_local,f_local,f_scal,ierr);CHKERRQ(ierr)
 
 end subroutine spectral_thermal_formResidual
 
@@ -341,10 +328,9 @@ subroutine spectral_thermal_forward()
    cutBack, &
    wgt
  use thermal_conduction, only: &
-   thermal_conduction_putTemperatureAndItsRate, &
-   thermal_conduction_getConductivity33, &
-   thermal_conduction_getMassDensity, &
-   thermal_conduction_getSpecificHeat
+   thermal_conduction_putTemperatureRate, &
+   thermal_conduction_getHeatFluxTangent, &
+   thermal_conduction_getThermalViscosity
    
  implicit none
  integer(pInt)           :: i, j, k, cell
@@ -365,10 +351,9 @@ subroutine spectral_thermal_forward()
    call DMDAVecRestoreArrayF90(dm_local,solution,x_scal,ierr); CHKERRQ(ierr)
    do k = 1_pInt, grid3;  do j = 1_pInt, grid(2);  do i = 1_pInt,grid(1)
      cell = cell + 1_pInt                                                                             !< material point increase
-     call thermal_conduction_putTemperatureAndItsRate(temperature_current(i,j,k), &
-                                                      (temperature_current(i,j,k) - &
-                                                       temperature_lastInc(i,j,k))/params%timeinc, &
-                                                      1,cell)
+     call thermal_conduction_putTemperatureRate((temperature_current(i,j,k) - &
+                                                 temperature_lastInc(i,j,k))/params%timeinc, &
+                                                1,cell)
    enddo; enddo; enddo
  else
 !--------------------------------------------------------------------------------------------------
@@ -376,17 +361,16 @@ subroutine spectral_thermal_forward()
    temperature_lastInc = temperature_current
    cell = 0_pInt
    D_ref = 0.0_pReal
-   mobility_ref = 0.0_pReal
+   viscosity_ref = 0.0_pReal
    do k = 1_pInt, grid3;  do j = 1_pInt, grid(2);  do i = 1_pInt,grid(1)
      cell = cell + 1_pInt
-     D_ref = D_ref + thermal_conduction_getConductivity33(1,cell)
-     mobility_ref = mobility_ref + thermal_conduction_getMassDensity(1,cell)* &
-                                   thermal_conduction_getSpecificHeat(1,cell)
+     D_ref = D_ref + thermal_conduction_getHeatFluxTangent(1,cell)
+     viscosity_ref = viscosity_ref + thermal_conduction_getThermalViscosity(1,cell)
    enddo; enddo; enddo
    D_ref = D_ref*wgt
    call MPI_Allreduce(MPI_IN_PLACE,D_ref,9,MPI_DOUBLE,MPI_SUM,PETSC_COMM_WORLD,ierr)
-   mobility_ref = mobility_ref*wgt
-   call MPI_Allreduce(MPI_IN_PLACE,mobility_ref,1,MPI_DOUBLE,MPI_SUM,PETSC_COMM_WORLD,ierr)
+   viscosity_ref = viscosity_ref*wgt
+   call MPI_Allreduce(MPI_IN_PLACE,viscosity_ref,1,MPI_DOUBLE,MPI_SUM,PETSC_COMM_WORLD,ierr)
  endif
  
 end subroutine spectral_thermal_forward

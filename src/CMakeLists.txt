@@ -92,6 +92,13 @@ add_library (CHEMICAL OBJECT
 add_dependencies(CHEMICAL DAMASK_HELPERS)
 list(APPEND OBJECTFILES $<TARGET_OBJECTS:CHEMICAL>)
 
+add_library (HEATFLUX OBJECT
+  "heatflux_isothermalnone.f90"
+  "heatflux_adiabaticnone.f90"
+  "heatflux_joule.f90")
+add_dependencies(HEATFLUX DAMASK_HELPERS)
+list(APPEND OBJECTFILES $<TARGET_OBJECTS:HEATFLUX>)
+
 add_library (KINEMATICS OBJECT
   "kinematics_cleavage_opening.f90"
   "kinematics_slipplane_opening.f90"
@@ -106,7 +113,7 @@ add_library (SOURCE OBJECT
   "source_elastic_energy.f90"
   "source_plastic_energy.f90"
   "source_chemical_energy.f90")
-add_dependencies(SOURCE PLASTIC CHEMICAL KINEMATICS)
+add_dependencies(SOURCE PLASTIC CHEMICAL HEATFLUX KINEMATICS)
 list(APPEND OBJECTFILES $<TARGET_OBJECTS:SOURCE>)
 
 add_library(CONSTITUTIVE OBJECT "constitutive.f90")
@@ -126,8 +133,7 @@ add_dependencies(HOMOGENIZATION CRYSTALLITE)
 list(APPEND OBJECTFILES $<TARGET_OBJECTS:HOMOGENIZATION>)
 
 add_library(THERMAL OBJECT
-  "thermal_isothermal.f90"
-  "thermal_adiabatic.f90"
+  "thermal_local.f90"
   "thermal_conduction.f90")
 add_dependencies(THERMAL CRYSTALLITE)
 list(APPEND OBJECTFILES $<TARGET_OBJECTS:THERMAL>)

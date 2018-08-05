@@ -34,6 +34,9 @@ module material
    CHEMICALFE_none_label                = 'none', &
    CHEMICALFE_quadenergy_label          = 'quadratic', &
    CHEMICALFE_thermodynamic_label       = 'thermodynamic', &
+   HEATFLUX_isothermalnone_label        = 'isothermalnone', &
+   HEATFLUX_adiabaticnone_label         = 'adiabaticnone', &
+   HEATFLUX_joule_label                 = 'joule', &
    SOURCE_thermal_dissipation_label     = 'thermal_dissipation', &
    SOURCE_thermal_externalheat_label    = 'thermal_externalheat', &
    SOURCE_elastic_energy_label          = 'elastic_energy', &
@@ -43,8 +46,7 @@ module material
    KINEMATICS_cleavage_opening_label    = 'cleavage_opening', &
    KINEMATICS_slipplane_opening_label   = 'slipplane_opening', &
    KINEMATICS_solute_strain_label       = 'solute_strain', &
-   THERMAL_isothermal_label             = 'isothermal', &
-   THERMAL_adiabatic_label              = 'adiabatic', &
+   THERMAL_local_label                  = 'local', &
    THERMAL_conduction_label             = 'conduction', &
    SOLUTE_isoconc_label                 = 'isoconc', &
    SOLUTE_flux_label                    = 'flux', &
@@ -73,6 +75,11 @@ module material
                  CHEMICALFE_quadenergy_ID, &
                  CHEMICALFE_thermodynamic_ID
  end enum
+ enum, bind(c)
+   enumerator :: HEATFLUX_isothermalnone_ID, &
+                 HEATFLUX_adiabaticnone_ID, &
+                 HEATFLUX_joule_ID
+ end enum
 
  enum, bind(c)
    enumerator :: SOURCE_undefined_ID, &
@@ -96,8 +103,7 @@ module material
  end enum
 
  enum, bind(c)
-   enumerator :: THERMAL_isothermal_ID, &
-                 THERMAL_adiabatic_ID, &
+   enumerator :: THERMAL_local_ID, &
                  THERMAL_conduction_ID
  end enum
 
@@ -119,8 +125,10 @@ module material
  integer(kind(PLASTICITY_undefined_ID)),     dimension(:),   allocatable, public, protected :: &
    phase_plasticity                                                                                 !< plasticity of each phase
  integer(kind(CHEMICALFE_none_ID)),          dimension(:),   allocatable, public, protected :: &
-   phase_chemicalFE                                                                                 !< plasticity of each phase
- integer(kind(THERMAL_isothermal_ID)),       dimension(:),   allocatable, public, protected :: &
+   phase_chemicalFE                                                                                 !< chemical free energy model of each phase
+ integer(kind(HEATFLUX_isothermalnone_ID)),  dimension(:),   allocatable, public, protected :: &
+   phase_heatflux                                                                                   !< heat flux model of each phase
+ integer(kind(THERMAL_local_ID)),            dimension(:),   allocatable, public, protected :: &
    thermal_type                                                                                     !< thermal transport model
  integer(kind(SOLUTE_isoconc_ID)),           dimension(:),   allocatable, public, protected :: &
    solute_type                                                                                      !< solute transport model
@@ -146,7 +154,8 @@ module material
    phase_Noutput, &                                                                                 !< number of '(output)' items per phase
    phase_elasticityInstance, &                                                                      !< instance of particular elasticity of each phase
    phase_plasticityInstance, &
-   phase_chemicalFEInstance                                                                         !< instance of particular plasticity of each phase
+   phase_chemicalFEInstance, &                                                                      !< instance of particular chemical free energy model of each phase
+   phase_heatfluxInstance                                                                           !< instance of particular heat flux model of each phase
 
  integer(pInt),                              dimension(:),  allocatable, public, protected :: &
    crystallite_Noutput                                                                              !< number of '(output)' items per crystallite setting
@@ -160,9 +169,6 @@ module material
    solute_typeInstance, &                                                                           !< instance of particular type of each solute transport
    microstructure_crystallite                                                                       !< crystallite setting ID of each microstructure
 
- real(pReal),                                dimension(:),  allocatable, public, protected :: &
-   thermal_initialT                                                                                 !< initial temperature per each homogenization
-
  integer(pInt),                          dimension(:,:,:),  allocatable, public            :: &
    material_phase                                                                                   !< phase (index) of each grain,IP,element
  integer(pInt),                            dimension(:,:),  allocatable, public            :: &
@@ -171,12 +177,14 @@ module material
    plasticState
  type(tState),                               dimension(:),  allocatable, public            :: &
    chemicalState
+ type(tState),                               dimension(:),  allocatable, public            :: &
+   heatfluxState
  type(tSourceState),                         dimension(:),  allocatable, public            :: &
    sourceState
  type(tState),                               dimension(:),  allocatable, public            :: &
    homogState, &
-   thermalState, &
-   soluteState
+   soluteState, &
+   thermalState
 
  integer(pInt),                          dimension(:,:,:),  allocatable, public, protected :: &
    material_texture                                                                                 !< texture (index) of each grain,IP,element
@@ -233,12 +241,12 @@ module material
    mappingHomogenizationConst                                                                       !< mapping from material points to offset in constant state/field
 
  type(tHomogMapping),                       dimension(:),  allocatable,  public            :: &
-   thermalMapping, &                                                                                !< mapping for thermal state/fields
    soluteMapping, &                                                                                 !< mapping for solute state/fields
    phasefracMapping                                                                                 !< mapping for phase fraction state/fields
 
  type(tPhaseMapping),                       dimension(:),  allocatable,  public            :: &
-   chemConcMapping                                                                                 !< mapping for phase fraction state/fields
+   thermalMapping, &                                                                                !< mapping for thermal state/fields
+   chemConcMapping                                                                                  !< mapping for phase fraction state/fields
 
  type(p_vec),                               dimension(:),  allocatable,  public            :: &
    temperature, &                                                                                   !< temperature field
@@ -263,6 +271,9 @@ module material
    CHEMICALFE_none_ID, &
    CHEMICALFE_quadenergy_ID, &
    CHEMICALFE_thermodynamic_ID, &
+   HEATFLUX_isothermalnone_ID, &
+   HEATFLUX_adiabaticnone_ID, &
+   HEATFLUX_joule_ID, &
    SOURCE_thermal_dissipation_ID, &
    SOURCE_thermal_externalheat_ID, &
    SOURCE_elastic_energy_ID, &
@@ -272,8 +283,7 @@ module material
    KINEMATICS_slipplane_opening_ID, &
    KINEMATICS_thermal_expansion_ID, &
    KINEMATICS_solute_strain_ID, &
-   THERMAL_isothermal_ID, &
-   THERMAL_adiabatic_ID, &
+   THERMAL_local_ID, &
    THERMAL_conduction_ID, &
    SOLUTE_isoconc_ID, &
    SOLUTE_flux_ID, &
@@ -365,6 +375,7 @@ subroutine material_init()
 
  allocate(plasticState       (size(config_phase)))
  allocate(chemicalState      (size(config_phase)))
+ allocate(heatfluxState       (size(config_phase)))
  allocate(sourceState        (size(config_phase)))
  do myPhase = 1,size(config_phase)
    allocate(sourceState(myPhase)%p(phase_Nsources(myPhase)))
@@ -373,14 +384,14 @@ subroutine material_init()
  allocate(chemicalConc       (size(config_phase)))
  allocate(chemicalConc0      (size(config_phase)))
  allocate(chemicalConcRate   (size(config_phase)))
+ allocate(thermalMapping     (size(config_phase)))
+ allocate(temperature        (size(config_phase)))
+ allocate(temperatureRate    (size(config_phase)))
 
  allocate(homogState         (size(config_homogenization)))
- allocate(thermalState       (size(config_homogenization)))
- allocate(thermalMapping     (size(config_homogenization)))
  allocate(soluteState        (size(config_homogenization)))
+ allocate(thermalState       (size(config_homogenization)))
  allocate(soluteMapping      (size(config_homogenization)))
- allocate(temperature        (size(config_homogenization)))
- allocate(temperatureRate    (size(config_homogenization)))
  allocate(phasefracMapping   (size(config_homogenization)))
  allocate(phasefrac          (size(config_homogenization)))
 
@@ -468,7 +479,7 @@ subroutine material_parseHomogenization
  character(len=65536) :: tag
 
  allocate(homogenization_type(size(config_homogenization)),           source=HOMOGENIZATION_undefined_ID)
- allocate(thermal_type(size(config_homogenization)),                  source=THERMAL_isothermal_ID)
+ allocate(thermal_type(size(config_homogenization)),                  source=THERMAL_local_ID)
  allocate(solute_type (size(config_homogenization)),                  source=SOLUTE_isoconc_ID)
  allocate(homogenization_typeInstance(size(config_homogenization)),   source=0_pInt)
  allocate(thermal_typeInstance(size(config_homogenization)),          source=0_pInt)
@@ -477,7 +488,6 @@ subroutine material_parseHomogenization
  allocate(homogenization_Ncomponents(size(config_homogenization)),    source=0_pInt)
  allocate(homogenization_Noutput(size(config_homogenization)),        source=0_pInt)
  allocate(homogenization_active(size(config_homogenization)),         source=.false.)  !!!!!!!!!!!!!!!
- allocate(thermal_initialT(size(config_homogenization)),              source=300.0_pReal)
 
  forall (h = 1_pInt:size(config_homogenization)) homogenization_active(h) = any(mesh_element(3,:) == h)
 
@@ -506,14 +516,11 @@ subroutine material_parseHomogenization
    homogenization_typeInstance(h) = count(homogenization_type==homogenization_type(h))
 
    if (config_homogenization(h)%keyExists('thermal')) then
-     thermal_initialT(h) =  config_homogenization(h)%getFloat('t0',defaultVal=300.0_pReal)
 
      tag = config_homogenization(h)%getString('thermal')
      select case (trim(tag))
-       case(THERMAL_isothermal_label)
-         thermal_type(h) = THERMAL_isothermal_ID
-       case(THERMAL_adiabatic_label)
-         thermal_type(h) = THERMAL_adiabatic_ID
+       case(THERMAL_local_label)
+         thermal_type(h) = THERMAL_local_ID
        case(THERMAL_conduction_label)
          thermal_type(h) = THERMAL_conduction_ID
        case default
@@ -666,6 +673,7 @@ subroutine material_parsePhase
  allocate(phase_elasticity(size(config_phase)),source=ELASTICITY_undefined_ID)
  allocate(phase_plasticity(size(config_phase)),source=PLASTICITY_undefined_ID)
  allocate(phase_chemicalFE(size(config_phase)),source=CHEMICALFE_none_ID)
+ allocate(phase_heatflux  (size(config_phase)),source=HEATFLUX_isothermalnone_ID)
  allocate(phase_Nsources(size(config_phase)),              source=0_pInt)
  allocate(phase_Nkinematics(size(config_phase)),           source=0_pInt)
  allocate(phase_NstiffnessModifiers(size(config_phase)),   source=0_pInt)
@@ -717,6 +725,19 @@ subroutine material_parsePhase
          phase_chemicalFE(p) = CHEMICALFE_THERMODYNAMIC_ID
        case default
          call IO_error(201_pInt,ext_msg=trim(config_phase(p)%getString('chemicalfe')))
+     end select
+   endif
+
+   if (config_phase(p)%keyExists('heatflux')) then
+     select case (config_phase(p)%getString('heatflux'))
+       case (HEATFLUX_ISOTHERMALNONE_label)
+         phase_heatflux(p) = HEATFLUX_ISOTHERMALNONE_ID
+       case (HEATFLUX_ADIABATICNONE_label)
+         phase_heatflux(p) = HEATFLUX_ADIABATICNONE_ID
+       case (HEATFLUX_JOULE_label)
+         phase_heatflux(p) = HEATFLUX_JOULE_ID
+       case default
+         call IO_error(201_pInt,ext_msg=trim(config_phase(p)%getString('heatflux')))
      end select
    endif
 
@@ -785,11 +806,13 @@ subroutine material_parsePhase
  allocate(phase_plasticityInstance(size(config_phase)),   source=0_pInt)
  allocate(phase_elasticityInstance(size(config_phase)),   source=0_pInt)
  allocate(phase_chemicalFEInstance(size(config_phase)),   source=0_pInt)
+ allocate(phase_heatfluxInstance  (size(config_phase)),   source=0_pInt)
 
  do p=1_pInt, size(config_phase)
    phase_elasticityInstance(p)  = count(phase_elasticity(1:p)  == phase_elasticity(p))
    phase_plasticityInstance(p)  = count(phase_plasticity(1:p)  == phase_plasticity(p))
    phase_chemicalFEInstance(p)  = count(phase_chemicalFE(1:p)  == phase_chemicalFE(p))
+   phase_heatfluxInstance  (p)  = count(phase_heatflux  (1:p)  == phase_heatflux  (p))
  enddo
  
  phase_maxNcomponents = maxval(phase_Ncomponents)

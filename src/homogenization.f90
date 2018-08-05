@@ -109,8 +109,7 @@ subroutine homogenization_init
  use homogenization_isostrain
  use homogenization_multiphase
  use homogenization_RGC
- use thermal_isothermal
- use thermal_adiabatic
+ use thermal_local
  use thermal_conduction
  use solute_isoconc
  use solute_flux
@@ -147,10 +146,8 @@ subroutine homogenization_init
 !--------------------------------------------------------------------------------------------------
 ! parse thermal from config file
  call IO_checkAndRewind(FILEUNIT)
- if (any(thermal_type == THERMAL_isothermal_ID)) &
-   call thermal_isothermal_init()
- if (any(thermal_type == THERMAL_adiabatic_ID)) &
-   call thermal_adiabatic_init(FILEUNIT)
+ if (any(thermal_type == THERMAL_local_ID)) &
+   call thermal_local_init(FILEUNIT)
  if (any(thermal_type == THERMAL_conduction_ID)) &
    call thermal_conduction_init(FILEUNIT)
 
@@ -207,16 +204,11 @@ subroutine homogenization_init
        i = thermal_typeInstance(p)                                                                      ! which instance of this thermal type
        valid = .true.                                                                                   ! assume valid
        select case(thermal_type(p))                                                                     ! split per thermal type
-         case (THERMAL_isothermal_ID)
-           outputName = THERMAL_isothermal_label
-           thisNoutput => null()
-           thisOutput => null()
-           thisSize   => null()
-         case (THERMAL_adiabatic_ID)
-           outputName = THERMAL_adiabatic_label
-           thisNoutput => thermal_adiabatic_Noutput
-           thisOutput => thermal_adiabatic_output
-           thisSize   => thermal_adiabatic_sizePostResult
+         case (THERMAL_local_ID)
+           outputName = THERMAL_local_label
+           thisNoutput => thermal_local_Noutput
+           thisOutput => thermal_local_output
+           thisSize   => thermal_local_sizePostResult
          case (THERMAL_conduction_ID)
            outputName = THERMAL_conduction_label
            thisNoutput => thermal_conduction_Noutput
@@ -227,11 +219,9 @@ subroutine homogenization_init
        end select
        if (valid) then
          write(FILEUNIT,'(a)') '(thermal)'//char(9)//trim(outputName)
-         if (thermal_type(p) /= THERMAL_isothermal_ID) then
-           do e = 1,thisNoutput(i)
-             write(FILEUNIT,'(a,i4)') trim(thisOutput(e,i))//char(9),thisSize(e,i)
-           enddo
-         endif
+         do e = 1,thisNoutput(i)
+           write(FILEUNIT,'(a,i4)') trim(thisOutput(e,i))//char(9),thisSize(e,i)
+         enddo
        endif
        i = solute_typeInstance(p)                                                                   ! which instance of this solute type
        valid = .true.                                                                               ! assume valid
@@ -954,7 +944,7 @@ function homogenization_updateState(iter,ip,el)
    homogenization_maxNgrains, &
    HOMOGENIZATION_MULTIPHASE_ID, &
    HOMOGENIZATION_RGC_ID, &
-   THERMAL_adiabatic_ID
+   THERMAL_local_ID
  use crystallite, only: &
    crystallite_P, &
    crystallite_dPdF, &
@@ -964,8 +954,8 @@ function homogenization_updateState(iter,ip,el)
    homogenization_multiphase_updateState
  use homogenization_RGC, only: &
    homogenization_RGC_updateState
- use thermal_adiabatic, only: &
-   thermal_adiabatic_updateState
+ use thermal_local, only: &
+   thermal_local_putTemperatureRate
 
  implicit none
  integer(pInt), intent(in) :: &
@@ -999,12 +989,9 @@ function homogenization_updateState(iter,ip,el)
  end select chosenHomogenization
 
  chosenThermal: select case (thermal_type(mesh_element(3,el)))
-   case (THERMAL_adiabatic_ID) chosenThermal
-     homogenization_updateState = &
-       homogenization_updateState .and. &
-       thermal_adiabatic_updateState(materialpoint_subdt(ip,el), &
-                                     ip, &
-                                     el)
+   case (THERMAL_local_ID) chosenThermal
+     call thermal_local_putTemperatureRate(ip,el)
+ 
  end select chosenThermal
 
 end function homogenization_updateState
@@ -1096,8 +1083,7 @@ function homogenization_postResults(ip,el)
    HOMOGENIZATION_ISOSTRAIN_ID, &
    HOMOGENIZATION_MULTIPHASE_ID, &
    HOMOGENIZATION_RGC_ID, &
-   THERMAL_isothermal_ID, &
-   THERMAL_adiabatic_ID, &
+   THERMAL_local_ID, &
    THERMAL_conduction_ID, &
    SOLUTE_isoconc_ID, &
    SOLUTE_flux_ID
@@ -1107,8 +1093,8 @@ function homogenization_postResults(ip,el)
    homogenization_multiphase_postResults
  use homogenization_RGC, only: &
    homogenization_RGC_postResults
- use thermal_adiabatic, only: &
-   thermal_adiabatic_postResults
+ use thermal_local, only: &
+   thermal_local_postResults
  use thermal_conduction, only: &
    thermal_conduction_postResults
  use solute_isoconc, only: &
@@ -1162,11 +1148,9 @@ function homogenization_postResults(ip,el)
  startPos = endPos + 1_pInt
  endPos   = endPos + thermalState(mappingHomogenization(2,ip,el))%sizePostResults
  chosenThermal: select case (thermal_type(mesh_element(3,el)))
-   case (THERMAL_isothermal_ID) chosenThermal
-
-   case (THERMAL_adiabatic_ID) chosenThermal
+   case (THERMAL_local_ID) chosenThermal
      homogenization_postResults(startPos:endPos) = &
-       thermal_adiabatic_postResults(ip, el)
+       thermal_local_postResults(ip, el)
    case (THERMAL_conduction_ID) chosenThermal
      homogenization_postResults(startPos:endPos) = &
        thermal_conduction_postResults(ip, el)

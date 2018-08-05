@@ -14,6 +14,8 @@ module constitutive
    constitutive_plasticity_maxSizeDotState, &
    constitutive_chemicalFE_maxSizePostResults, &
    constitutive_chemicalFE_maxSizeDotState, &
+   constitutive_heatflux_maxSizePostResults, &
+   constitutive_heatflux_maxSizeDotState, &
    constitutive_source_maxSizePostResults, &
    constitutive_source_maxSizeDotState
 
@@ -74,6 +76,8 @@ subroutine constitutive_init()
    phase_plasticityInstance, &
    phase_chemicalFE, &
    phase_chemicalFEInstance, &
+   phase_heatflux, &
+   phase_heatfluxInstance, &
    phase_Nsources, &
    phase_source, &
    phase_kinematics, &
@@ -88,6 +92,9 @@ subroutine constitutive_init()
    CHEMICALFE_none_ID, &
    CHEMICALFE_quadenergy_ID, &
    CHEMICALFE_thermodynamic_ID, &
+   HEATFLUX_isothermalnone_ID, &
+   HEATFLUX_adiabaticnone_ID, &
+   HEATFLUX_joule_ID, &
    SOURCE_thermal_dissipation_ID, &
    SOURCE_thermal_externalheat_ID, &
    SOURCE_elastic_energy_ID, &
@@ -108,6 +115,9 @@ subroutine constitutive_init()
    CHEMICALFE_none_label, &
    CHEMICALFE_quadenergy_label, &
    CHEMICALFE_thermodynamic_label, &
+   HEATFLUX_isothermalnone_label, &
+   HEATFLUX_adiabaticnone_label, &
+   HEATFLUX_joule_label, &
    SOURCE_thermal_dissipation_label, &
    SOURCE_thermal_externalheat_label, &
    SOURCE_elastic_energy_label, &
@@ -115,6 +125,7 @@ subroutine constitutive_init()
    SOURCE_chemical_energy_label, &
    plasticState, &
    chemicalState, &
+   heatfluxState, &
    sourceState
 
  use plastic_none
@@ -127,6 +138,9 @@ subroutine constitutive_init()
  use chemicalFE_none
  use chemicalFE_quadenergy
  use chemicalFE_thermodynamic
+ use heatflux_isothermalnone
+ use heatflux_adiabaticnone
+ use heatflux_joule
  use source_thermal_dissipation
  use source_thermal_externalheat
  use source_elastic_energy
@@ -148,8 +162,8 @@ subroutine constitutive_init()
  integer(pInt), dimension(:,:), pointer :: thisSize
  character(len=64), dimension(:,:), pointer :: thisOutput
  character(len=32) :: outputName                                                                    !< name of output, intermediate fix until HDF5 output is ready
- logical :: knownPlasticity, knownchemicalFE, knownSource, nonlocalConstitutionPresent
- nonlocalConstitutionPresent = .false.
+ logical :: knownPlasticity, knownchemicalFE, knownheatflux, knownSource, &
+            nonlocalConstitutionPresent = .false.
 
 !--------------------------------------------------------------------------------------------------
 ! open material.config
@@ -171,9 +185,17 @@ subroutine constitutive_init()
 
 !--------------------------------------------------------------------------------------------------
 ! parse chemical FE models from config file
+ call IO_checkAndRewind(FILEUNIT)
  if (any(phase_chemicalFE == CHEMICALFE_none_ID))          call chemicalFE_none_init
  if (any(phase_chemicalFE == CHEMICALFE_quadenergy_ID))    call chemicalFE_quadenergy_init(FILEUNIT)
  if (any(phase_chemicalFE == CHEMICALFE_thermodynamic_ID)) call chemicalFE_thermodynamic_init(FILEUNIT)
+
+!--------------------------------------------------------------------------------------------------
+! parse heat flux models from config file
+ call IO_checkAndRewind(FILEUNIT)
+ if (any(phase_heatflux == HEATFLUX_isothermalnone_ID)) call heatflux_isothermalnone_init(FILEUNIT)
+ if (any(phase_heatflux == HEATFLUX_adiabaticnone_ID))  call heatflux_adiabaticnone_init(FILEUNIT)
+ if (any(phase_heatflux == HEATFLUX_joule_ID))          call heatflux_joule_init(FILEUNIT)
 
 !--------------------------------------------------------------------------------------------------
 ! parse source mechanisms from config file
@@ -275,6 +297,30 @@ subroutine constitutive_init()
            enddo OutputChemicalFELoop
          endif
        endif
+       ins = phase_heatfluxInstance(ph)
+       knownheatflux = .true.                                                                     ! assume valid
+       heatfluxType: select case(phase_heatflux(ph))
+         case (HEATFLUX_isothermalnone_ID) heatfluxType
+           outputName = HEATFLUX_isothermalnone_label
+           thisOutput => heatflux_isothermalnone_output
+           thisSize   => heatflux_isothermalnone_sizePostResult
+         case (HEATFLUX_adiabaticnone_ID) heatfluxType
+           outputName = HEATFLUX_adiabaticnone_label
+           thisOutput => heatflux_adiabaticnone_output
+           thisSize   => heatflux_adiabaticnone_sizePostResult
+         case (HEATFLUX_joule_ID) heatfluxType
+           outputName = HEATFLUX_joule_label
+           thisOutput => heatflux_joule_output
+           thisSize   => heatflux_joule_sizePostResult
+         case default heatfluxType
+           knownheatflux = .false.
+       end select heatfluxType
+       if (knownheatflux) then
+         write(FILEUNIT,'(a)') '(heatflux)'//char(9)//trim(outputName)
+         OutputHeatFluxLoop: do o = 1_pInt,size(thisOutput(:,ins))
+           write(FILEUNIT,'(a,i4)') trim(thisOutput(o,ins))//char(9),thisSize(o,ins)
+         enddo OutputHeatFluxLoop
+       endif
        SourceLoop: do s = 1_pInt, phase_Nsources(ph)
          knownSource = .true.                                                                       ! assume valid
          sourceType: select case (phase_source(s,ph))
@@ -323,6 +369,8 @@ subroutine constitutive_init()
  constitutive_plasticity_maxSizePostResults = 0_pInt
  constitutive_chemicalFE_maxSizeDotState = 0_pInt
  constitutive_chemicalFE_maxSizePostResults = 0_pInt
+ constitutive_heatflux_maxSizeDotState = 0_pInt
+ constitutive_heatflux_maxSizePostResults = 0_pInt
  constitutive_source_maxSizeDotState = 0_pInt
  constitutive_source_maxSizePostResults = 0_pInt
 
@@ -333,6 +381,8 @@ subroutine constitutive_init()
    plasticState(ph)%State           = plasticState(ph)%State0
    chemicalState(ph)%partionedState0= chemicalState(ph)%State0
    chemicalState(ph)%State          = chemicalState(ph)%State0
+   heatfluxState(ph)%partionedState0 = heatfluxState(ph)%State0
+   heatfluxState(ph)%State           = heatfluxState(ph)%State0
    forall(s = 1_pInt:phase_Nsources(ph))
      sourceState(ph)%p(s)%partionedState0 = sourceState(ph)%p(s)%State0
      sourceState(ph)%p(s)%State           = sourceState(ph)%p(s)%State0
@@ -347,6 +397,10 @@ subroutine constitutive_init()
                                                     chemicalState(ph)%sizeDotState)
    constitutive_chemicalFE_maxSizePostResults = max(constitutive_chemicalFE_maxSizePostResults, &
                                                     chemicalState(ph)%sizePostResults)
+   constitutive_heatflux_maxSizeDotState      = max(constitutive_heatflux_maxSizeDotState,    &
+                                                    heatfluxState(ph)%sizeDotState)
+   constitutive_heatflux_maxSizePostResults   = max(constitutive_heatflux_maxSizePostResults, &
+                                                    heatfluxState(ph)%sizePostResults)
    constitutive_source_maxSizeDotState        = max(constitutive_source_maxSizeDotState, &
                                                     maxval(sourceState(ph)%p(:)%sizeDotState))
    constitutive_source_maxSizePostResults     = max(constitutive_source_maxSizePostResults, &
@@ -412,7 +466,6 @@ subroutine constitutive_microstructure(orientations, Fe, Fp, ipc, ip, el)
  use material, only: &
    phase_plasticity, &
    material_phase, &
-   material_homog, &
    temperature, &
    thermalMapping, &
    PLASTICITY_dislotwin_ID, &
@@ -434,19 +487,17 @@ subroutine constitutive_microstructure(orientations, Fe, Fp, ipc, ip, el)
    Fe, &                                                                                            !< elastic deformation gradient
    Fp                                                                                               !< plastic deformation gradient
  integer(pInt) :: &
-   ho, &                                                                                            !< homogenization
    tme                                                                                              !< thermal member position
  real(pReal),   intent(in), dimension(:,:,:,:) :: &
    orientations                                                                                     !< crystal orientations as quaternions
 
- ho = material_homog(ip,el)
- tme = thermalMapping(ho)%p(ip,el)
+ tme = thermalMapping(material_phase(ipc,ip,el))%p(ipc,ip,el)
 
  plasticityType: select case (phase_plasticity(material_phase(ipc,ip,el)))
    case (PLASTICITY_DISLOTWIN_ID) plasticityType
-     call plastic_dislotwin_microstructure(temperature(ho)%p(tme),ipc,ip,el)
+     call plastic_dislotwin_microstructure(temperature(material_phase(ipc,ip,el))%p(tme),ipc,ip,el)
    case (PLASTICITY_DISLOUCLA_ID) plasticityType
-     call plastic_disloucla_microstructure(temperature(ho)%p(tme),ipc,ip,el)
+     call plastic_disloucla_microstructure(temperature(material_phase(ipc,ip,el))%p(tme),ipc,ip,el)
    case (PLASTICITY_NONLOCAL_ID) plasticityType
      call plastic_nonlocal_microstructure (Fe,Fp,ip,el)
  end select plasticityType
@@ -468,7 +519,6 @@ subroutine constitutive_LpAndItsTangent(Lp, dLp_dTstar3333, dLp_dFi3333, Tstar_v
  use material, only: &
    phase_plasticity, &
    material_phase, &
-   material_homog, &
    temperature, &
    thermalMapping, &
    PLASTICITY_NONE_ID, &
@@ -512,13 +562,11 @@ subroutine constitutive_LpAndItsTangent(Lp, dLp_dTstar3333, dLp_dFi3333, Tstar_v
  real(pReal), dimension(3,3) :: &
    temp_33
  integer(pInt) :: &
-   ho, &                                                                                            !< homogenization
    tme                                                                                              !< thermal member position
  integer(pInt) :: &
    i, j
 
- ho = material_homog(ip,el)
- tme = thermalMapping(ho)%p(ip,el)
+ tme = thermalMapping(material_phase(ipc,ip,el))%p(ipc,ip,el)
 
  Mstar_v = math_Mandel33to6(math_mul33x33(math_mul33x33(transpose(Fi),Fi),math_Mandel6to33(Tstar_v)))
 
@@ -534,13 +582,13 @@ subroutine constitutive_LpAndItsTangent(Lp, dLp_dTstar3333, dLp_dFi3333, Tstar_v
      call plastic_kinehardening_LpAndItsTangent   (Lp,dLp_dMstar,Mstar_v,ipc,ip,el)  
    case (PLASTICITY_NONLOCAL_ID) plasticityType
      call plastic_nonlocal_LpAndItsTangent        (Lp,dLp_dMstar,Mstar_v, &
-                                                   temperature(ho)%p(tme),ip,el)
+                                                   temperature(material_phase(ipc,ip,el))%p(tme),ip,el)
    case (PLASTICITY_DISLOTWIN_ID) plasticityType
      call plastic_dislotwin_LpAndItsTangent       (Lp,dLp_dMstar,Mstar_v, &
-                                                   temperature(ho)%p(tme),ipc,ip,el)
+                                                   temperature(material_phase(ipc,ip,el))%p(tme),ipc,ip,el)
    case (PLASTICITY_DISLOUCLA_ID) plasticityType
      call plastic_disloucla_LpAndItsTangent       (Lp,dLp_dMstar,Mstar_v, &
-                                                   temperature(ho)%p(tme), ipc,ip,el)
+                                                   temperature(material_phase(ipc,ip,el))%p(tme), ipc,ip,el)
  end select plasticityType
 
  dLp_dTstar3333 = math_Plain99to3333(dLp_dMstar)
@@ -802,10 +850,10 @@ subroutine constitutive_collectDotState(Tstar_v, FeArray, FpArray, subdt, subfra
  use material, only: &
    phase_plasticity, &
    phase_chemicalFE, &
+   phase_heatflux, &
    phase_source, &
    phase_Nsources, &
    material_phase, &
-   material_homog, &
    temperature, &
    thermalMapping, &
    homogenization_maxNgrains, &
@@ -818,6 +866,8 @@ subroutine constitutive_collectDotState(Tstar_v, FeArray, FpArray, subdt, subfra
    PLASTICITY_nonlocal_ID, &
    CHEMICALFE_quadenergy_ID, &
    CHEMICALFE_thermodynamic_ID, &
+   HEATFLUX_adiabaticnone_ID, &
+   HEATFLUX_joule_ID, &
    SOURCE_thermal_externalheat_ID
  use plastic_isotropic, only:  &
    plastic_isotropic_dotState
@@ -835,6 +885,10 @@ subroutine constitutive_collectDotState(Tstar_v, FeArray, FpArray, subdt, subfra
    chemicalFE_quadenergy_dotState  
  use chemicalFE_thermodynamic, only: &
    chemicalFE_thermodynamic_dotState  
+ use heatflux_adiabaticnone, only: &
+   heatflux_adiabaticnone_dotState  
+ use heatflux_joule, only: &
+   heatflux_joule_dotState  
  use source_thermal_externalheat, only: &
    source_thermal_externalheat_dotState
 
@@ -857,15 +911,13 @@ subroutine constitutive_collectDotState(Tstar_v, FeArray, FpArray, subdt, subfra
    tickrate, &
    maxticks
  integer(pInt) :: &
-   ho, &                                                                                            !< homogenization
    tme, &                                                                                           !< thermal member position
    s                                                                                                !< counter in source loop
 
  if (iand(debug_level(debug_constitutive), debug_levelBasic) /= 0_pInt) &
    call system_clock(count=tick,count_rate=tickrate,count_max=maxticks)
 
- ho  = material_homog(    ip,el)
- tme = thermalMapping(ho)%p(ip,el)
+ tme = thermalMapping(material_phase(ipc,ip,el))%p(ipc,ip,el)
 
  plasticityType: select case (phase_plasticity(material_phase(ipc,ip,el)))
    case (PLASTICITY_ISOTROPIC_ID) plasticityType
@@ -875,13 +927,14 @@ subroutine constitutive_collectDotState(Tstar_v, FeArray, FpArray, subdt, subfra
    case (PLASTICITY_KINEHARDENING_ID) plasticityType
      call plastic_kinehardening_dotState(Tstar_v,ipc,ip,el)
    case (PLASTICITY_DISLOTWIN_ID) plasticityType
-     call plastic_dislotwin_dotState    (Tstar_v,temperature(ho)%p(tme), &
+     call plastic_dislotwin_dotState    (Tstar_v,temperature(material_phase(ipc,ip,el))%p(tme), &
                                          ipc,ip,el)
    case (PLASTICITY_DISLOUCLA_ID) plasticityType
-     call plastic_disloucla_dotState    (Tstar_v,temperature(ho)%p(tme), &
+     call plastic_disloucla_dotState    (Tstar_v,temperature(material_phase(ipc,ip,el))%p(tme), &
                                          ipc,ip,el)
    case (PLASTICITY_NONLOCAL_ID) plasticityType
-     call plastic_nonlocal_dotState     (Tstar_v,FeArray,FpArray,temperature(ho)%p(tme), &
+     call plastic_nonlocal_dotState     (Tstar_v,FeArray,FpArray, &
+                                         temperature(material_phase(ipc,ip,el))%p(tme), &
                                          subdt,subfracArray,ip,el)
  end select plasticityType
 
@@ -891,6 +944,13 @@ subroutine constitutive_collectDotState(Tstar_v, FeArray, FpArray, subdt, subfra
    case (CHEMICALFE_thermodynamic_ID) chemicalType
      call chemicalFE_thermodynamic_dotState(ipc,ip,el)
  end select chemicalType
+
+ heatfluxType: select case (phase_heatflux(material_phase(ipc,ip,el)))
+   case (HEATFLUX_adiabaticnone_ID) heatfluxType
+     call heatflux_adiabaticnone_dotState(ipc,ip,el)
+   case (HEATFLUX_joule_ID) heatfluxType
+     call heatflux_joule_dotState(ipc,ip,el)
+ end select heatfluxType
 
  SourceLoop: do s = 1_pInt, phase_Nsources(material_phase(ipc,ip,el))
     sourceType: select case (phase_source(s,material_phase(ipc,ip,el)))
@@ -962,13 +1022,14 @@ function constitutive_postResults(Tstar_v, FeArray, ipc, ip, el)
  use material, only: &
    plasticState, &
    chemicalState, &
+   heatfluxState, &
    sourceState, &
    phase_plasticity, &
    phase_chemicalFE, &
+   phase_heatflux, &
    phase_source, &
    phase_Nsources, &
    material_phase, &
-   material_homog, &
    temperature, &
    thermalMapping, &
    homogenization_maxNgrains, &
@@ -980,7 +1041,10 @@ function constitutive_postResults(Tstar_v, FeArray, ipc, ip, el)
    PLASTICITY_DISLOUCLA_ID, &
    PLASTICITY_NONLOCAL_ID, &
    CHEMICALFE_quadenergy_ID, &
-   CHEMICALFE_thermodynamic_ID
+   CHEMICALFE_thermodynamic_ID, &
+   HEATFLUX_isothermalnone_ID, &
+   HEATFLUX_adiabaticnone_ID, &
+   HEATFLUX_joule_ID
  use plastic_isotropic, only: &
    plastic_isotropic_postResults
  use plastic_phenopowerlaw, only: &
@@ -997,6 +1061,12 @@ function constitutive_postResults(Tstar_v, FeArray, ipc, ip, el)
    chemicalFE_quadenergy_postResults  
  use chemicalFE_thermodynamic, only: &
    chemicalFE_thermodynamic_postResults  
+ use heatflux_isothermalnone, only: &
+   heatflux_isothermalnone_postResults  
+ use heatflux_adiabaticnone, only: &
+   heatflux_adiabaticnone_postResults  
+ use heatflux_joule, only: &
+   heatflux_joule_postResults  
 
  implicit none
  integer(pInt), intent(in) :: &
@@ -1005,6 +1075,7 @@ function constitutive_postResults(Tstar_v, FeArray, ipc, ip, el)
    el                                                                                               !< element
  real(pReal), dimension(plasticState (material_phase(ipc,ip,el))%sizePostResults + &
                         chemicalState(material_phase(ipc,ip,el))%sizePostResults + &
+                        heatfluxState(material_phase(ipc,ip,el))%sizePostResults + &
                         sum(sourceState(material_phase(ipc,ip,el))%p(:)%sizePostResults)) :: &
    constitutive_postResults
  real(pReal),  intent(in), dimension(3,3,homogenization_maxNgrains,mesh_maxNips,mesh_NcpElems) :: &
@@ -1014,14 +1085,12 @@ function constitutive_postResults(Tstar_v, FeArray, ipc, ip, el)
  integer(pInt) :: &
    startPos, endPos
  integer(pInt) :: &
-   ho, &                                                                                            !< homogenization
    tme, &                                                                                           !< thermal member position
    s                                                                                                !< counter in source loop
 
  constitutive_postResults = 0.0_pReal
 
- ho = material_homog(    ip,el)
- tme = thermalMapping(ho)%p(ip,el)
+ tme = thermalMapping(material_phase(ipc,ip,el))%p(ipc,ip,el)
 
  startPos = 1_pInt
  endPos = plasticState(material_phase(ipc,ip,el))%sizePostResults
@@ -1037,10 +1106,10 @@ function constitutive_postResults(Tstar_v, FeArray, ipc, ip, el)
        plastic_kinehardening_postResults(Tstar_v,ipc,ip,el)    
    case (PLASTICITY_DISLOTWIN_ID) plasticityType
      constitutive_postResults(startPos:endPos) = &
-       plastic_dislotwin_postResults(Tstar_v,temperature(ho)%p(tme),ipc,ip,el)
+       plastic_dislotwin_postResults(Tstar_v,temperature(material_phase(ipc,ip,el))%p(tme),ipc,ip,el)
    case (PLASTICITY_DISLOUCLA_ID) plasticityType
      constitutive_postResults(startPos:endPos) = &
-       plastic_disloucla_postResults(Tstar_v,temperature(ho)%p(tme),ipc,ip,el)
+       plastic_disloucla_postResults(Tstar_v,temperature(material_phase(ipc,ip,el))%p(tme),ipc,ip,el)
    case (PLASTICITY_NONLOCAL_ID) plasticityType
      constitutive_postResults(startPos:endPos) = &
        plastic_nonlocal_postResults (Tstar_v,FeArray,ip,el)
@@ -1057,6 +1126,21 @@ function constitutive_postResults(Tstar_v, FeArray, ipc, ip, el)
      constitutive_postResults(startPos:endPos) = &
        chemicalFE_thermodynamic_postResults(ipc,ip,el)
  end select chemicalFEType
+
+ startPos = endPos + 1_pInt
+ endPos = endPos + heatfluxState(material_phase(ipc,ip,el))%sizePostResults
+ 
+ heatfluxType: select case (phase_heatflux(material_phase(ipc,ip,el)))
+   case (HEATFLUX_isothermalnone_ID) heatfluxType
+     constitutive_postResults(startPos:endPos) = &
+       heatflux_isothermalnone_postResults(ipc,ip,el)
+   case (HEATFLUX_adiabaticnone_ID) heatfluxType
+     constitutive_postResults(startPos:endPos) = &
+       heatflux_adiabaticnone_postResults(ipc,ip,el)
+   case (HEATFLUX_joule_ID) heatfluxType
+     constitutive_postResults(startPos:endPos) = &
+       heatflux_joule_postResults(ipc,ip,el)
+ end select heatfluxType
 
  SourceLoop: do s = 1_pInt, phase_Nsources(material_phase(ipc,ip,el))
    startPos = endPos + 1_pInt

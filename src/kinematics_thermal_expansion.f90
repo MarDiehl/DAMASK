@@ -152,15 +152,12 @@ end subroutine kinematics_thermal_expansion_init
 pure function kinematics_thermal_expansion_initialStrain(ipc, ip, el)
  use material, only: &
    material_phase, &
-   material_homog, &
-   thermal_initialT
+   temperature, &
+   thermalMapping
  use lattice, only: &
    lattice_thermalExpansion33, &
    lattice_referenceTemperature
  
- use math, only: &
-   math_I3,math_mul3x3
-
  implicit none
  integer(pInt), intent(in) :: &
    ipc, &                                                                                           !< grain number
@@ -170,19 +167,18 @@ pure function kinematics_thermal_expansion_initialStrain(ipc, ip, el)
    kinematics_thermal_expansion_initialStrain                                                       !< initial thermal strain (should be small strain, though)
  integer(pInt) :: &
    phase, &
-   homog
- real(pReal) :: &
-   T, TRef 
+   offset
    
- phase = material_phase(ipc,ip,el)
- homog = material_homog(ip,el)
- T    = thermal_initialT(homog)
- TRef = lattice_referenceTemperature(phase) 
+ phase  = material_phase(ipc,ip,el)
+ offset = thermalMapping(phase)%p(ipc,ip,el)
  
  kinematics_thermal_expansion_initialStrain = &
-     lattice_thermalExpansion33(1:3,1:3,1,phase)*(T - TRef)**1 / 1_pReal &                            ! constant  coefficient
-   + lattice_thermalExpansion33(1:3,1:3,2,phase)*(T - TRef)**2 / 2_pReal &                            ! linear    coefficient
-   + lattice_thermalExpansion33(1:3,1:3,3,phase)*(T - TRef)**3 / 3_pReal                              ! quadratic coefficient
+   (temperature(phase)%p(offset) - lattice_referenceTemperature(phase))**1 / 1. * &
+   lattice_thermalExpansion33(1:3,1:3,1,phase) + &                                                  ! constant  coefficient
+   (temperature(phase)%p(offset) - lattice_referenceTemperature(phase))**2 / 2. * &
+   lattice_thermalExpansion33(1:3,1:3,2,phase) + &                                                  ! linear    coefficient
+   (temperature(phase)%p(offset) - lattice_referenceTemperature(phase))**3 / 3. * &
+   lattice_thermalExpansion33(1:3,1:3,3,phase)                                                      ! quadratic coefficient
   
 end function kinematics_thermal_expansion_initialStrain
 
@@ -192,7 +188,6 @@ end function kinematics_thermal_expansion_initialStrain
 subroutine kinematics_thermal_expansion_LiAndItsTangent(Li, dLi_dTstar3333, ipc, ip, el)
  use material, only: &
    material_phase, &
-   material_homog, &
    temperature, &
    temperatureRate, &
    thermalMapping
@@ -211,15 +206,14 @@ subroutine kinematics_thermal_expansion_LiAndItsTangent(Li, dLi_dTstar3333, ipc,
    dLi_dTstar3333                                                                                   !< derivative of Li with respect to Tstar (4th-order tensor defined to be zero)
  integer(pInt) :: &
    phase, &
-   homog, offset
+   offset
  real(pReal) :: &
    T, TRef, TDot  
    
  phase = material_phase(ipc,ip,el)
- homog = material_homog(ip,el)
- offset = thermalMapping(homog)%p(ip,el)
- T = temperature(homog)%p(offset)
- TDot = temperatureRate(homog)%p(offset)
+ offset = thermalMapping(phase)%p(ipc,ip,el)
+ T = temperature(phase)%p(offset)
+ TDot = temperatureRate(phase)%p(offset)
  TRef = lattice_referenceTemperature(phase)
  
  Li = TDot * ( &
