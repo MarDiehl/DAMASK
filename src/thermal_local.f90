@@ -289,6 +289,8 @@ end function thermal_local_getHeatSource
 !> @brief set module wide temperature rate 
 !--------------------------------------------------------------------------------------------------
 subroutine thermal_local_putTemperatureRate(ip,el)
+ use prec, only: &
+   dEq
  use material, only: &
    material_homog, &
    homogenization_Ngrains, &
@@ -302,12 +304,21 @@ subroutine thermal_local_putTemperatureRate(ip,el)
    gr, &
    phase, &
    homog
+ real(pReal) :: &
+   heatSource, &
+   thermalViscosity  
 
  homog = material_homog(ip,el)
+ heatSource = thermal_local_getHeatSource(ip,el)
+ thermalViscosity = thermal_local_getThermalViscosity(ip,el)
  do gr = 1_pInt, homogenization_Ngrains(homog)
    phase = material_phase(gr,ip,el)
-   temperatureRate(phase)%p(thermalMapping(phase)%p(gr,ip,el)) = &
-     thermal_local_getHeatSource(ip,el)/thermal_local_getThermalViscosity(ip,el)
+   if (dEq(thermalViscosity,0.0_pReal)) then
+     temperatureRate(phase)%p(thermalMapping(phase)%p(gr,ip,el)) = 0.0_pReal
+   else
+     temperatureRate(phase)%p(thermalMapping(phase)%p(gr,ip,el)) = &
+       thermal_local_getHeatSource(ip,el)/thermal_local_getThermalViscosity(ip,el)
+   endif
  enddo
 
 end subroutine thermal_local_putTemperatureRate
