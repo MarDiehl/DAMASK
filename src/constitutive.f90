@@ -160,7 +160,6 @@ subroutine constitutive_init()
    ins                                                                                              !< instance of plasticity/source
 
  integer(pInt), dimension(:,:), pointer :: thisSize
- integer(pInt), dimension(:)  , pointer :: thisNoutput
  character(len=64), dimension(:,:), pointer :: thisOutput
  character(len=32) :: outputName                                                                    !< name of output, intermediate fix until HDF5 output is ready
  logical :: knownPlasticity, knownchemicalFE, knownheatflux, knownSource, &
@@ -233,37 +232,30 @@ subroutine constitutive_init()
        plasticityType: select case(phase_plasticity(ph))
          case (PLASTICITY_NONE_ID) plasticityType
            outputName = PLASTICITY_NONE_label
-           thisNoutput => null()
            thisOutput => null()
            thisSize   => null()
          case (PLASTICITY_ISOTROPIC_ID) plasticityType
            outputName = PLASTICITY_ISOTROPIC_label
-           thisNoutput => plastic_isotropic_Noutput
            thisOutput => plastic_isotropic_output
            thisSize   => plastic_isotropic_sizePostResult
          case (PLASTICITY_PHENOPOWERLAW_ID) plasticityType
            outputName = PLASTICITY_PHENOPOWERLAW_label
-           thisNoutput => plastic_phenopowerlaw_Noutput
            thisOutput => plastic_phenopowerlaw_output
            thisSize   => plastic_phenopowerlaw_sizePostResult
          case (PLASTICITY_KINEHARDENING_ID) plasticityType
            outputName = PLASTICITY_KINEHARDENING_label
-           thisNoutput => plastic_kinehardening_Noutput
            thisOutput => plastic_kinehardening_output
            thisSize   => plastic_kinehardening_sizePostResult  
          case (PLASTICITY_DISLOTWIN_ID) plasticityType
            outputName = PLASTICITY_DISLOTWIN_label
-           thisNoutput => plastic_dislotwin_Noutput
            thisOutput => plastic_dislotwin_output
            thisSize   => plastic_dislotwin_sizePostResult
          case (PLASTICITY_DISLOUCLA_ID) plasticityType
            outputName = PLASTICITY_DISLOUCLA_label
-           thisNoutput => plastic_disloucla_Noutput
            thisOutput => plastic_disloucla_output
            thisSize   => plastic_disloucla_sizePostResult
          case (PLASTICITY_NONLOCAL_ID) plasticityType
            outputName = PLASTICITY_NONLOCAL_label
-           thisNoutput => plastic_nonlocal_Noutput
            thisOutput => plastic_nonlocal_output
            thisSize   => plastic_nonlocal_sizePostResult
          case default plasticityType
@@ -273,7 +265,7 @@ subroutine constitutive_init()
        if (knownPlasticity) then
          write(FILEUNIT,'(a)') '(plasticity)'//char(9)//trim(outputName)
          if (phase_plasticity(ph) /= PLASTICITY_NONE_ID) then
-           OutputPlasticityLoop: do o = 1_pInt,thisNoutput(ins)
+           OutputPlasticityLoop: do o = 1_pInt,size(thisOutput(:,ins))
              if(len(trim(thisOutput(o,ins))) > 0_pInt) &
                write(FILEUNIT,'(a,i4)') trim(thisOutput(o,ins))//char(9),thisSize(o,ins)
            enddo OutputPlasticityLoop
@@ -284,17 +276,14 @@ subroutine constitutive_init()
        chemicalFEType: select case(phase_chemicalFE(ph))
          case (CHEMICALFE_none_ID) chemicalFEType
            outputName = CHEMICALFE_none_label
-           thisNoutput => null()
            thisOutput => null()
            thisSize   => null()
          case (CHEMICALFE_quadenergy_ID) chemicalFEType
            outputName = CHEMICALFE_quadenergy_label
-           thisNoutput => chemicalFE_quadenergy_Noutput
            thisOutput => chemicalFE_quadenergy_output
            thisSize   => chemicalFE_quadenergy_sizePostResult
          case (CHEMICALFE_thermodynamic_ID) chemicalFEType
            outputName = CHEMICALFE_thermodynamic_label
-           thisNoutput => chemicalFE_thermodynamic_Noutput
            thisOutput => chemicalFE_thermodynamic_output
            thisSize   => chemicalFE_thermodynamic_sizePostResult
          case default chemicalFEType
@@ -303,7 +292,7 @@ subroutine constitutive_init()
        if (knownchemicalFE) then
          write(FILEUNIT,'(a)') '(chemicalfe)'//char(9)//trim(outputName)
          if (phase_chemicalFE(ph) /= CHEMICALFE_none_ID) then
-           OutputChemicalFELoop: do o = 1_pInt,thisNoutput(ins)
+           OutputChemicalFELoop: do o = 1_pInt,size(thisOutput(:,ins))
              write(FILEUNIT,'(a,i4)') trim(thisOutput(o,ins))//char(9),thisSize(o,ins)
            enddo OutputChemicalFELoop
          endif
@@ -313,17 +302,14 @@ subroutine constitutive_init()
        heatfluxType: select case(phase_heatflux(ph))
          case (HEATFLUX_isothermalnone_ID) heatfluxType
            outputName = HEATFLUX_isothermalnone_label
-           thisNoutput => heatflux_isothermalnone_Noutput
            thisOutput => heatflux_isothermalnone_output
            thisSize   => heatflux_isothermalnone_sizePostResult
          case (HEATFLUX_adiabaticnone_ID) heatfluxType
            outputName = HEATFLUX_adiabaticnone_label
-           thisNoutput => heatflux_adiabaticnone_Noutput
            thisOutput => heatflux_adiabaticnone_output
            thisSize   => heatflux_adiabaticnone_sizePostResult
          case (HEATFLUX_joule_ID) heatfluxType
            outputName = HEATFLUX_joule_label
-           thisNoutput => heatflux_joule_Noutput
            thisOutput => heatflux_joule_output
            thisSize   => heatflux_joule_sizePostResult
          case default heatfluxType
@@ -331,7 +317,7 @@ subroutine constitutive_init()
        end select heatfluxType
        if (knownheatflux) then
          write(FILEUNIT,'(a)') '(heatflux)'//char(9)//trim(outputName)
-         OutputHeatFluxLoop: do o = 1_pInt,thisNoutput(ins)
+         OutputHeatFluxLoop: do o = 1_pInt,size(thisOutput(:,ins))
            write(FILEUNIT,'(a,i4)') trim(thisOutput(o,ins))//char(9),thisSize(o,ins)
          enddo OutputHeatFluxLoop
        endif
@@ -341,31 +327,26 @@ subroutine constitutive_init()
            case (SOURCE_thermal_dissipation_ID) sourceType
              ins = source_thermal_dissipation_instance(ph)
              outputName = SOURCE_thermal_dissipation_label
-             thisNoutput=> source_thermal_dissipation_Noutput
              thisOutput => source_thermal_dissipation_output
              thisSize   => source_thermal_dissipation_sizePostResult
            case (SOURCE_thermal_externalheat_ID) sourceType
              ins = source_thermal_externalheat_instance(ph)
              outputName = SOURCE_thermal_externalheat_label
-             thisNoutput=> source_thermal_externalheat_Noutput
              thisOutput => source_thermal_externalheat_output
              thisSize   => source_thermal_externalheat_sizePostResult
            case (SOURCE_elastic_energy_ID) sourceType
              ins = source_elastic_energy_instance(ph)
              outputName = SOURCE_elastic_energy_label
-             thisNoutput=> source_elastic_energy_Noutput
              thisOutput => source_elastic_energy_output
              thisSize   => source_elastic_energy_sizePostResult
            case (SOURCE_plastic_energy_ID) sourceType
              ins = source_plastic_energy_instance(ph)
              outputName = SOURCE_plastic_energy_label
-             thisNoutput=> source_plastic_energy_Noutput
              thisOutput => source_plastic_energy_output
              thisSize   => source_plastic_energy_sizePostResult
            case (SOURCE_chemical_energy_ID) sourceType
              ins = source_chemical_energy_instance(ph)
              outputName = SOURCE_chemical_energy_label
-             thisNoutput=> source_chemical_energy_Noutput
              thisOutput => source_chemical_energy_output
              thisSize   => source_chemical_energy_sizePostResult
            case default sourceType
@@ -373,7 +354,7 @@ subroutine constitutive_init()
          end select sourceType
          if (knownSource) then
            write(FILEUNIT,'(a)') '(source)'//char(9)//trim(outputName)
-           OutputSourceLoop: do o = 1_pInt,thisNoutput(ins)
+           OutputSourceLoop: do o = 1_pInt,size(thisOutput(:,ins))
              if(len(trim(thisOutput(o,ins))) > 0_pInt) &
                write(FILEUNIT,'(a,i4)') trim(thisOutput(o,ins))//char(9),thisSize(o,ins)
            enddo OutputSourceLoop
