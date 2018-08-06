@@ -293,7 +293,8 @@ subroutine constitutive_init()
          write(FILEUNIT,'(a)') '(chemicalfe)'//char(9)//trim(outputName)
          if (phase_chemicalFE(ph) /= CHEMICALFE_none_ID) then
            OutputChemicalFELoop: do o = 1_pInt,size(thisOutput(:,ins))
-             write(FILEUNIT,'(a,i4)') trim(thisOutput(o,ins))//char(9),thisSize(o,ins)
+             if(len(trim(thisOutput(o,ins))) > 0_pInt) &
+               write(FILEUNIT,'(a,i4)') trim(thisOutput(o,ins))//char(9),thisSize(o,ins)
            enddo OutputChemicalFELoop
          endif
        endif
@@ -318,7 +319,8 @@ subroutine constitutive_init()
        if (knownheatflux) then
          write(FILEUNIT,'(a)') '(heatflux)'//char(9)//trim(outputName)
          OutputHeatFluxLoop: do o = 1_pInt,size(thisOutput(:,ins))
-           write(FILEUNIT,'(a,i4)') trim(thisOutput(o,ins))//char(9),thisSize(o,ins)
+             if(len(trim(thisOutput(o,ins))) > 0_pInt) &
+               write(FILEUNIT,'(a,i4)') trim(thisOutput(o,ins))//char(9),thisSize(o,ins)
          enddo OutputHeatFluxLoop
        endif
        SourceLoop: do s = 1_pInt, phase_Nsources(ph)
