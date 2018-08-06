@@ -64,7 +64,7 @@ subroutine thermal_conduction_init(fileUnit)
  integer(pInt),                intent(in) :: fileUnit
  integer(pInt), allocatable, dimension(:) :: chunkPos
  integer(pInt) :: &
-   section = 0_pInt, i, mySize = 0_pInt, o
+   i, mySize = 0_pInt, o
  integer(pInt) :: sizeState
  integer :: &
    maxNinstance, &
@@ -98,6 +98,7 @@ subroutine thermal_conduction_init(fileUnit)
    line = IO_read(fileUnit)
  enddo
 
+ homog = 0_pInt
  parsingFile: do while (trim(line) /= IO_EOF)                                                       ! read through sections of homogenization part
    line = IO_read(fileUnit)
    if (IO_isBlank(line)) cycle                                                                      ! skip empty lines
@@ -106,16 +107,16 @@ subroutine thermal_conduction_init(fileUnit)
      exit                                                                                           
    endif
    if (IO_getTag(line,'[',']') /= '') then                                                          ! next section
-     section = section + 1_pInt
-     if (thermal_type(section) == THERMAL_conduction_ID) then
-       i = thermal_typeInstance(section)                                                            ! count instances of my homogenization law
-       allocate(param(i)%outputID(homogenization_Noutput(section)))                                 ! allocate space for IDs of every requested output
+     homog = homog + 1_pInt
+     if (thermal_type(homog) == THERMAL_conduction_ID) then
+       i = thermal_typeInstance(homog)                                                            ! count instances of my homogenization law
+       allocate(param(i)%outputID(homogenization_Noutput(homog)))                                 ! allocate space for IDs of every requested output
      endif
      cycle
    endif
-   if (section > 0_pInt ) then                                                                      ! do not short-circuit here (.and. with next if-statement). It's not safe in Fortran
-     if (thermal_type(section) == THERMAL_conduction_ID) then                         ! one of my sections
-       i = thermal_typeInstance(section)                                                     ! which instance of my type is present homogenization
+   if (homog > 0_pInt ) then                                                                      ! do not short-circuit here (.and. with next if-statement). It's not safe in Fortran
+     if (thermal_type(homog) == THERMAL_conduction_ID) then                         ! one of my sections
+       i = thermal_typeInstance(homog)                                                     ! which instance of my type is present homogenization
        chunkPos = IO_stringPos(line)
        tag = IO_lc(IO_stringValue(line,chunkPos,1_pInt))                                            ! extract key
        select case(tag)
@@ -158,11 +159,11 @@ subroutine thermal_conduction_init(fileUnit)
 
 ! allocate state arrays
      sizeState = 0_pInt
-     thermalState(section)%sizeState = sizeState
-     thermalState(section)%sizePostResults = thermal_conduction_sizePostResults(instance)
-     allocate(thermalState(section)%state0   (sizeState,NofmyThermal), source=0.0_pReal)
-     allocate(thermalState(section)%subState0(sizeState,NofmyThermal), source=0.0_pReal)
-     allocate(thermalState(section)%state    (sizeState,NofmyThermal), source=0.0_pReal)
+     thermalState(homog)%sizeState = sizeState
+     thermalState(homog)%sizePostResults = thermal_conduction_sizePostResults(instance)
+     allocate(thermalState(homog)%state0   (sizeState,NofmyThermal), source=0.0_pReal)
+     allocate(thermalState(homog)%subState0(sizeState,NofmyThermal), source=0.0_pReal)
+     allocate(thermalState(homog)%state    (sizeState,NofmyThermal), source=0.0_pReal)
 
    endif myThermal
  enddo initializeInstances
