@@ -23,37 +23,38 @@ module material
  implicit none
  private
  character(len=*),                         parameter,            public :: &
-   ELASTICITY_hooke_label               = 'hooke', &
-   PLASTICITY_none_label                = 'none', &
-   PLASTICITY_isotropic_label           = 'isotropic', &
-   PLASTICITY_phenopowerlaw_label       = 'phenopowerlaw', &
-   PLASTICITY_kinehardening_label       = 'kinehardening', &
-   PLASTICITY_dislotwin_label           = 'dislotwin', &
-   PLASTICITY_disloucla_label           = 'disloucla', &
-   PLASTICITY_nonlocal_label            = 'nonlocal', &
-   CHEMICALFE_none_label                = 'none', &
-   CHEMICALFE_quadenergy_label          = 'quadratic', &
-   CHEMICALFE_thermodynamic_label       = 'thermodynamic', &
-   HEATFLUX_isothermalnone_label        = 'isothermalnone', &
-   HEATFLUX_adiabaticnone_label         = 'adiabaticnone', &
-   HEATFLUX_joule_label                 = 'joule', &
-   SOURCE_thermal_dissipation_label     = 'thermal_dissipation', &
-   SOURCE_thermal_externalheat_label    = 'thermal_externalheat', &
-   SOURCE_elastic_energy_label          = 'elastic_energy', &
-   SOURCE_plastic_energy_label          = 'plastic_energy', &
-   SOURCE_chemical_energy_label         = 'chemical_energy', &
-   KINEMATICS_thermal_expansion_label   = 'thermal_expansion', &
-   KINEMATICS_cleavage_opening_label    = 'cleavage_opening', &
-   KINEMATICS_slipplane_opening_label   = 'slipplane_opening', &
-   KINEMATICS_solute_strain_label       = 'solute_strain', &
-   THERMAL_local_label                  = 'local', &
-   THERMAL_conduction_label             = 'conduction', &
-   SOLUTE_isoconc_label                 = 'isoconc', &
-   SOLUTE_flux_label                    = 'flux', &
-   HOMOGENIZATION_none_label            = 'none', &
-   HOMOGENIZATION_isostrain_label       = 'isostrain', &
-   HOMOGENIZATION_rgc_label             = 'rgc', &
-   HOMOGENIZATION_multiphase_label      = 'multiphase'
+   ELASTICITY_hooke_label                   = 'hooke', &
+   PLASTICITY_none_label                    = 'none', &
+   PLASTICITY_isotropic_label               = 'isotropic', &
+   PLASTICITY_phenopowerlaw_label           = 'phenopowerlaw', &
+   PLASTICITY_kinehardening_label           = 'kinehardening', &
+   PLASTICITY_dislotwin_label               = 'dislotwin', &
+   PLASTICITY_disloucla_label               = 'disloucla', &
+   PLASTICITY_nonlocal_label                = 'nonlocal', &
+   CHEMICALFE_none_label                    = 'none', &
+   CHEMICALFE_quadenergy_label              = 'quadratic', &
+   CHEMICALFE_thermodynamic_label           = 'thermodynamic', &
+   HEATFLUX_isothermalnone_label            = 'isothermalnone', &
+   HEATFLUX_adiabaticnone_label             = 'adiabaticnone', &
+   HEATFLUX_joule_label                     = 'joule', &
+   SOURCE_thermal_dissipation_label         = 'thermal_dissipation', &
+   SOURCE_thermal_externalheat_label        = 'thermal_externalheat', &
+   SOURCE_elastic_energy_label              = 'elastic_energy', &
+   SOURCE_plastic_energy_label              = 'plastic_energy', &
+   SOURCE_chemical_energy_label             = 'chemical_energy', &
+   SOURCE_stochastic_phase_nucleation_label = 'stochastic_phase_nucleation', &
+   KINEMATICS_thermal_expansion_label       = 'thermal_expansion', &
+   KINEMATICS_cleavage_opening_label        = 'cleavage_opening', &
+   KINEMATICS_slipplane_opening_label       = 'slipplane_opening', &
+   KINEMATICS_solute_strain_label           = 'solute_strain', &
+   THERMAL_local_label                      = 'local', &
+   THERMAL_conduction_label                 = 'conduction', &
+   SOLUTE_isoconc_label                     = 'isoconc', &
+   SOLUTE_flux_label                        = 'flux', &
+   HOMOGENIZATION_none_label                = 'none', &
+   HOMOGENIZATION_isostrain_label           = 'isostrain', &
+   HOMOGENIZATION_rgc_label                 = 'rgc', &
+   HOMOGENIZATION_multiphase_label          = 'multiphase'
 
 
  enum, bind(c)
@@ -87,7 +88,8 @@ module material
                  SOURCE_thermal_externalheat_ID, &
                  SOURCE_elastic_energy_ID, &
                  SOURCE_plastic_energy_ID, &
-                 SOURCE_chemical_energy_ID
+                 SOURCE_chemical_energy_ID, &
+                 SOURCE_stochastic_phase_nucleation_ID
  end enum
 
  enum, bind(c)
@@ -279,6 +281,7 @@ module material
    SOURCE_elastic_energy_ID, &
    SOURCE_plastic_energy_ID, &
    SOURCE_chemical_energy_ID, &
+   SOURCE_stochastic_phase_nucleation_ID, &
    KINEMATICS_cleavage_opening_ID, &
    KINEMATICS_slipplane_opening_ID, &
    KINEMATICS_thermal_expansion_ID, &

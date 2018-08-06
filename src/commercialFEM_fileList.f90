@@ -34,6 +34,7 @@
 #include "source_elastic_energy.f90"
 #include "source_plastic_energy.f90"
 #include "source_chemical_energy.f90"
+#include "source_stochastic_phase_nucleation.f90"
 #include "constitutive.f90"
 #include "crystallite.f90"
 #include "homogenization_none.f90"

@@ -112,7 +112,8 @@ add_library (SOURCE OBJECT
   "source_thermal_externalheat.f90"
   "source_elastic_energy.f90"
   "source_plastic_energy.f90"
-  "source_chemical_energy.f90")
+  "source_chemical_energy.f90"
+  "source_stochastic_phase_nucleation.f90")
 add_dependencies(SOURCE PLASTIC CHEMICAL HEATFLUX KINEMATICS)
 list(APPEND OBJECTFILES $<TARGET_OBJECTS:SOURCE>)
 

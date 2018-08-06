@@ -2229,7 +2229,8 @@ function homogenization_multiphase_getPhaseSource(phi,ip,el)
    homogenization_typeInstance, &
    SOURCE_elastic_energy_ID, &
    SOURCE_plastic_energy_ID, &
-   SOURCE_chemical_energy_ID
+   SOURCE_chemical_energy_ID, &
+   SOURCE_stochastic_phase_nucleation_ID
  use crystallite, only: &
    crystallite_Tstar_v
  use constitutive, only: &
@@ -2240,6 +2241,8 @@ function homogenization_multiphase_getPhaseSource(phi,ip,el)
    source_plastic_energy_getRateAndItsTangent
  use source_chemical_energy, only: &
    source_chemical_energy_getRateAndItsTangent
+ use source_stochastic_phase_nucleation, only: &
+  source_stochastic_phase_nucleation_getRateAndItsTangent   
  
  implicit none
  real(pReal),   dimension(homogenization_maxNgrains) :: &
@@ -2277,7 +2280,13 @@ function homogenization_multiphase_getPhaseSource(phi,ip,el)
        case (SOURCE_chemical_energy_ID)                                                  
          call source_chemical_energy_getRateAndItsTangent(localSource, localSourceTangent, &
                                                           grI,ip,el)
-       
+
+        case (SOURCE_stochastic_phase_nucleation_ID)                                                  
+         call source_stochastic_phase_nucleation_getRateAndItsTangent(localSource, localSourceTangent, &
+                                                          grI,ip,el) 
+                                                          
+         localSource                         = localSource*(1.0 - phi(grI))          
+
        case default
          localSource = 0.0_pReal
        
