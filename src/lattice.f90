@@ -1082,15 +1082,8 @@ module lattice
    lattice_nu, &
    lattice_trans_mu, &
    lattice_trans_nu
- real(pReal),                              dimension(:,:,:,:), allocatable, public, protected :: &  ! with higher-order parameters (e.g. temperature-dependent)
-   lattice_thermalExpansion33
  real(pReal),                              dimension(:,:,:),   allocatable, public, protected :: &
-   lattice_initialPlasticStrain, &
-   lattice_thermalConductivity33
- real(pReal),                              dimension(:),       allocatable, public, protected :: &
-   lattice_massDensity, &
-   lattice_specificHeat, &
-   lattice_referenceTemperature
+   lattice_initialPlasticStrain
  enum, bind(c)
    enumerator :: LATTICE_undefined_ID, &
                  LATTICE_iso_ID, &
@@ -1367,11 +1360,6 @@ subroutine lattice_init
  allocate(lattice_trans_C66(6,6,Nphases),  source=0.0_pReal)
  allocate(lattice_trans_C3333(3,3,3,3,Nphases),  source=0.0_pReal)
  allocate(lattice_initialPlasticStrain   (3,3,Nphases), source=0.0_pReal)
- allocate(lattice_thermalConductivity33  (3,3,Nphases), source=0.0_pReal)
- allocate(lattice_thermalExpansion33   (3,3,3,Nphases), source=0.0_pReal)
- allocate(lattice_massDensity            (    Nphases), source=0.0_pReal)
- allocate(lattice_specificHeat           (    Nphases), source=0.0_pReal)
- allocate(lattice_referenceTemperature   (    Nphases), source=300.0_pReal)
 
  allocate(lattice_mu(Nphases),       source=0.0_pReal)
  allocate(lattice_nu(Nphases),       source=0.0_pReal)
@@ -1515,30 +1503,6 @@ subroutine lattice_init
          ctr = ctr + 1_pInt
          lattice_initialPlasticStrain(i,j,section) = IO_floatValue(line,chunkPos,1_pInt+ctr)
        enddo; enddo  
-     case ('thermal_conductivity11')
-       lattice_thermalConductivity33(1,1,section) = IO_floatValue(line,chunkPos,2_pInt)
-     case ('thermal_conductivity22')
-       lattice_thermalConductivity33(2,2,section) = IO_floatValue(line,chunkPos,2_pInt)
-     case ('thermal_conductivity33')
-       lattice_thermalConductivity33(3,3,section) = IO_floatValue(line,chunkPos,2_pInt)
-     case ('thermal_expansion11')
-         do i = 2_pInt, min(4,chunkPos(1))                                                        ! read up to three parameters (constant, linear, quadratic with T)
-           lattice_thermalExpansion33(1,1,i-1_pInt,section) = IO_floatValue(line,chunkPos,i)
-         enddo
-     case ('thermal_expansion22')
-         do i = 2_pInt, min(4,chunkPos(1))                                                        ! read up to three parameters (constant, linear, quadratic with T)
-           lattice_thermalExpansion33(2,2,i-1_pInt,section) = IO_floatValue(line,chunkPos,i)
-         enddo
-     case ('thermal_expansion33')
-         do i = 2_pInt, min(4,chunkPos(1))                                                        ! read up to three parameters (constant, linear, quadratic with T)
-           lattice_thermalExpansion33(3,3,i-1_pInt,section) = IO_floatValue(line,chunkPos,i)
-         enddo
-     case ('specific_heat')
-       lattice_specificHeat(section) = IO_floatValue(line,chunkPos,2_pInt)
-     case ('mass_density')
-       lattice_massDensity(section) = IO_floatValue(line,chunkPos,2_pInt)
-     case ('reference_temperature')
-       lattice_referenceTemperature(section) = IO_floatValue(line,chunkPos,2_pInt)
      end select
    endif
  enddo
@@ -1682,12 +1646,6 @@ subroutine lattice_initializeStructure(myPhase,CoverA,CoverA_trans,a_fcc,a_bcc)
          enddo
      end select
  end select
-
- lattice_thermalConductivity33(1:3,1:3,myPhase) = lattice_symmetrize33(lattice_structure(myPhase),&
-                                                                       lattice_thermalConductivity33(1:3,1:3,myPhase))
- forall (i = 1_pInt:3_pInt) &
-   lattice_thermalExpansion33 (1:3,1:3,i,myPhase) = lattice_symmetrize33(lattice_structure(myPhase),&
-                                                                         lattice_thermalExpansion33   (1:3,1:3,i,myPhase))
 
  select case(lattice_structure(myPhase))
 !--------------------------------------------------------------------------------------------------
