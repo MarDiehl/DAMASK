@@ -203,7 +203,7 @@ subroutine constitutive_init()
  if (any(phase_source == SOURCE_thermal_dissipation_ID))     call source_thermal_dissipation_init(FILEUNIT)
  if (any(phase_source == SOURCE_thermal_externalheat_ID))    call source_thermal_externalheat_init(FILEUNIT)
  if (any(phase_source == SOURCE_elastic_energy_ID))          call source_elastic_energy_init
- if (any(phase_source == SOURCE_plastic_energy_ID))          call source_plastic_energy_init
+ if (any(phase_source == SOURCE_plastic_energy_ID))          call source_plastic_energy_init(FILEUNIT)
  if (any(phase_source == SOURCE_chemical_energy_ID))         call source_chemical_energy_init
 
 !--------------------------------------------------------------------------------------------------
@@ -838,7 +838,7 @@ end subroutine constitutive_hooke_TandItsTangent
 !--------------------------------------------------------------------------------------------------
 !> @brief contains the constitutive equation for calculating the rate of change of microstructure
 !--------------------------------------------------------------------------------------------------
-subroutine constitutive_collectDotState(Tstar_v, FeArray, FpArray, subdt, subfracArray,ipc, ip, el)
+subroutine constitutive_collectDotState(Tstar_v, Lp, FeArray, FpArray, subdt, subfracArray,ipc, ip, el)
  use prec, only: &
    pReal, &
    pLongInt
@@ -870,7 +870,8 @@ subroutine constitutive_collectDotState(Tstar_v, FeArray, FpArray, subdt, subfra
    CHEMICALFE_thermodynamic_ID, &
    HEATFLUX_adiabaticnone_ID, &
    HEATFLUX_joule_ID, &
-   SOURCE_thermal_externalheat_ID
+   SOURCE_thermal_externalheat_ID, &
+   SOURCE_plastic_energy_ID
  use plastic_isotropic, only:  &
    plastic_isotropic_dotState
  use plastic_phenopowerlaw, only: &
@@ -893,6 +894,8 @@ subroutine constitutive_collectDotState(Tstar_v, FeArray, FpArray, subdt, subfra
    heatflux_joule_dotState  
  use source_thermal_externalheat, only: &
    source_thermal_externalheat_dotState
+  use source_plastic_energy, only: &
+   source_plastic_energy_dotState  
 
  implicit none
  integer(pInt), intent(in) :: &
@@ -908,6 +911,8 @@ subroutine constitutive_collectDotState(Tstar_v, FeArray, FpArray, subdt, subfra
    FpArray                                                                                          !< plastic deformation gradient
  real(pReal),  intent(in), dimension(6) :: &
    Tstar_v                                                                                          !< 2nd Piola Kirchhoff stress tensor (Mandel)
+ real(pReal),  intent(in), dimension(3,3) :: &                                                      
+   Lp                                                                                               !velocity gradient 
  integer(pLongInt) :: &
    tick = 0_pLongInt, &
    tickrate, &
@@ -957,7 +962,9 @@ subroutine constitutive_collectDotState(Tstar_v, FeArray, FpArray, subdt, subfra
  SourceLoop: do s = 1_pInt, phase_Nsources(material_phase(ipc,ip,el))
     sourceType: select case (phase_source(s,material_phase(ipc,ip,el)))
      case (SOURCE_thermal_externalheat_ID) sourceType
-       call source_thermal_externalheat_dotState(         ipc, ip, el)
+       call source_thermal_externalheat_dotState(       ipc, ip, el)
+     case (SOURCE_plastic_energy_ID) sourceType
+       call source_plastic_energy_dotState(Tstar_v, Lp, ipc, ip, el) 
    end select sourceType
  enddo SourceLoop
 

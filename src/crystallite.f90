@@ -1307,6 +1307,7 @@ subroutine crystallite_integrateStateRK4()
    do e = eIter(1),eIter(2); do i = iIter(1,e),iIter(2,e); do g = gIter(1,e),gIter(2,e)                 ! iterate over elements, ips and grains
      if (crystallite_todo(g,i,e)) &
        call constitutive_collectDotState(crystallite_Tstar_v(1:6,g,i,e), &
+                                         crystallite_Lp(1:3,1:3, g,i,e), &
                                          crystallite_Fe, &
                                          crystallite_Fp, &
                                          crystallite_subdt(g,i,e), crystallite_subFrac, g,i,e)
@@ -1465,6 +1466,7 @@ subroutine crystallite_integrateStateRK4()
        do e = eIter(1),eIter(2); do i = iIter(1,e),iIter(2,e); do g = gIter(1,e),gIter(2,e)                ! iterate over elements, ips and grains
          if (crystallite_todo(g,i,e)) &
            call constitutive_collectDotState(crystallite_Tstar_v(1:6,g,i,e), &
+                                             crystallite_Lp(1:3,1:3, g,i,e), &
                                              crystallite_Fe, &
                                              crystallite_Fp, &
                                              timeStepFraction(n)*crystallite_subdt(g,i,e), &               ! fraction of original timestep
@@ -1649,6 +1651,7 @@ subroutine crystallite_integrateStateRKCK45()
    do e = eIter(1),eIter(2); do i = iIter(1,e),iIter(2,e); do g = gIter(1,e),gIter(2,e)                    ! iterate over elements, ips and grains
      if (crystallite_todo(g,i,e)) &
        call constitutive_collectDotState(crystallite_Tstar_v(1:6,g,i,e), &
+                                         crystallite_Lp(1:3,1:3, g,i,e), & 
                                          crystallite_Fe, &
                                          crystallite_Fp, &
                                          crystallite_subdt(g,i,e), crystallite_subFrac, g,i,e)
@@ -1821,6 +1824,7 @@ subroutine crystallite_integrateStateRKCK45()
      do e = eIter(1),eIter(2); do i = iIter(1,e),iIter(2,e); do g = gIter(1,e),gIter(2,e)                  ! iterate over elements, ips and grains
        if (crystallite_todo(g,i,e)) &
          call constitutive_collectDotState(crystallite_Tstar_v(1:6,g,i,e), &
+                                           crystallite_Lp(1:3,1:3, g,i,e), &
                                            crystallite_Fe, &
                                            crystallite_Fp, &
                                            C(stage)*crystallite_subdt(g,i,e), & ! fraction of original timestep
@@ -2214,6 +2218,7 @@ subroutine crystallite_integrateStateAdaptiveEuler()
      do e = eIter(1),eIter(2); do i = iIter(1,e),iIter(2,e); do g = gIter(1,e),gIter(2,e)                    ! iterate over elements, ips and grains
        if (crystallite_todo(g,i,e)) &
          call constitutive_collectDotState(crystallite_Tstar_v(1:6,g,i,e), &
+                                           crystallite_Lp(1:3,1:3, g,i,e), &
                                            crystallite_Fe, &
                                            crystallite_Fp, &
                                            crystallite_subdt(g,i,e), crystallite_subFrac, g,i,e)
@@ -2355,6 +2360,7 @@ subroutine crystallite_integrateStateAdaptiveEuler()
      do e = eIter(1),eIter(2); do i = iIter(1,e),iIter(2,e); do g = gIter(1,e),gIter(2,e)                  ! iterate over elements, ips and grains
        if (crystallite_todo(g,i,e)) &
          call constitutive_collectDotState(crystallite_Tstar_v(1:6,g,i,e), &
+                                           crystallite_Lp(1:3,1:3, g,i,e), &
                                            crystallite_Fe, &
                                            crystallite_Fp, &
                                            crystallite_subdt(g,i,e), crystallite_subFrac, g,i,e)
@@ -2601,6 +2607,7 @@ eIter = FEsolving_execElem(1:2)
      do e = eIter(1),eIter(2); do i = iIter(1,e),iIter(2,e); do g = gIter(1,e),gIter(2,e)                    ! iterate over elements, ips and grains
        if (crystallite_todo(g,i,e) .and. .not. crystallite_converged(g,i,e)) &
          call constitutive_collectDotState(crystallite_Tstar_v(1:6,g,i,e), &
+                                           crystallite_Lp(1:3,1:3, g,i,e), &
                                            crystallite_Fe, &
                                            crystallite_Fp, &
                                            crystallite_subdt(g,i,e), crystallite_subFrac, g,i,e)
@@ -2900,6 +2907,7 @@ subroutine crystallite_integrateStateFPI()
    do e = eIter(1),eIter(2); do i = iIter(1,e),iIter(2,e); do g = gIter(1,e),gIter(2,e)             ! iterate over elements, ips and grains
      if (crystallite_todo(g,i,e)) &
        call constitutive_collectDotState(crystallite_Tstar_v(1:6,g,i,e), &
+                                         crystallite_Lp(1:3,1:3, g,i,e), &
                                          crystallite_Fe, &
                                          crystallite_Fp, &
                                          crystallite_subdt(g,i,e), crystallite_subFrac, g,i,e)
@@ -3038,6 +3046,7 @@ subroutine crystallite_integrateStateFPI()
      do e = eIter(1),eIter(2); do i = iIter(1,e),iIter(2,e); do g = gIter(1,e),gIter(2,e)                    ! iterate over elements, ips and grains
        if (crystallite_todo(g,i,e) .and. .not. crystallite_converged(g,i,e)) &
          call constitutive_collectDotState(crystallite_Tstar_v(1:6,g,i,e), &
+                                           crystallite_Lp(1:3,1:3, g,i,e), &
                                            crystallite_Fe, &
                                            crystallite_Fp, &
                                            crystallite_subdt(g,i,e), crystallite_subFrac, g,i,e)

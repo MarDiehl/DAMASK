@@ -23,9 +23,13 @@ module source_plastic_energy
    
  integer(pInt),                       dimension(:),           allocatable, target, public :: &
    source_plastic_energy_Noutput                                                                   !< number of outputs per instance of this source 
-
+ 
+ real(pReal),                         dimension(:),           allocatable,        private :: &
+   source_plastic_work_storeCoeff
+   
  public :: &
    source_plastic_energy_init, &
+   source_plastic_energy_dotState, &
    source_plastic_energy_getRateAndItsTangent
 
 contains
@@ -35,7 +39,7 @@ contains
 !> @brief module initialization
 !> @details reads in material parameters, allocates arrays, and does sanity checks
 !--------------------------------------------------------------------------------------------------
-subroutine source_plastic_energy_init
+subroutine source_plastic_energy_init(fileUnit)
 #if defined(__GFORTRAN__) || __INTEL_COMPILER >= 1800
  use, intrinsic :: iso_fortran_env, only: &
    compiler_version, &
@@ -46,7 +50,18 @@ subroutine source_plastic_energy_init
    debug_constitutive,&
    debug_levelBasic
  use IO, only: &
-   IO_timeStamp
+   IO_read, &
+   IO_lc, &
+   IO_getTag, &
+   IO_isBlank, &
+   IO_stringPos, &
+   IO_stringValue, &
+   IO_floatValue, &
+   IO_intValue, &
+   IO_warning, &
+   IO_error, &
+   IO_timeStamp, &
+   IO_EOF
  use material, only: &
    phase_source, &
    phase_Nsources, &
@@ -62,9 +77,15 @@ subroutine source_plastic_energy_init
    numerics_integrator
 
  implicit none
+ integer(pInt), intent(in) :: fileUnit
+
+ integer(pInt), allocatable, dimension(:) :: chunkPos
  integer(pInt) :: maxNinstance,phase,instance,source,sourceOffset
  integer(pInt) :: sizeState, sizeDotState, sizeDeltaState
- integer(pInt) :: NofMyPhase   
+ integer(pInt) :: NofMyPhase
+ character(len=65536) :: &
+   tag  = '', &
+   line = ''   
 
  write(6,'(/,a)')   ' <<<+-  source_'//SOURCE_plastic_energy_label//' init  -+>>>'
  write(6,'(a15,a)') ' Current time: ',IO_timeStamp()
@@ -90,6 +111,38 @@ subroutine source_plastic_energy_init
  allocate(source_plastic_energy_output  (maxval(phase_Noutput),maxNinstance))
           source_plastic_energy_output = ''
  allocate(source_plastic_energy_Noutput(maxNinstance),                             source=0_pInt) 
+ allocate(source_plastic_work_storeCoeff(maxNinstance),                         source=0.0_pReal) 
+ 
+ rewind(fileUnit)
+ phase = 0_pInt
+ do while (trim(line) /= IO_EOF .and. IO_lc(IO_getTag(line,'<','>')) /= MATERIAL_partPhase)         ! wind forward to <phase>
+   line = IO_read(fileUnit)
+ enddo
+ 
+ parsingFile: do while (trim(line) /= IO_EOF)                                                       ! read through sections of phase part
+   line = IO_read(fileUnit)
+   if (IO_isBlank(line)) cycle                                                                      ! skip empty lines
+   if (IO_getTag(line,'<','>') /= '') then                                                          ! stop at next part
+     line = IO_read(fileUnit, .true.)                                                               ! reset IO_read
+     exit                                                                                           
+   endif   
+   if (IO_getTag(line,'[',']') /= '') then                                                          ! next phase section
+     phase = phase + 1_pInt                                                                         ! advance phase section counter
+     cycle                                                                                          ! skip to next line
+   endif
+
+   if (phase > 0_pInt ) then; if (any(phase_source(:,phase) == SOURCE_plastic_energy_ID)) then      ! do not short-circuit here (.and. with next if statemen). It's not safe in Fortran
+
+     instance = source_plastic_energy_instance(phase)                                               ! which instance of my source is present phase
+     chunkPos = IO_stringPos(line)
+     tag = IO_lc(IO_stringValue(line,chunkPos,1_pInt))                                              ! extract key
+     select case(tag)
+       case ('plastic_work_store_coeff')
+         source_plastic_work_storeCoeff(instance) = IO_floatValue(line,chunkPos,2_pInt)
+
+     end select
+   endif; endif
+ enddo parsingFile
 
  initializeInstances: do phase = 1_pInt, material_Nphase
    if (any(phase_source(:,phase) == SOURCE_plastic_energy_ID)) then
@@ -97,9 +150,9 @@ subroutine source_plastic_energy_init
      instance = source_plastic_energy_instance(phase)
      sourceOffset = source_plastic_energy_offset(phase)
 
-     sizeDotState              =   0_pInt
+     sizeDotState              =   1_pInt
      sizeDeltaState            =   0_pInt
-     sizeState                 =   0_pInt
+     sizeState                 =   1_pInt
      sourceState(phase)%p(sourceOffset)%sizeState =       sizeState
      sourceState(phase)%p(sourceOffset)%sizeDotState =    sizeDotState
      sourceState(phase)%p(sourceOffset)%sizeDeltaState =  sizeDeltaState
@@ -127,11 +180,51 @@ subroutine source_plastic_energy_init
 end subroutine source_plastic_energy_init
 
 !--------------------------------------------------------------------------------------------------
+!> @brief rate of change of state
+
+!--------------------------------------------------------------------------------------------------
+subroutine source_plastic_energy_dotState(Tstar_v, Lp, ipc, ip, el)
+ use material, only: &
+   phaseAt, phasememberAt, &
+   sourceState
+ use math, only: &  
+   math_Mandel6to33, &
+   math_mul33xx33
+   
+ implicit none
+ integer(pInt), intent(in) :: &
+   ipc, &                                                                                           !< component-ID of integration point
+   ip, &                                                                                            !< integration point
+   el                                                                                               !< element
+ real(pReal),  intent(in), dimension(6) :: &
+   Tstar_v                                                                                          !< 2nd Piola Kirchhoff stress tensor (Mandel)
+ real(pReal),  intent(in), dimension(3,3) :: &                                                     
+   Lp                                                                                               !velocity gradient 
+ real(pReal),  dimension(3,3) :: &
+   Tstar    
+ integer(pInt) :: &
+   phase, &
+   constituent, &
+   sourceOffset
+
+ phase = phaseAt(ipc,ip,el)
+ constituent = phasememberAt(ipc,ip,el)
+ sourceOffset = source_plastic_energy_offset(phase)
+ 
+ Tstar = math_Mandel6to33(Tstar_v)
+ 
+ sourceState(phase)%p(sourceOffset)%dotState(1,constituent) = math_mul33xx33(Tstar,Lp)               ! state is current time
+
+end subroutine source_plastic_energy_dotState
+
+!--------------------------------------------------------------------------------------------------
 !> @brief returns plastic driving force 
 !--------------------------------------------------------------------------------------------------
 subroutine source_plastic_energy_getRateAndItsTangent(TDot, dTDOT_dT, ipc, ip, el)
  use material, only: &
+   phaseAt, phasememberAt, &
    phase_plasticity, &
+   sourceState, &
    material_phase, &
    PLASTICITY_NONE_ID, &
    PLASTICITY_ISOTROPIC_ID, &
@@ -148,6 +241,16 @@ subroutine source_plastic_energy_getRateAndItsTangent(TDot, dTDOT_dT, ipc, ip, e
  real(pReal),  intent(out) :: &
    TDot, &
    dTDOT_dT
+ integer(pInt) :: &
+   phase, &
+   constituent, &
+   sourceOffset, &
+   instance
+
+ phase = phaseAt(ipc,ip,el)
+ constituent = phasememberAt(ipc,ip,el)
+ sourceOffset = source_plastic_energy_offset(phase) 
+ instance = source_plastic_energy_instance(phase)
 
  plasticityType: select case(phase_plasticity(material_phase(ipc, ip, el)))
    case (PLASTICITY_NONE_ID) plasticityType
@@ -155,23 +258,28 @@ subroutine source_plastic_energy_getRateAndItsTangent(TDot, dTDOT_dT, ipc, ip, e
      dTDOT_dT = 0.0_pReal
 
    case (PLASTICITY_ISOTROPIC_ID) plasticityType
-     TDot = 0.0_pReal
+     TDot = source_plastic_work_storeCoeff(instance)* & 
+            sourceState(phase)%p(sourceOffset)%State(1,constituent)
      dTDOT_dT = 0.0_pReal
 
    case (PLASTICITY_PHENOPOWERLAW_ID) plasticityType
-     TDot = 0.0_pReal
+     TDot = source_plastic_work_storeCoeff(instance)* & 
+            sourceState(phase)%p(sourceOffset)%State(1,constituent)
      dTDOT_dT = 0.0_pReal
 
    case (PLASTICITY_DISLOTWIN_ID) plasticityType
-     TDot = 0.0_pReal
+     TDot = source_plastic_work_storeCoeff(instance)* & 
+            sourceState(phase)%p(sourceOffset)%State(1,constituent)
      dTDOT_dT = 0.0_pReal
 
    case (PLASTICITY_DISLOUCLA_ID) plasticityType
-     TDot = 0.0_pReal
+     TDot = source_plastic_work_storeCoeff(instance)* & 
+            sourceState(phase)%p(sourceOffset)%State(1,constituent)
      dTDOT_dT = 0.0_pReal
 
    case (PLASTICITY_NONLOCAL_ID) plasticityType
-     TDot = 0.0_pReal
+     TDot = source_plastic_work_storeCoeff(instance)* & 
+            sourceState(phase)%p(sourceOffset)%State(1,constituent)
      dTDOT_dT = 0.0_pReal
 
  end select plasticityType
