@@ -188,6 +188,8 @@ end subroutine source_stochastic_phase_nucleation_init
 !> @brief calculates derived quantities from state
 !--------------------------------------------------------------------------------------------------
 subroutine source_stochastic_phase_nucleation_deltaState(ipc, ip, el)
+ use prec, only: &
+   dEq0
  use material, only: &
    phaseAt, phasememberAt, &
    sourceState
@@ -213,16 +215,20 @@ subroutine source_stochastic_phase_nucleation_deltaState(ipc, ip, el)
  sourceState(phase)%p(sourceOffset)%deltaState(1,constituent) = &
    randNo - sourceState(phase)%p(sourceOffset)%state(1,constituent)
    
- if (randNo > source_stochastic_phase_nucleation_probability(instance) .and. &
-   abs(sourceState(phase)%p(sourceOffset)%State(2,constituent)) < 1.0e-08_pReal) &  
-      sourceState(phase)%p(sourceOffset)%deltaState(2,constituent) = 1.0_pReal
+ if (      (   sourceState(phase)%p(sourceOffset)%state(1,constituent) &
+             > source_stochastic_phase_nucleation_probability(instance)) &
+     .and. (dEq0(sourceState(phase)%p(sourceOffset)%State(2,constituent)))) &
+   
+   sourceState(phase)%p(sourceOffset)%deltaState(2,constituent) = 1.0_pReal
 
 end subroutine source_stochastic_phase_nucleation_deltaState
 
 !--------------------------------------------------------------------------------------------------
 !> @brief returns local nucleation source
 !--------------------------------------------------------------------------------------------------
-subroutine source_stochastic_phase_nucleation_getRateAndItsTangent(TDot, dTDOT_dT, ipc, ip, el)
+subroutine source_stochastic_phase_nucleation_getRateAndItsTangent(TDot, dTDOT_dT, Phi, ipc, ip, el)
+ use prec, only: &
+   dNeq0
  use material, only: &
    phaseAt, phasememberAt, &
    sourceState
@@ -232,6 +238,8 @@ subroutine source_stochastic_phase_nucleation_getRateAndItsTangent(TDot, dTDOT_d
    ipc, &                                                                                           !< grain number
    ip, &                                                                                            !< integration point number
    el                                                                                               !< element number
+ real(pReal), intent(in) :: &
+   Phi
  real(pReal), intent(out) :: &
    TDot, dTDOT_dT
  integer(pInt) :: &
@@ -244,8 +252,10 @@ subroutine source_stochastic_phase_nucleation_getRateAndItsTangent(TDot, dTDOT_d
  
  TDot = 0.0_pReal
  dTDot_dT = 0.0_pReal
- if (abs(sourceState(phase)%p(sourceOffset)%state0(2,constituent) - 1.0_pReal) < 1.0e-8_pReal) &
-   TDot = source_stochastic_phase_nucleation_sourcestrength(instance)
+ if (dNeq0(sourceState(phase)%p(sourceOffset)%State(2,constituent))) then
+   TDot = source_stochastic_phase_nucleation_sourcestrength(instance)*(1.0_pReal - Phi)
+   dTDot_dT = -source_stochastic_phase_nucleation_sourcestrength(instance)
+ endif  
  
 end subroutine source_stochastic_phase_nucleation_getRateAndItsTangent
  

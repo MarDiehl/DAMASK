@@ -2283,10 +2283,8 @@ function homogenization_multiphase_getPhaseSource(phi,ip,el)
 
         case (SOURCE_stochastic_phase_nucleation_ID)                                                  
          call source_stochastic_phase_nucleation_getRateAndItsTangent(localSource, localSourceTangent, &
-                                                          grI,ip,el) 
+                                                                      phi(grI),grI,ip,el) 
                                                           
-         localSource                         = localSource*(1.0 - phi(grI))          
-
        case default
          localSource = 0.0_pReal
        
@@ -2341,9 +2339,15 @@ end function homogenization_multiphase_getPhaseSource
 function homogenization_multiphase_getPhaseSourceTangent(phi,ip,el)
  use material, only: &
    material_homog, &
+   phaseAt, &
+   phase_source, &
+   phase_Nsources, &
    homogenization_Ngrains, &
    homogenization_maxNgrains, &
-   homogenization_typeInstance
+   homogenization_typeInstance, &
+   SOURCE_stochastic_phase_nucleation_ID
+ use source_stochastic_phase_nucleation, only: &
+  source_stochastic_phase_nucleation_getRateAndItsTangent   
  
  implicit none
  real(pReal),   dimension(homogenization_maxNgrains,homogenization_maxNgrains) :: &
@@ -2354,13 +2358,34 @@ function homogenization_multiphase_getPhaseSourceTangent(phi,ip,el)
  integer(pInt) :: &
    grI, grJ, grK, &
    homog, & 
+   source, &
+   phase, &
    instance
  real(pReal) :: &
-   tripleJunctionEnergy  
+   tripleJunctionEnergy, &
+   localSource, localSourceTangent  
 
  homog = material_homog(ip,el)
  instance = homogenization_typeInstance(homog)
  selfSourceTangent = 0.0_pReal
+ do grI = 1_pInt, homogenization_Ngrains(homog)
+   phase = phaseAt(grI,ip,el)
+   do source = 1_pInt, phase_Nsources(phase)
+     select case(phase_source(source,phase)) 
+        case (SOURCE_stochastic_phase_nucleation_ID)                                                  
+         call source_stochastic_phase_nucleation_getRateAndItsTangent(localSource, localSourceTangent, &
+                                                                      phi(grI),grI,ip,el) 
+                                                          
+       case default
+         localSourceTangent = 0.0_pReal
+       
+     end select
+     selfSourceTangent(grI,grI) = &
+       selfSourceTangent(grI,grI) - &
+       (param(instance)%InterfaceWidth/8.0_pReal)*localSourceTangent
+   enddo  
+ enddo
+ 
  do grI = 1_pInt, homogenization_Ngrains(homog)
    do grJ = grI+1_pInt, homogenization_Ngrains(homog)
      selfSourceTangent(grI,grJ) = selfSourceTangent(grI,grJ) - &
