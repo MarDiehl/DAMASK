@@ -24,9 +24,13 @@ module source_stochastic_phase_nucleation
  integer(pInt),                       dimension(:),           allocatable, target, public :: &
    source_stochastic_phase_nucleation_Noutput                                                                   !< number of outputs per instance of this damage 
 
- real(pReal),                         dimension(:),           allocatable,        private :: &
-   source_stochastic_phase_nucleation_probability, &
-   source_stochastic_phase_nucleation_sourcestrength
+ type, private :: tParameters                                                                                   !< container type for internal constitutive parameters
+   real(pReal) :: &
+     source_stochastic_phase_nucleation_probability, &
+     source_stochastic_phase_nucleation_sourcestrength
+ end type  
+ 
+ type(tParameters), dimension(:), allocatable, private :: param                                                 !< containers of constitutive parameters (len Ninstance)  
 
  public :: &
    source_stochastic_phase_nucleation_init, &
@@ -111,10 +115,10 @@ subroutine source_stochastic_phase_nucleation_init(fileUnit)
  allocate(source_stochastic_phase_nucleation_sizePostResult(maxval(phase_Noutput),maxNinstance),source=0_pInt)
  allocate(source_stochastic_phase_nucleation_output(maxval(phase_Noutput),maxNinstance))
           source_stochastic_phase_nucleation_output = ''
- allocate(source_stochastic_phase_nucleation_Noutput(maxNinstance),                                source=0_pInt) 
- allocate(source_stochastic_phase_nucleation_probability(maxNinstance),                         source=0.0_pReal) 
- allocate(source_stochastic_phase_nucleation_sourcestrength(maxNinstance),                      source=0.0_pReal) 
+ allocate(source_stochastic_phase_nucleation_Noutput(maxNinstance),                             source=0_pInt) 
 
+ allocate(param(maxNinstance))
+ 
  rewind(fileUnit)
  phase = 0_pInt
  do while (trim(line) /= IO_EOF .and. IO_lc(IO_getTag(line,'<','>')) /= MATERIAL_partPhase)         ! wind forward to <phase>
@@ -140,10 +144,10 @@ subroutine source_stochastic_phase_nucleation_init(fileUnit)
      tag = IO_lc(IO_stringValue(line,chunkPos,1_pInt))                                             ! extract key
      select case(tag)
        case ('nucleation_probability')
-         source_stochastic_phase_nucleation_probability(instance) = IO_floatValue(line,chunkPos,2_pInt)
+         param(instance)%source_stochastic_phase_nucleation_probability    = IO_floatValue(line,chunkPos,2_pInt)
 
        case ('nucleation_sourcestrength')
-         source_stochastic_phase_nucleation_sourcestrength(instance) = IO_floatValue(line,chunkPos,2_pInt)
+         param(instance)%source_stochastic_phase_nucleation_sourcestrength = IO_floatValue(line,chunkPos,2_pInt)
 
      end select
    endif; endif
@@ -215,9 +219,9 @@ subroutine source_stochastic_phase_nucleation_deltaState(ipc, ip, el)
  sourceState(phase)%p(sourceOffset)%deltaState(1,constituent) = &
    randNo - sourceState(phase)%p(sourceOffset)%state(1,constituent)
    
- if (      (   sourceState(phase)%p(sourceOffset)%state(1,constituent) &
-             > source_stochastic_phase_nucleation_probability(instance)) &
-     .and. (dEq0(sourceState(phase)%p(sourceOffset)%State(2,constituent)))) &
+ if (      (   sourceState(phase)%p(sourceOffset)%state0(1,constituent) &
+             > param(instance)%source_stochastic_phase_nucleation_probability) &
+     .and. (dEq0(sourceState(phase)%p(sourceOffset)%State0(2,constituent)))) &
    
    sourceState(phase)%p(sourceOffset)%deltaState(2,constituent) = 1.0_pReal
 
@@ -252,9 +256,9 @@ subroutine source_stochastic_phase_nucleation_getRateAndItsTangent(TDot, dTDOT_d
  
  TDot = 0.0_pReal
  dTDot_dT = 0.0_pReal
- if (dNeq0(sourceState(phase)%p(sourceOffset)%State(2,constituent))) then
-   TDot = source_stochastic_phase_nucleation_sourcestrength(instance)*(1.0_pReal - Phi)
-   dTDot_dT = -source_stochastic_phase_nucleation_sourcestrength(instance)
+ if (dNeq0(sourceState(phase)%p(sourceOffset)%State0(2,constituent))) then
+   TDot = param(instance)%source_stochastic_phase_nucleation_sourcestrength*(1.0_pReal - Phi)
+   dTDot_dT = -param(instance)%source_stochastic_phase_nucleation_sourcestrength
  endif  
  
 end subroutine source_stochastic_phase_nucleation_getRateAndItsTangent

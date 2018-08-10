@@ -24,8 +24,12 @@ module source_plastic_energy
  integer(pInt),                       dimension(:),           allocatable, target, public :: &
    source_plastic_energy_Noutput                                                                   !< number of outputs per instance of this source 
  
- real(pReal),                         dimension(:),           allocatable,        private :: &
-   source_plastic_work_storeCoeff
+ type, private :: tParameters                                                                      !< container type for internal constitutive parameters
+   real(pReal) :: &
+     source_plastic_work_storeCoeff
+ end type  
+ 
+ type(tParameters), dimension(:), allocatable, private :: param                                    !< containers of constitutive parameters (len Ninstance)
    
  public :: &
    source_plastic_energy_init, &
@@ -111,7 +115,8 @@ subroutine source_plastic_energy_init(fileUnit)
  allocate(source_plastic_energy_output  (maxval(phase_Noutput),maxNinstance))
           source_plastic_energy_output = ''
  allocate(source_plastic_energy_Noutput(maxNinstance),                             source=0_pInt) 
- allocate(source_plastic_work_storeCoeff(maxNinstance),                         source=0.0_pReal) 
+  
+ allocate(param(maxNinstance))
  
  rewind(fileUnit)
  phase = 0_pInt
@@ -138,7 +143,7 @@ subroutine source_plastic_energy_init(fileUnit)
      tag = IO_lc(IO_stringValue(line,chunkPos,1_pInt))                                              ! extract key
      select case(tag)
        case ('plastic_work_store_coeff')
-         source_plastic_work_storeCoeff(instance) = IO_floatValue(line,chunkPos,2_pInt)
+         param(instance)%source_plastic_work_storeCoeff = IO_floatValue(line,chunkPos,2_pInt)
 
      end select
    endif; endif
@@ -157,7 +162,7 @@ subroutine source_plastic_energy_init(fileUnit)
      sourceState(phase)%p(sourceOffset)%sizeDotState =    sizeDotState
      sourceState(phase)%p(sourceOffset)%sizeDeltaState =  sizeDeltaState
      sourceState(phase)%p(sourceOffset)%sizePostResults = source_plastic_energy_sizePostResults(instance)
-     allocate(sourceState(phase)%p(sourceOffset)%aTolState           (sizeState),                source=0.0_pReal)
+     allocate(sourceState(phase)%p(sourceOffset)%aTolState           (sizeState),                source=0.1_pReal)
      allocate(sourceState(phase)%p(sourceOffset)%state0              (sizeState,NofMyPhase),     source=0.0_pReal)
      allocate(sourceState(phase)%p(sourceOffset)%partionedState0     (sizeState,NofMyPhase),     source=0.0_pReal)
      allocate(sourceState(phase)%p(sourceOffset)%subState0           (sizeState,NofMyPhase),     source=0.0_pReal)
@@ -214,8 +219,8 @@ subroutine source_plastic_energy_dotState(Tstar_v, Lp, ipc, ip, el)
  Tstar = math_Mandel6to33(Tstar_v)
  
  sourceState(phase)%p(sourceOffset)%dotState(1,constituent) = math_mul33xx33(Tstar,Lp)               ! state is current time
-
-end subroutine source_plastic_energy_dotState
+ 
+ end subroutine source_plastic_energy_dotState
 
 !--------------------------------------------------------------------------------------------------
 !> @brief returns plastic driving force 
@@ -258,27 +263,27 @@ subroutine source_plastic_energy_getRateAndItsTangent(TDot, dTDOT_dT, ipc, ip, e
      dTDOT_dT = 0.0_pReal
 
    case (PLASTICITY_ISOTROPIC_ID) plasticityType
-     TDot = source_plastic_work_storeCoeff(instance)* & 
+     TDot = param(instance)%source_plastic_work_storeCoeff* & 
             sourceState(phase)%p(sourceOffset)%State(1,constituent)
      dTDOT_dT = 0.0_pReal
 
    case (PLASTICITY_PHENOPOWERLAW_ID) plasticityType
-     TDot = source_plastic_work_storeCoeff(instance)* & 
+     TDot = param(instance)%source_plastic_work_storeCoeff* & 
             sourceState(phase)%p(sourceOffset)%State(1,constituent)
      dTDOT_dT = 0.0_pReal
 
    case (PLASTICITY_DISLOTWIN_ID) plasticityType
-     TDot = source_plastic_work_storeCoeff(instance)* & 
+     TDot = param(instance)%source_plastic_work_storeCoeff* & 
             sourceState(phase)%p(sourceOffset)%State(1,constituent)
      dTDOT_dT = 0.0_pReal
 
    case (PLASTICITY_DISLOUCLA_ID) plasticityType
-     TDot = source_plastic_work_storeCoeff(instance)* & 
+     TDot = param(instance)%source_plastic_work_storeCoeff* & 
             sourceState(phase)%p(sourceOffset)%State(1,constituent)
      dTDOT_dT = 0.0_pReal
 
    case (PLASTICITY_NONLOCAL_ID) plasticityType
-     TDot = source_plastic_work_storeCoeff(instance)* & 
+     TDot = param(instance)%source_plastic_work_storeCoeff* & 
             sourceState(phase)%p(sourceOffset)%State(1,constituent)
      dTDOT_dT = 0.0_pReal
 
