@@ -37,11 +37,18 @@ module homogenization_multiphase
                  fullrankone_ID
  end enum
 
+ enum, bind(c) 
+   enumerator :: linear_ID, &
+                 moelans_ID
+ end enum
+
  type, private :: tParameters                                                                       !< container type for internal constitutive parameters
    integer(kind(undefined_ID)), dimension(:), allocatable :: & 
      outputID
    integer(kind(isostrain_ID)) :: &
      mixtureID = isostrain_ID
+   integer(kind(linear_ID)) :: &
+     interpolationID = linear_ID
    real(pReal), dimension(:,:), allocatable :: &
      interfaceMobility, &
      interfaceEnergy, &
@@ -74,6 +81,7 @@ module homogenization_multiphase
    homogenization_multiphase_getPhaseSource, &
    homogenization_multiphase_getPhaseSourceTangent, &
    homogenization_multiphase_putPhaseFrac, &
+   homogenization_multiphase_calcPhaseFrac, &
    homogenization_multiphase_putInterfaceNormals, &
    homogenization_multiphase_postResults
 
@@ -222,6 +230,17 @@ subroutine homogenization_multiphase_init(fileUnit)
              case default
                call IO_error(211_pInt,el=i, &
                              ext_msg='mixture_rule ('//HOMOGENIZATION_multiphase_label//')')
+           end select
+
+         case ('interpolation_type')
+           select case(IO_lc(IO_stringValue(line,chunkPos,2_pInt)))
+             case('linear')
+               param(i)%interpolationID = linear_ID
+             case('moelans')
+               param(i)%interpolationID = moelans_ID
+             case default
+               call IO_error(211_pInt,el=i, &
+                             ext_msg='interpolation_type ('//HOMOGENIZATION_multiphase_label//')')
            end select
 
          case ('interface_mobility')
@@ -2242,12 +2261,15 @@ function homogenization_multiphase_getPhaseSource(phi,ip,el)
  use source_chemical_energy, only: &
    source_chemical_energy_getRateAndItsTangent
  use source_stochastic_phase_nucleation, only: &
-  source_stochastic_phase_nucleation_getRateAndItsTangent   
+   source_stochastic_phase_nucleation_getRateAndItsTangent   
  
  implicit none
  real(pReal),   dimension(homogenization_maxNgrains) :: &
    homogenization_multiphase_getPhaseSource, &
-   selfSource
+   selfSource, &
+   drivingSource, &
+   totDrivingSource, &
+   nucleationSource
  real(pReal),   dimension(homogenization_maxNgrains), intent(in) :: phi
  integer(pInt),                                       intent(in) :: ip, el                          !< element number
  integer(pInt) :: &
@@ -2256,14 +2278,32 @@ function homogenization_multiphase_getPhaseSource(phi,ip,el)
    instance, &
    source, &
    phase
+ real(pReal),   dimension(homogenization_maxNgrains,homogenization_maxNgrains) :: &
+   interpTangent
  real(pReal) :: &
    tripleJunctionEnergy, &
-   localSource, localSourceTangent  
+   localSource, localSourceTangent
 
  homog = material_homog(ip,el)
  instance = homogenization_typeInstance(homog)
 
- selfSource = 0.0_pReal
+ nucleationSource = 0.0_pReal
+ do grI = 1_pInt, homogenization_Ngrains(homog)
+   phase = phaseAt(grI,ip,el)
+   do source = 1_pInt, phase_Nsources(phase)
+     select case(phase_source(source,phase)) 
+       case (SOURCE_stochastic_phase_nucleation_ID)                                                  
+         call source_stochastic_phase_nucleation_getRateAndItsTangent(localSource, localSourceTangent, &
+                                                                      phi(grI),grI,ip,el) 
+       case default
+         localSource = 0.0_pReal
+       
+     end select
+     nucleationSource(grI) = nucleationSource(grI) - localSource
+   enddo
+ enddo
+ 
+ drivingSource = 0.0_pReal
  do grI = 1_pInt, homogenization_Ngrains(homog)
    phase = phaseAt(grI,ip,el)
    do source = 1_pInt, phase_Nsources(phase)
@@ -2281,18 +2321,25 @@ function homogenization_multiphase_getPhaseSource(phi,ip,el)
          call source_chemical_energy_getRateAndItsTangent(localSource, localSourceTangent, &
                                                           grI,ip,el)
 
-        case (SOURCE_stochastic_phase_nucleation_ID)                                                  
-         call source_stochastic_phase_nucleation_getRateAndItsTangent(localSource, localSourceTangent, &
-                                                                      phi(grI),grI,ip,el) 
-                                                          
        case default
          localSource = 0.0_pReal
        
      end select
-     selfSource(grI) = selfSource(grI) - (param(instance)%InterfaceWidth/8.0_pReal)*localSource
-   enddo  
+     drivingSource(grI) = drivingSource(grI) - localSource
+   enddo
  enddo
  
+ totDrivingSource = 0.0_pReal
+ interpTangent = homogenization_multiphase_calcPhaseFracTangent(phi,ip,el)
+ do grI = 1_pInt, homogenization_Ngrains(homog)
+   do grJ = 1_pInt, homogenization_Ngrains(homog)
+     totDrivingSource(grI) = &
+       totDrivingSource(grI) + &
+       interpTangent(grJ,grI)*drivingSource(grJ)
+   enddo
+ enddo    
+
+ selfSource = 0.0_pReal
  do grI = 1_pInt, homogenization_Ngrains(homog)
    do grJ = grI+1_pInt, homogenization_Ngrains(homog)
      selfSource(grI) = selfSource(grI) - &
@@ -2317,18 +2364,19 @@ function homogenization_multiphase_getPhaseSource(phi,ip,el)
        ((phi(grI) - param(instance)%phasefracTol)/param(instance)%phasefracTol)**2.0_pReal
  enddo
 
+ selfSource = 8.0_pReal*selfSource/param(instance)%InterfaceWidth
+ 
  homogenization_multiphase_getPhaseSource = 0.0_pReal
  do grI = 1_pInt, homogenization_Ngrains(homog)
    do grJ = 1_pInt, homogenization_Ngrains(homog)
      homogenization_multiphase_getPhaseSource(grI) = &
        homogenization_multiphase_getPhaseSource(grI) + &
        param(instance)%InterfaceMobility(grI,grJ)* &
-       (selfSource(grI) - selfSource(grJ))
+       ((selfSource      (grI) - selfSource      (grJ))  + &
+        (totDrivingSource(grI) - totDrivingSource(grJ))) + &
+        (nucleationSource(grI) - nucleationSource(grJ)) 
    enddo
  enddo    
- homogenization_multiphase_getPhaseSource = &
-   (8.0_pReal/param(instance)%InterfaceWidth)* &
-   homogenization_multiphase_getPhaseSource
  
 end function homogenization_multiphase_getPhaseSource
 
@@ -2345,14 +2393,31 @@ function homogenization_multiphase_getPhaseSourceTangent(phi,ip,el)
    homogenization_Ngrains, &
    homogenization_maxNgrains, &
    homogenization_typeInstance, &
+   SOURCE_elastic_energy_ID, &
+   SOURCE_plastic_energy_ID, &
+   SOURCE_chemical_energy_ID, &
    SOURCE_stochastic_phase_nucleation_ID
+ use crystallite, only: &
+   crystallite_Tstar_v
+ use constitutive, only: &
+   constitutive_homogenizedC
+ use source_elastic_energy, only: &
+   source_elastic_energy_getRateAndItsTangent
+ use source_plastic_energy, only: &
+   source_plastic_energy_getRateAndItsTangent
+ use source_chemical_energy, only: &
+   source_chemical_energy_getRateAndItsTangent
  use source_stochastic_phase_nucleation, only: &
   source_stochastic_phase_nucleation_getRateAndItsTangent   
  
  implicit none
+ real(pReal),   dimension(homogenization_maxNgrains) :: &
+   drivingSource
  real(pReal),   dimension(homogenization_maxNgrains,homogenization_maxNgrains) :: &
    homogenization_multiphase_getPhaseSourceTangent, &
-   selfSourceTangent
+   selfSourceTangent, &
+   drivingSourceTangent, &
+   nucleationSourceTangent
  real(pReal),   dimension(homogenization_maxNgrains), intent(in) :: phi
  integer(pInt), intent(in) :: ip, el                                                                !< element number
  integer(pInt) :: &
@@ -2364,10 +2429,15 @@ function homogenization_multiphase_getPhaseSourceTangent(phi,ip,el)
  real(pReal) :: &
    tripleJunctionEnergy, &
    localSource, localSourceTangent  
+ real(pReal),   dimension(homogenization_maxNgrains, &
+                          homogenization_maxNgrains, &
+                          homogenization_maxNgrains) :: &
+   interp2ndTangent
 
  homog = material_homog(ip,el)
  instance = homogenization_typeInstance(homog)
- selfSourceTangent = 0.0_pReal
+
+ nucleationSourceTangent = 0.0_pReal
  do grI = 1_pInt, homogenization_Ngrains(homog)
    phase = phaseAt(grI,ip,el)
    do source = 1_pInt, phase_Nsources(phase)
@@ -2380,12 +2450,50 @@ function homogenization_multiphase_getPhaseSourceTangent(phi,ip,el)
          localSourceTangent = 0.0_pReal
        
      end select
-     selfSourceTangent(grI,grI) = &
-       selfSourceTangent(grI,grI) - &
-       (param(instance)%InterfaceWidth/8.0_pReal)*localSourceTangent
+     nucleationSourceTangent(grI,grI) = &
+       nucleationSourceTangent(grI,grI) - localSourceTangent
    enddo  
  enddo
  
+ drivingSource = 0.0_pReal
+ do grI = 1_pInt, homogenization_Ngrains(homog)
+   phase = phaseAt(grI,ip,el)
+   do source = 1_pInt, phase_Nsources(phase)
+     select case(phase_source(source,phase)) 
+       case (SOURCE_elastic_energy_ID)
+         call source_elastic_energy_getRateAndItsTangent(localSource, localSourceTangent, &
+                                                         crystallite_Tstar_v(1:6,grI,ip,el), &
+                                                         constitutive_homogenizedC(grI,ip,el))
+       
+       case (SOURCE_plastic_energy_ID)
+         call source_plastic_energy_getRateAndItsTangent(localSource, localSourceTangent, &
+                                                         grI,ip,el)
+       
+       case (SOURCE_chemical_energy_ID)                                                  
+         call source_chemical_energy_getRateAndItsTangent(localSource, localSourceTangent, &
+                                                          grI,ip,el) 
+                                                               
+       case default
+         localSource = 0.0_pReal
+       
+     end select
+     drivingSource(grI) = drivingSource(grI) - localSource
+   enddo 
+ enddo
+
+ interp2ndTangent = homogenization_multiphase_calcPhaseFrac2ndTangent(phi,ip,el)
+ drivingSourceTangent = 0.0_pReal
+ do grK = 1_pInt, homogenization_Ngrains(homog)
+   do grJ = 1_pInt, homogenization_Ngrains(homog)
+     do grI = 1_pInt, homogenization_Ngrains(homog)
+       drivingSourceTangent(grK,grJ) =  drivingSourceTangent(grK,grJ) + &
+                                        interp2ndTangent(grI,grK,grJ)* &
+                                        drivingSource(grI) 
+     enddo
+   enddo
+ enddo  
+     
+ selfSourceTangent = 0.0_pReal
  do grI = 1_pInt, homogenization_Ngrains(homog)
    do grJ = grI+1_pInt, homogenization_Ngrains(homog)
      selfSourceTangent(grI,grJ) = selfSourceTangent(grI,grJ) - &
@@ -2416,6 +2524,8 @@ function homogenization_multiphase_getPhaseSourceTangent(phi,ip,el)
        2.0_pReal*(phi(grI) - param(instance)%phasefracTol)/param(instance)%phasefracTol/param(instance)%phasefracTol
  enddo
  
+ selfSourceTangent = 8.0_pReal*selfSourceTangent/param(instance)%InterfaceWidth
+
  homogenization_multiphase_getPhaseSourceTangent = 0.0_pReal
  do grI = 1_pInt, homogenization_Ngrains(homog)
    do grJ = 1_pInt, homogenization_Ngrains(homog)
@@ -2423,13 +2533,12 @@ function homogenization_multiphase_getPhaseSourceTangent(phi,ip,el)
        homogenization_multiphase_getPhaseSourceTangent(grI,grK) = &
          homogenization_multiphase_getPhaseSourceTangent(grI,grK) + &
          param(instance)%InterfaceMobility(grI,grJ)* &
-         (selfSourceTangent(grI,grK) - selfSourceTangent(grJ,grK)) 
+         ((selfSourceTangent      (grI,grK) - selfSourceTangent      (grJ,grK))  + &
+          (drivingSourceTangent   (grI,grK) - drivingSourceTangent   (grJ,grK))) + &
+          (nucleationSourceTangent(grI,grK) - nucleationSourceTangent(grJ,grK)) 
      enddo
    enddo
  enddo
- homogenization_multiphase_getPhaseSourceTangent = &
-   (8.0_pReal/param(instance)%InterfaceWidth)* &
-   homogenization_multiphase_getPhaseSourceTangent
 
 end function homogenization_multiphase_getPhaseSourceTangent
 
@@ -2463,6 +2572,142 @@ subroutine homogenization_multiphase_putPhaseFrac(frac,ip,el)
  enddo
 
 end subroutine homogenization_multiphase_putPhaseFrac
+
+!--------------------------------------------------------------------------------------------------
+!> @brief calculates phase fractions (i.e. interpolation functions) for given phase field values
+!--------------------------------------------------------------------------------------------------
+function homogenization_multiphase_calcPhaseFrac(phi,ip,el)
+ use material, only: &
+   material_homog, &
+   homogenization_Ngrains, &
+   homogenization_typeInstance
+ 
+ implicit none
+ integer(pInt),                                                intent(in)  :: ip, el                !< element number
+ real(pReal),   dimension (homogenization_Ngrains(material_homog(ip,el))),     &
+                                                               intent(in)  :: phi             !< array of current phase fractions
+ real(pReal),   dimension (homogenization_Ngrains(material_homog(ip,el)))  :: &
+   homogenization_multiphase_calcPhaseFrac
+ integer(pInt) :: &
+   homog, & 
+   instance
+
+ homog = material_homog(ip,el)
+ instance = homogenization_typeInstance(homog)
+ 
+ select case(param(instance)%interpolationID)
+   case(linear_ID)
+     homogenization_multiphase_calcPhaseFrac = phi
+   
+   case(moelans_ID)
+     homogenization_multiphase_calcPhaseFrac = phi*phi/sum(phi*phi)
+     
+ end select
+
+end function homogenization_multiphase_calcPhaseFrac
+
+
+!--------------------------------------------------------------------------------------------------
+!> @brief calculates tangent of the phase fractions (i.e. interpolation functions) 
+!--------------------------------------------------------------------------------------------------
+function homogenization_multiphase_calcPhaseFracTangent(phi,ip,el)
+ use math, only: &
+   math_identity2nd
+ use material, only: &
+   material_homog, &
+   homogenization_Ngrains, &
+   homogenization_typeInstance
+ 
+ implicit none
+ integer(pInt),                                                intent(in)  :: ip, el                !< element number
+ real(pReal),   dimension (homogenization_Ngrains(material_homog(ip,el))),     &
+                                                               intent(in)  :: phi             !< array of current phase fractions
+ real(pReal),   dimension (homogenization_Ngrains(material_homog(ip,el)), &
+                           homogenization_Ngrains(material_homog(ip,el)))  :: &
+   homogenization_multiphase_calcPhaseFracTangent
+ integer(pInt) :: &
+   grI, grJ, &
+   homog, & 
+   instance
+
+ homog = material_homog(ip,el)
+ instance = homogenization_typeInstance(homog)
+ 
+ select case(param(instance)%interpolationID)
+   case(linear_ID)
+     homogenization_multiphase_calcPhaseFracTangent = &
+       math_identity2nd(homogenization_Ngrains(homog))
+   
+   case(moelans_ID)
+     homogenization_multiphase_calcPhaseFracTangent = 0.0_pReal
+     do grI = 1_pInt, homogenization_Ngrains(homog)
+       homogenization_multiphase_calcPhaseFracTangent(grI,grI) = &
+         2.0_pReal*phi(grI)/sum(phi*phi)
+       do grJ = 1_pInt, homogenization_Ngrains(homog)
+         homogenization_multiphase_calcPhaseFracTangent(grI,grJ) = &
+           homogenization_multiphase_calcPhaseFracTangent(grI,grJ) - &
+           2.0_pReal*phi(grI)*phi(grI)*phi(grJ)/sum(phi*phi)/sum(phi*phi)
+       enddo
+     enddo      
+     
+ end select
+
+end function homogenization_multiphase_calcPhaseFracTangent
+
+
+!--------------------------------------------------------------------------------------------------
+!> @brief calculates tangent of the phase fractions (i.e. interpolation functions) 
+!--------------------------------------------------------------------------------------------------
+function homogenization_multiphase_calcPhaseFrac2ndTangent(phi,ip,el)
+ use math, only: &
+   math_identity2nd
+ use material, only: &
+   material_homog, &
+   homogenization_Ngrains, &
+   homogenization_typeInstance
+ 
+ implicit none
+ integer(pInt),                                                intent(in)  :: ip, el                !< element number
+ real(pReal),   dimension (homogenization_Ngrains(material_homog(ip,el))),     &
+                                                               intent(in)  :: phi             !< array of current phase fractions
+ real(pReal),   dimension (homogenization_Ngrains(material_homog(ip,el)), &
+                           homogenization_Ngrains(material_homog(ip,el)), &
+                           homogenization_Ngrains(material_homog(ip,el)))  :: &
+   homogenization_multiphase_calcPhaseFrac2ndTangent
+ real(pReal),   dimension (homogenization_Ngrains(material_homog(ip,el)), &
+                           homogenization_Ngrains(material_homog(ip,el)))  :: &
+   kronDelta
+ integer(pInt) :: &
+   grI, grJ, grK, &
+   homog, & 
+   instance
+
+ homog = material_homog(ip,el)
+ instance = homogenization_typeInstance(homog)
+ 
+ select case(param(instance)%interpolationID)
+   case(linear_ID)
+     homogenization_multiphase_calcPhaseFrac2ndTangent = 0.0_pReal
+   
+   case(moelans_ID)
+     kronDelta = math_identity2nd(homogenization_Ngrains(homog))
+     homogenization_multiphase_calcPhaseFrac2ndTangent = 0.0_pReal
+     do grI = 1_pInt, homogenization_Ngrains(homog)
+       do grJ = 1_pInt, homogenization_Ngrains(homog)
+         do grK = 1_pInt, homogenization_Ngrains(homog)
+           homogenization_multiphase_calcPhaseFrac2ndTangent(grI,grJ,grK) = &
+             2.0_pReal*KronDelta(grI,grJ)*kronDelta(grI,grK)/sum(phi*phi) - &
+             4.0_pReal*KronDelta(grI,grJ)*phi(grI)*phi(grK)/sum(phi*phi)/sum(phi*phi) - &
+             4.0_pReal*kronDelta(grI,grK)*phi(grI)*phi(grJ)/sum(phi*phi)/sum(phi*phi) - &
+             2.0_pReal*kronDelta(grJ,grK)*phi(grI)*phi(grI)/sum(phi*phi)/sum(phi*phi) + &
+             8.0_pReal*phi(grI)*phi(grI)*phi(grJ)*phi(grK)/sum(phi*phi)/sum(phi*phi)/sum(phi*phi)
+         enddo                                           
+       enddo                            
+     enddo 
+     
+ end select
+
+end function homogenization_multiphase_calcPhaseFrac2ndTangent
 
 
 !--------------------------------------------------------------------------------------------------

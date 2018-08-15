@@ -192,6 +192,7 @@ type(tSolutionState) function spectral_multiphase_solution(timeinc,timeinc_old)
    wgt
  use homogenization_multiphase, only: &
    homogenization_multiphase_putPhaseFrac, &
+   homogenization_multiphase_calcPhaseFrac, &
    homogenization_multiphase_putInterfaceNormals
 
  implicit none
@@ -204,7 +205,8 @@ type(tSolutionState) function spectral_multiphase_solution(timeinc,timeinc_old)
  DM :: da_local
  Vec :: solution_current_local
  PetscScalar, pointer :: x_scal_current(:,:,:,:), x_scal_lastInc(:,:,:,:)
- real(pReal), dimension(NActivePhases) :: phi_current, phi_lastInc, phi_stagInc
+ real(pReal), dimension(NActivePhases) :: phi_current, phi_lastInc, &
+                                         frac_current, frac_stagInc
  real(pReal), dimension(NActivePhases) :: stagNorm, minPhi, maxPhi, avgPhi
  integer(pInt) :: i, j, k, cell, phase, phaseI, phaseJ, homog
  real(pReal) :: interfaceNormal(3)
@@ -250,15 +252,16 @@ type(tSolutionState) function spectral_multiphase_solution(timeinc,timeinc_old)
    cell = cell + 1
    homog = material_homog(1,cell)
    do phase = 1, NActivePhases
-     phi_stagInc(phase) = phasefrac(homog)%p(phase,phasefracMapping(homog)%p(1,cell))
      phi_current(phase) = x_scal_current(phase-1,i,j,k)
      phi_lastInc(phase) = x_scal_lastInc(phase-1,i,j,k)
+     frac_stagInc(phase) = phasefrac(homog)%p(phase,phasefracMapping(homog)%p(1,cell))
    enddo
+   frac_current = homogenization_multiphase_calcPhaseFrac(phi_current,1,cell)
    do phase = 1, NActivePhases
      minPhi(phase) = min(minPhi(phase),phi_current(phase))
      maxPhi(phase) = max(maxPhi(phase),phi_current(phase))
      avgPhi(phase) = avgPhi(phase) + phi_current(phase)
-     stagNorm(phase) = max(stagNorm(phase),abs(phi_current(phase) - phi_stagInc(phase)))
+     stagNorm(phase) = max(stagNorm(phase),abs(frac_current(phase) - frac_stagInc(phase)))
    enddo
    do phaseI = 1, NActivePhases-1
      do phaseJ = phaseI+1, NActivePhases
@@ -282,7 +285,7 @@ type(tSolutionState) function spectral_multiphase_solution(timeinc,timeinc_old)
        call homogenization_multiphase_putInterfaceNormals(interfaceNormal,phaseI,phaseJ,1,cell)
      enddo
    enddo    
-   call homogenization_multiphase_putPhaseFrac(phi_current,1,cell)
+   call homogenization_multiphase_putPhaseFrac(frac_current,1,cell)
  enddo; enddo; enddo
  call MPI_Allreduce(MPI_IN_PLACE,minPhi    ,NActivePhases,MPI_DOUBLE,MPI_MIN,PETSC_COMM_WORLD,ierr)
  call MPI_Allreduce(MPI_IN_PLACE,maxPhi    ,NActivePhases,MPI_DOUBLE,MPI_MAX,PETSC_COMM_WORLD,ierr)
@@ -481,6 +484,7 @@ subroutine spectral_multiphase_forward()
    cutBack
  use homogenization_multiphase, only: &
    homogenization_multiphase_putPhaseFrac, &
+   homogenization_multiphase_calcPhaseFrac, &
    homogenization_multiphase_putInterfaceNormals
 
  implicit none
@@ -526,7 +530,9 @@ subroutine spectral_multiphase_forward()
          call homogenization_multiphase_putInterfaceNormals(interfaceNormal,phaseI,phaseJ,1,cell)
        enddo
      enddo    
-     call homogenization_multiphase_putPhaseFrac(solution_current_scal(0:NActivePhases-1,i,j,k),1,cell)
+     call homogenization_multiphase_putPhaseFrac( &
+           homogenization_multiphase_calcPhaseFrac(solution_current_scal(0:NActivePhases-1,i,j,k),1,cell), &
+           1, cell                              )
    enddo; enddo; enddo
    call DMDAVecRestoreArrayF90(da_local,solution_current_local,solution_current_scal,ierr)
    CHKERRQ(ierr)
