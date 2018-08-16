@@ -10,8 +10,6 @@ module solute_flux
  
  implicit none
  private
- integer(pInt),             dimension(:),     allocatable,         public, protected :: &
-   solute_flux_sizePostResults
  integer(pInt),             dimension(:,:),   allocatable, target, public :: &
    solute_flux_sizePostResult
  
@@ -146,7 +144,7 @@ subroutine solute_flux_init
 ! allocate state arrays
      sizeState = 0_pInt
      soluteState(homog)%sizeState = sizeState
-     soluteState(homog)%sizePostResults = solute_flux_sizePostResults(instance)
+     soluteState(homog)%sizePostResults = sum(solute_flux_sizePostResult(:,instance))
      allocate(soluteState(homog)%state0   (sizeState,NofmySolute))
      allocate(soluteState(homog)%subState0(sizeState,NofmySolute))
      allocate(soluteState(homog)%state    (sizeState,NofmySolute))
