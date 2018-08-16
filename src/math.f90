@@ -122,6 +122,7 @@ module math
    math_Mandel3333to66, &
    math_Mandel66to3333, &
    math_Voigt66to3333, &
+   math_VecMtoSymNN, &
    math_qRand, &
    math_qMul, &
    math_qDot, &
@@ -1271,6 +1272,33 @@ pure function math_Voigt66to3333(m66)
  end forall
 
 end function math_Voigt66to3333
+
+
+!--------------------------------------------------------------------------------------------------
+!> @brief convert vector containing unrolled triangular half to a symmetric matrix
+!--------------------------------------------------------------------------------------------------
+function math_VecMtoSymNN(Vec,N)
+ use IO, only: &
+   IO_error
+
+ implicit none
+ integer(pInt), intent(in) :: N
+ real(pReal), dimension(:), intent(in) :: vec
+ real(pReal), dimension(N,N) :: math_VecMtoSymNN
+ integer(pInt) :: i, j, ctr
+
+ if (size(vec) /= N*(N-1_pInt)/2_pInt) then
+   call IO_error(411_pInt, ext_msg = 'math_VecMtoSymNN')
+ else
+   math_VecMtoSymNN = 0.0_pReal
+   ctr = 0_pInt
+   do i = 1_pInt, N; do j = i+1_pInt, N  
+     ctr = ctr + 1_pInt
+     math_VecMtoSymNN(i,j) = Vec(ctr)
+     math_VecMtoSymNN(j,i) = Vec(ctr)
+   enddo; enddo
+ endif    
+end function math_VecMtoSymNN
 
 
 !--------------------------------------------------------------------------------------------------
