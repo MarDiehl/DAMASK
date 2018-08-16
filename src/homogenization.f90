@@ -140,7 +140,7 @@ subroutine homogenization_init
  if (any(homogenization_type == HOMOGENIZATION_ISOSTRAIN_ID)) &
    call homogenization_isostrain_init(FILEUNIT)
  if (any(homogenization_type == HOMOGENIZATION_MULTIPHASE_ID)) &
-   call homogenization_multiphase_init(FILEUNIT)
+   call homogenization_multiphase_init
  if (any(homogenization_type == HOMOGENIZATION_RGC_ID)) &
    call homogenization_RGC_init(FILEUNIT)
 
