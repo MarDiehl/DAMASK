@@ -158,7 +158,7 @@ subroutine homogenization_init
  if (any(solute_type == SOLUTE_isoconc_ID)) &
    call solute_isoconc_init(FILEUNIT)
  if (any(solute_type == SOLUTE_flux_ID)) &
-   call solute_flux_init(FILEUNIT)
+   call solute_flux_init
 
 !--------------------------------------------------------------------------------------------------
 ! write description file for homogenization output

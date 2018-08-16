@@ -47,7 +47,7 @@ contains
 !--------------------------------------------------------------------------------------------------
 !> @brief allocates all neccessary fields, reads information from material configuration file
 !--------------------------------------------------------------------------------------------------
-subroutine solute_flux_init(fileUnit)
+subroutine solute_flux_init
 #if defined(__GFORTRAN__) || __INTEL_COMPILER >= 1800
  use, intrinsic :: iso_fortran_env, only: &
    compiler_version, &
@@ -67,22 +67,19 @@ subroutine solute_flux_init(fileUnit)
    mesh_element
  
  implicit none
- integer(pInt),                intent(in) :: fileUnit
- integer(pInt), allocatable, dimension(:) :: chunkPos
  integer(pInt) :: &
-   section = 0_pInt, i, mySize = 0_pInt, o, el, ip, gr
+   o, el, ip, gr, outputsize
  integer(pInt) :: sizeState
  integer :: &
    maxNinstance, &
    homog, &
    phase, &
-   comp, &
    instance
  integer :: &
    NofmySolute                                                                                       ! no pInt (stores a system dependen value from 'count'
- character(len=65536) :: &
-   tag  = '', &
-   line = ''
+ character(len=65536), dimension(:), allocatable :: outputs
+ character(len=65536), dimension(0), parameter :: emptyStringArray = [character(len=65536)::]
+ integer(kind(undefined_ID)) :: outputID                                                           !< ID of each post result output
  
  write(6,'(/,a)')   ' <<<+-  solute_'//SOLUTE_flux_label//' init  -+>>>'
  write(6,'(a15,a)') ' Current time: ',IO_timeStamp()
@@ -93,7 +90,6 @@ subroutine solute_flux_init(fileUnit)
  
  if (iand(debug_level(debug_HOMOGENIZATION),debug_levelBasic) /= 0_pInt) &
    write(6,'(a16,1x,i5,/)') '# instances:',maxNinstance
- allocate(solute_flux_sizePostResults(maxNinstance),                              source=0_pInt)
  allocate(solute_flux_sizePostResult(maxval(homogenization_Noutput),maxNinstance),source=0_pInt)
  allocate(solute_flux_Noutput        (maxNinstance),                              source=0_pInt)
  allocate(solute_flux_output        (maxval(homogenization_Noutput),maxNinstance))
@@ -101,76 +97,33 @@ subroutine solute_flux_init(fileUnit)
  
  allocate(param(maxNinstance))
 
- rewind(fileUnit)
- do while (trim(line) /= IO_EOF .and. IO_lc(IO_getTag(line,'<','>')) /= material_partHomogenization)! wind forward to <homogenization>
-   line = IO_read(fileUnit)
- enddo
+ parsingFile: do homog = 1_pInt, material_Nhomogenization
+  if (solute_type(homog) /= SOLUTE_flux_ID) cycle
+  instance = solute_typeInstance(homog)
+  param(instance)%initialChemPot = config_homogenization(homog)%getFloats('initial_chemicalpotential')
 
- parsingFile: do while (trim(line) /= IO_EOF)                                                       ! read through sections of homogenization part
-   line = IO_read(fileUnit)
-   if (IO_isBlank(line)) cycle                                                                      ! skip empty lines
-   if (IO_getTag(line,'<','>') /= '') then                                                          ! stop at next part
-     line = IO_read(fileUnit, .true.)                                                               ! reset IO_read
-     exit                                                                                           
-   endif
-   if (IO_getTag(line,'[',']') /= '') then                                                          ! next section
-     section = section + 1_pInt
-     if (solute_type(section) == SOLUTE_flux_ID) then
-       i = solute_typeInstance(section)                                                             ! count instances of my homogenization law
-       allocate(param(i)%outputID(homogenization_Noutput(section)))                                 ! allocate space for IDs of every requested output
-       allocate(param(i)%initialChemPot(homogenization_Ncomponents(section)), source = 0.0_pReal)
+  outputs = config_homogenization(homog)%getStrings('(output)',defaultVal=emptyStringArray)
+  allocate(param(instance)%outputID(0))
+  do o=1_pInt, size(outputs)
+    outputID = undefined_ID
+    select case(outputs(o))
+      case('conc','concentration')
+        outputID = conc_ID
+        outputSize = homogenization_Ncomponents(homog)
+     end select
+
+     if (outputID /= undefined_ID) then
+       solute_flux_output(o,instance) = outputs(o)
+       solute_flux_sizePostResult(o,instance) = outputSize
+       param(instance)%outputID = [param(instance)%outputID , outputID]
      endif
-     cycle
-   endif
-   if (section > 0_pInt ) then                                                                      ! do not short-circuit here (.and. with next if-statement). It's not safe in Fortran
-     if (solute_type(section) == SOLUTE_flux_ID) then                         ! one of my sections
-       i = solute_typeInstance(section)                                                     ! which instance of my type is present homogenization
-       chunkPos = IO_stringPos(line)
-       tag = IO_lc(IO_stringValue(line,chunkPos,1_pInt))                                            ! extract key
-       select case(tag)
-         case ('(output)')
-           select case(IO_lc(IO_stringValue(line,chunkPos,2_pInt)))
-             case('conc','concentration')
-               solute_flux_Noutput(i) = solute_flux_Noutput(i) + 1_pInt
-               solute_flux_output(solute_flux_Noutput(i),i) = &
-                 IO_lc(IO_stringValue(line,chunkPos,2_pInt))
-               param(i)%outputID(solute_flux_Noutput(i)) = conc_ID
-
-           end select
-
-         case ('initial_chemicalpotential')
-           if (chunkPos(1) /= homogenization_Ncomponents(section) + 1_pInt) &
-             call IO_error(150_pInt,ext_msg=trim(tag)//' ('//SOLUTE_flux_label//')')
-           do comp = 1_pInt, homogenization_Ncomponents(section)
-             param(i)%initialChemPot(comp) = IO_floatValue(line,chunkPos,1_pInt+comp)
-           enddo
-
-       end select
-     endif
-   endif
+   enddo
  enddo parsingFile
 
  initializeInstances: do homog = 1_pInt, material_Nhomogenization
    mySolute: if (solute_type(homog) == SOLUTE_flux_ID) then
      NofmySolute = count(material_homog == homog)
      instance = solute_typeInstance(homog)
-
-! *  Determine size of postResults array
-     outputsLoop: do o = 1_pInt, solute_flux_Noutput(instance)
-       select case(param(instance)%outputID(o))
-        case(conc_ID)
-          mySize = homogenization_Ncomponents(homog)
-        case default
-          mySize = 0_pInt
-
-       end select
-
-       outputFound: if (mySize > 0_pInt) then
-        solute_flux_sizePostResult(o,instance) = mySize
-        solute_flux_sizePostResults(instance) = &
-          solute_flux_sizePostResults(instance) + mySize
-       endif outputFound
-     enddo outputsLoop
 
 ! allocate state arrays
      sizeState = 0_pInt
@@ -464,7 +417,7 @@ function solute_flux_postResults(ip,el)
  integer(pInt), intent(in) :: &
    ip, &                                                                                            !< integration point number
    el                                                                                               !< element number
- real(pReal),  dimension(solute_flux_sizePostResults(solute_typeInstance(material_homog(ip,el)))) :: &
+ real(pReal),  dimension(sum(solute_flux_sizePostResult(:,solute_typeInstance(material_homog(ip,el))))) :: &
    solute_flux_postResults
  
  integer(pInt) :: &
