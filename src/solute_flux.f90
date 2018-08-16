@@ -5,7 +5,8 @@
 module solute_flux
  use prec, only: &
    pInt, &
-   pReal
+   pReal, &
+   p_2Dvec
  
  implicit none
  private
@@ -27,8 +28,10 @@ module solute_flux
  type, private :: tParameters                                                                       !< container type for internal constitutive parameters
    integer(kind(undefined_ID)), dimension(:), allocatable :: & 
      outputID
-   real(pReal), dimension(:),   allocatable :: &
+   real(pReal),   dimension(:), allocatable :: &
      initialChemPot
+   type(p_2Dvec), dimension(:), allocatable :: &
+     interfaceChemPot
  end type
 
  type(tParameters), dimension(:), allocatable, private :: param                                     !< containers of constitutive parameters (len Ninstance)
@@ -65,10 +68,12 @@ subroutine solute_flux_init
    FE_geomtype, &
    mesh_NcpElems, &
    mesh_element
+ use math, only: &
+   math_VecMtoSymNN
  
  implicit none
  integer(pInt) :: &
-   o, el, ip, gr, outputsize
+   o, el, ip, gr, cp, outputsize
  integer(pInt) :: sizeState
  integer :: &
    maxNinstance, &
@@ -77,6 +82,7 @@ subroutine solute_flux_init
    instance
  integer :: &
    NofmySolute                                                                                       ! no pInt (stores a system dependen value from 'count'
+ character(len=65536) :: cpStr
  character(len=65536), dimension(:), allocatable :: outputs
  character(len=65536), dimension(0), parameter :: emptyStringArray = [character(len=65536)::]
  integer(kind(undefined_ID)) :: outputID                                                           !< ID of each post result output
@@ -100,8 +106,20 @@ subroutine solute_flux_init
  parsingFile: do homog = 1_pInt, material_Nhomogenization
   if (solute_type(homog) /= SOLUTE_flux_ID) cycle
   instance = solute_typeInstance(homog)
-  param(instance)%initialChemPot = config_homogenization(homog)%getFloats('initial_chemicalpotential')
-
+  param(instance)%initialChemPot = &
+                     config_homogenization(homog)%getFloats('initial_chemicalpotential')
+  allocate(param(instance)%interfaceChemPot(homogenization_Ncomponents(homog)))
+  do cp = 1_pInt, homogenization_Ncomponents(homog)
+    write(cpStr,'(i0)') cp
+    if (config_homogenization(homog)%keyExists('interface_chemicalpotential_'//trim(cpStr))) then
+      param(instance)%interfaceChemPot(cp)%p = &
+        math_VecMtoSymNN(config_homogenization(homog)%getFloats('interface_chemicalpotential_'//trim(cpStr)), &
+                         homogenization_Ngrains(homog))
+    else
+      allocate(param(instance)%interfaceChemPot(cp)%p(0,0))
+    endif
+  enddo  
+    
   outputs = config_homogenization(homog)%getStrings('(output)',defaultVal=emptyStringArray)
   allocate(param(instance)%outputID(0))
   do o=1_pInt, size(outputs)
@@ -184,7 +202,9 @@ subroutine solute_flux_calComponentConcandTangent(Conc,dConcdChemPot,dConcdGradC
    material_homog, &
    homogenization_Ngrains, &
    material_phase, &
+   homogenization_Ncomponents, &
    homogenization_maxNcomponents, &
+   solute_typeInstance, &
    phase_chemicalFE, &
    CHEMICALFE_quadenergy_ID, &
    CHEMICALFE_thermodynamic_ID, &
@@ -216,21 +236,37 @@ subroutine solute_flux_calComponentConcandTangent(Conc,dConcdChemPot,dConcdGradC
    dConcdGradC
  real(pReal), dimension(homogenization_maxNcomponents) :: &
    MechChemPot, &
+   InftChemPot, &
    Conc_local
  real(pReal), dimension(homogenization_maxNcomponents, &
                         homogenization_maxNcomponents) :: &
    dConcdChemPot_local, &
    dConcdGradC_local
  integer(pInt) :: &
-   gr, k, &
-   homog, & 
+   gr, grI, grJ, k, &
+   homog, &
+   instance, & 
    offset
 
  homog = material_homog(ip,el)
+ instance = solute_typeInstance(homog)
  offset = phasefracMapping(homog)%p(ip,el)
  Conc = 0.0_pReal
  dConcdChemPot = 0.0_pReal
  dConcdGradC = 0.0_pReal
+ InftChemPot = 0.0_pReal
+ do gr = 1_pInt, homogenization_Ncomponents(homog)
+   do grI = 1_pInt, size(param(instance)%interfaceChemPot(gr)%p,1)
+     do grJ = grI+1_pInt, size(param(instance)%interfaceChemPot(gr)%p,2)
+       InftChemPot(gr) = &
+         InftChemPot(gr) + &
+         param(instance)%interfaceChemPot(gr)%p(grI,grJ)* &
+         phasefrac(homog)%p(grI,offset)* &
+         phasefrac(homog)%p(grJ,offset)
+     enddo
+   enddo
+ enddo        
+ 
  do gr = 1_pInt, homogenization_Ngrains(homog)
    MechChemPot = 0.0_pReal
    KinematicsLoop: do k = 1_pInt, phase_Nkinematics(material_phase(gr,ip,el))
@@ -246,11 +282,11 @@ subroutine solute_flux_calComponentConcandTangent(Conc,dConcdChemPot,dConcdGradC
    chemicalFEType: select case (phase_chemicalFE(material_phase(gr,ip,el)))
      case (CHEMICALFE_quadenergy_ID) chemicalFEType
        call chemicalFE_quadenergy_calConcandTangent(Conc_local,dConcdChemPot_local,dConcdGradC_local, & 
-                                                    ChemPot,GradC,MechChemPot,gr,ip,el)
+                                                    ChemPot,GradC,MechChemPot,InftChemPot,gr,ip,el)
 
      case (CHEMICALFE_thermodynamic_ID) chemicalFEType
        call chemicalFE_thermodynamic_calConcandTangent(Conc_local,dConcdChemPot_local,dConcdGradC_local, & 
-                                                       ChemPot,GradC,MechChemPot,gr,ip,el)
+                                                       ChemPot,GradC,MechChemPot,InftChemPot,gr,ip,el)
 
      case default
        Conc_local = 0.0_pReal
