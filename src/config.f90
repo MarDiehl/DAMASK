@@ -493,7 +493,7 @@ character(len=65536) function getString(this,key,defaultVal,raw)
  implicit none
  class(tPartitionedStringList), intent(in)           :: this
  character(len=*),              intent(in)           :: key
- character(len=65536),          intent(in), optional :: defaultVal
+ character(len=*),              intent(in), optional :: defaultVal
  logical,                       intent(in), optional :: raw
  type(tPartitionedStringList),  pointer              :: item
  logical                                             :: found, &
