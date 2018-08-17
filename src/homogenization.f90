@@ -122,7 +122,6 @@ subroutine homogenization_init
  integer(pInt), parameter :: FILEUNIT = 200_pInt
  integer(pInt) :: e,i,p
  integer(pInt), dimension(:,:), pointer :: thisSize
- integer(pInt), dimension(:)  , pointer :: thisNoutput
  character(len=64), dimension(:,:), pointer :: thisOutput
  character(len=32) :: outputName                                                                    !< name of output, intermediate fix until HDF5 output is ready
  logical :: valid
@@ -171,22 +170,18 @@ subroutine homogenization_init
        select case(homogenization_type(p))                                                              ! split per homogenization type
          case (HOMOGENIZATION_NONE_ID)
            outputName = HOMOGENIZATION_NONE_label
-           thisNoutput => null()
            thisOutput => null()
            thisSize   => null()
          case (HOMOGENIZATION_ISOSTRAIN_ID)
            outputName = HOMOGENIZATION_ISOSTRAIN_label
-           thisNoutput => homogenization_isostrain_Noutput
            thisOutput => homogenization_isostrain_output
            thisSize   => homogenization_isostrain_sizePostResult
          case (HOMOGENIZATION_MULTIPHASE_ID)
            outputName = HOMOGENIZATION_MULTIPHASE_label
-           thisNoutput => homogenization_multiphase_Noutput
            thisOutput => homogenization_multiphase_output
            thisSize   => homogenization_multiphase_sizePostResult
          case (HOMOGENIZATION_RGC_ID)
            outputName = HOMOGENIZATION_RGC_label
-           thisNoutput => homogenization_RGC_Noutput
            thisOutput => homogenization_RGC_output
            thisSize   => homogenization_RGC_sizePostResult
          case default
@@ -197,8 +192,9 @@ subroutine homogenization_init
          write(FILEUNIT,'(a)') '(type)'//char(9)//trim(outputName)
          write(FILEUNIT,'(a,i4)') '(ngrains)'//char(9),homogenization_Ngrains(p)
          if (homogenization_type(p) /= HOMOGENIZATION_NONE_ID) then
-           do e = 1,thisNoutput(i)
-             write(FILEUNIT,'(a,i4)') trim(thisOutput(e,i))//char(9),thisSize(e,i)
+         do e = 1,size(thisOutput(:,i))
+           if(len(trim(thisOutput(e,i))) > 0_pInt) &
+               write(FILEUNIT,'(a,i4)') trim(thisOutput(e,i))//char(9),thisSize(e,i)
            enddo
          endif
        endif
@@ -207,12 +203,10 @@ subroutine homogenization_init
        select case(thermal_type(p))                                                                     ! split per thermal type
          case (THERMAL_local_ID)
            outputName = THERMAL_local_label
-           thisNoutput => thermal_local_Noutput
            thisOutput => thermal_local_output
            thisSize   => thermal_local_sizePostResult
          case (THERMAL_conduction_ID)
            outputName = THERMAL_conduction_label
-           thisNoutput => thermal_conduction_Noutput
            thisOutput => thermal_conduction_output
            thisSize   => thermal_conduction_sizePostResult
          case default
@@ -220,8 +214,9 @@ subroutine homogenization_init
        end select
        if (valid) then
          write(FILEUNIT,'(a)') '(thermal)'//char(9)//trim(outputName)
-         do e = 1,thisNoutput(i)
-           write(FILEUNIT,'(a,i4)') trim(thisOutput(e,i))//char(9),thisSize(e,i)
+         do e = 1,size(thisOutput(:,i))
+           if(len(trim(thisOutput(e,i))) > 0_pInt) &
+             write(FILEUNIT,'(a,i4)') trim(thisOutput(e,i))//char(9),thisSize(e,i)
          enddo
        endif
        i = solute_typeInstance(p)                                                                   ! which instance of this solute type
@@ -229,12 +224,10 @@ subroutine homogenization_init
        select case(solute_type(p))                                                                  ! split per solute type
          case (SOLUTE_isoconc_ID)
            outputName = SOLUTE_isoconc_label
-           thisNoutput => solute_isoconc_Noutput
            thisOutput => solute_isoconc_output
            thisSize   => solute_isoconc_sizePostResult
          case (SOLUTE_flux_ID)
            outputName = SOLUTE_flux_label
-           thisNoutput => solute_flux_Noutput
            thisOutput => solute_flux_output
            thisSize   => solute_flux_sizePostResult
          case default
@@ -242,8 +235,9 @@ subroutine homogenization_init
        end select
        if (valid) then
          write(FILEUNIT,'(a)') '(solute)'//char(9)//trim(outputName)
-         do e = 1,thisNoutput(i)
-           write(FILEUNIT,'(a,i4)') trim(thisOutput(e,i))//char(9),thisSize(e,i)
+         do e = 1,size(thisOutput(:,i))
+           if(len(trim(thisOutput(e,i))) > 0_pInt) &
+             write(FILEUNIT,'(a,i4)') trim(thisOutput(e,i))//char(9),thisSize(e,i)
          enddo
        endif
      endif
