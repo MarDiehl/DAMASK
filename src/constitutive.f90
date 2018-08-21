@@ -205,7 +205,7 @@ subroutine constitutive_init()
 ! parse current dendity models from config file
  call IO_checkAndRewind(FILEUNIT) 
  if (any(phase_currentDensity == CURRENTDENSITY_none_ID))  call currentDensity_none_init
- if (any(phase_currentDensity == CURRENTDENSITY_ohm_ID))   call currentDensity_ohm_init(FILEUNIT)
+ if (any(phase_currentDensity == CURRENTDENSITY_ohm_ID))   call currentDensity_ohm_init
 
 !--------------------------------------------------------------------------------------------------
 ! parse heat flux models from config file
