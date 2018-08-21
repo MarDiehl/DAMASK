@@ -76,23 +76,30 @@ module spectral_utilities
    integer(pInt) :: iterationsNeeded  = 0_pInt
  end type tSolutionState
 
- type, public :: tBoundaryCondition                                                                 !< set of parameters defining a boundary condition
+ type, public :: tTensorBoundaryCondition                                                                 !< set of parameters defining a boundary condition
    real(pReal), dimension(3,3) :: values      = 0.0_pReal
    real(pReal), dimension(3,3) :: maskFloat   = 0.0_pReal
    logical,     dimension(3,3) :: maskLogical = .false.
    character(len=64)           :: myType      = 'None'
- end type tBoundaryCondition
+ end type tTensorBoundaryCondition
+ 
+ type, public :: tVectorBoundaryCondition                                                                 !< set of parameters defining a boundary condition
+   real(pReal), dimension(3) :: values      = 0.0_pReal
+   real(pReal), dimension(3) :: maskFloat   = 0.0_pReal
+   logical,     dimension(3) :: maskLogical = .false.
+   character(len=64)           :: myType      = 'None'
+ end type tVectorBoundaryCondition
 
  type, public :: tLoadCase
-   real(pReal), dimension (3,3) :: rotation               = math_I3                                 !< rotation of BC
-   type(tBoundaryCondition) ::     stress, &                                                        !< stress BC
-                                   deformation                                                      !< deformation BC (Fdot or L)
-   real(pReal) ::                  time                   = 0.0_pReal                               !< length of increment
-   integer(pInt) ::                incs                   = 0_pInt, &                               !< number of increments
-                                   outputfrequency        = 1_pInt, &                               !< frequency of result writes
-                                   restartfrequency       = 0_pInt, &                               !< frequency of restart writes
-                                   logscale               = 0_pInt                                  !< linear/logarithmic time inc flag
-   logical ::                      followFormerTrajectory = .true.                                  !< follow trajectory of former loadcase
+   real(pReal), dimension (3,3)   :: rotation               = math_I3                                 !< rotation of BC
+   type(tTensorBoundaryCondition) :: stress, &                                                        !< stress BC
+                                     deformation                                                      !< deformation BC (Fdot or L)
+   real(pReal) ::                    time                   = 0.0_pReal                               !< length of increment
+   integer(pInt) ::                  incs                   = 0_pInt, &                               !< number of increments
+                                     outputfrequency        = 1_pInt, &                               !< frequency of result writes
+                                     restartfrequency       = 0_pInt, &                               !< frequency of restart writes
+                                     logscale               = 0_pInt                                  !< linear/logarithmic time inc flag
+   logical ::                        followFormerTrajectory = .true.                                  !< follow trajectory of former loadcase
    integer(kind(FIELD_UNDEFINED_ID)), allocatable :: ID(:)
  end type tLoadCase
 

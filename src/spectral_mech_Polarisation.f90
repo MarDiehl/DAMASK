@@ -247,7 +247,7 @@ type(tSolutionState) function Polarisation_solution(incInfoIn,timeinc,timeinc_ol
  use math, only: &
    math_invSym3333
  use spectral_utilities, only: &
-   tBoundaryCondition, &
+   tTensorBoundaryCondition, &
    Utilities_maskedCompliance, &
    Utilities_updateGamma
  use FEsolving, only: &
@@ -263,7 +263,7 @@ type(tSolutionState) function Polarisation_solution(incInfoIn,timeinc,timeinc_ol
  real(pReal), intent(in) :: &
    timeinc, &                                                                                       !< increment time for current solution
    timeinc_old                                                                                      !< increment time of last successful increment
- type(tBoundaryCondition),    intent(in) :: &
+ type(tTensorBoundaryCondition),    intent(in) :: &
    stress_BC
  real(pReal), dimension(3,3), intent(in) :: rotation_BC
  
@@ -555,7 +555,7 @@ subroutine Polarisation_forward(guess,timeinc,timeinc_old,loadCaseTime,deformati
     Utilities_calculateRate, &
     Utilities_forwardField, &
     Utilities_updateIPcoords, &
-    tBoundaryCondition, &
+    tTensorBoundaryCondition, &
     cutBack
   use IO, only: &
     IO_write_JobRealFile
@@ -569,7 +569,7 @@ subroutine Polarisation_forward(guess,timeinc,timeinc_old,loadCaseTime,deformati
     timeinc_old, &
     timeinc, &
     loadCaseTime                                                                                     !< remaining time of current load case
-  type(tBoundaryCondition),      intent(in) :: &
+  type(tTensorBoundaryCondition),      intent(in) :: &
     stress_BC, &
     deformation_BC
   real(pReal), dimension(3,3), intent(in) ::&

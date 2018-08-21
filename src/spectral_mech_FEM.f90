@@ -249,7 +249,7 @@ type(tSolutionState) function &
  use IO, only: &
    IO_error
  use spectral_utilities, only: &
-   tBoundaryCondition, &
+   tTensorBoundaryCondition, &
    utilities_maskedCompliance
  use FEsolving, only: &
    terminallyIll
@@ -262,7 +262,7 @@ type(tSolutionState) function &
    timeinc, &                                                                                       !< increment in time for current solution
    timeinc_old, &                                                                                   !< increment in time of last increment
    loadCaseTime                                                                                     !< remaining time of current load case
- type(tBoundaryCondition),      intent(in) :: &
+ type(tTensorBoundaryCondition),      intent(in) :: &
    stress_BC
  character(len=*), intent(in) :: &
    incInfoIn
@@ -605,7 +605,7 @@ subroutine FEM_forward(guess,timeinc,timeinc_old,loadCaseTime,deformation_BC,str
    math_mul33x33
  use spectral_utilities, only: &
    utilities_updateIPcoords, &
-   tBoundaryCondition, &
+   tTensorBoundaryCondition, &
    cutBack
   use homogenization, only: &
     materialpoint_F0
@@ -620,7 +620,7 @@ subroutine FEM_forward(guess,timeinc,timeinc_old,loadCaseTime,deformation_BC,str
    timeinc_old, &
    timeinc, &
    loadCaseTime                                                                                     !< remaining time of current load case
- type(tBoundaryCondition),      intent(in) :: &
+ type(tTensorBoundaryCondition),      intent(in) :: &
    stress_BC, &
    deformation_BC
  real(pReal), dimension(3,3), intent(in) :: rotation

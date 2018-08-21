@@ -222,7 +222,7 @@ type(tSolutionState) function basic_solution(incInfoIn,timeinc,timeinc_old,stres
  use numerics, only: &
    update_gamma
  use spectral_utilities, only: &
-   tBoundaryCondition, &
+   tTensorBoundaryCondition, &
    Utilities_maskedCompliance, &
    Utilities_updateGamma
  use FEsolving, only: &
@@ -238,7 +238,7 @@ type(tSolutionState) function basic_solution(incInfoIn,timeinc,timeinc_old,stres
  real(pReal),                 intent(in) :: &
    timeinc, &                                                                                       !< increment time for current solution
    timeinc_old                                                                                      !< increment time of last successful increment
- type(tBoundaryCondition),    intent(in) :: &
+ type(tTensorBoundaryCondition),    intent(in) :: &
    stress_BC
  real(pReal), dimension(3,3), intent(in) :: rotation_BC
  
@@ -451,7 +451,7 @@ subroutine Basic_forward(guess,timeinc,timeinc_old,loadCaseTime,deformation_BC,s
     Utilities_calculateRate, &
     Utilities_forwardField, &
     Utilities_updateIPcoords, &
-    tBoundaryCondition, &
+    tTensorBoundaryCondition, &
     cutBack
   use IO, only: &
     IO_write_JobRealFile
@@ -465,7 +465,7 @@ subroutine Basic_forward(guess,timeinc,timeinc_old,loadCaseTime,deformation_BC,s
     timeinc_old, &
     timeinc, &
     loadCaseTime                                                                                     !< remaining time of current load case
-  type(tBoundaryCondition),    intent(in) :: &
+  type(tTensorBoundaryCondition),    intent(in) :: &
     stress_BC, &
     deformation_BC
   real(pReal), dimension(3,3), intent(in) :: &
