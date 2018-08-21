@@ -4113,6 +4113,7 @@ function crystallite_postResults(ipc, ip, el)
    plasticState, &
    chemicalState, &
    heatfluxState, &
+   currentDensityState, &
    sourceState, &
    microstructure_crystallite, &
    crystallite_Noutput, &
@@ -4132,6 +4133,7 @@ function crystallite_postResults(ipc, ip, el)
  real(pReal), dimension(1+crystallite_sizePostResults(microstructure_crystallite(mesh_element(4,el))) + &
                         1+plasticState(material_phase(ipc,ip,el))%sizePostResults + &
                           chemicalState(material_phase(ipc,ip,el))%sizePostResults + &
+                          currentDensityState(material_phase(ipc,ip,el))%sizePostResults + &
                           heatfluxState(material_phase(ipc,ip,el))%sizePostResults + &
                           sum(sourceState(material_phase(ipc,ip,el))%p(:)%sizePostResults)) :: &
    crystallite_postResults
@@ -4259,6 +4261,7 @@ function crystallite_postResults(ipc, ip, el)
 
  crystallite_postResults(c+1) = real(plasticState(material_phase(ipc,ip,el))%sizePostResults + &
                                      chemicalState(material_phase(ipc,ip,el))%sizePostResults + &
+                                     currentDensityState(material_phase(ipc,ip,el))%sizePostResults + &
                                      heatfluxState(material_phase(ipc,ip,el))%sizePostResults + &
                                      sum(sourceState(material_phase(ipc,ip,el))%p(:)%sizePostResults),pReal)             ! size of constitutive results
  c = c + 1_pInt

@@ -37,6 +37,8 @@ module material
    HEATFLUX_isothermalnone_label            = 'isothermalnone', &
    HEATFLUX_adiabaticnone_label             = 'adiabaticnone', &
    HEATFLUX_joule_label                     = 'joule', &
+   CURRENTDENSITY_none_label                = 'none', &
+   CURRENTDENSITY_ohm_label                 = 'ohm', &
    SOURCE_thermal_dissipation_label         = 'thermal_dissipation', &
    SOURCE_thermal_externalheat_label        = 'thermal_externalheat', &
    SOURCE_elastic_energy_label              = 'elastic_energy', &
@@ -82,6 +84,11 @@ module material
                  HEATFLUX_joule_ID
  end enum
 
+ enum, bind(c)
+   enumerator :: CURRENTDENSITY_none_ID, &
+                 CURRENTDENSITY_ohm_ID
+ end enum
+ 
  enum, bind(c)
    enumerator :: SOURCE_undefined_ID, &
                  SOURCE_thermal_dissipation_ID, &
@@ -130,6 +137,8 @@ module material
    phase_chemicalFE                                                                                 !< chemical free energy model of each phase
  integer(kind(HEATFLUX_isothermalnone_ID)),  dimension(:),   allocatable, public, protected :: &
    phase_heatflux                                                                                   !< heat flux model of each phase
+ integer(kind(CURRENTDENSITY_none_ID)),      dimension(:),   allocatable, public, protected :: &
+   phase_currentDensity                                                                             !< current density model of each phase  
  integer(kind(THERMAL_local_ID)),            dimension(:),   allocatable, public, protected :: &
    thermal_type                                                                                     !< thermal transport model
  integer(kind(SOLUTE_isoconc_ID)),           dimension(:),   allocatable, public, protected :: &
@@ -157,7 +166,8 @@ module material
    phase_elasticityInstance, &                                                                      !< instance of particular elasticity of each phase
    phase_plasticityInstance, &
    phase_chemicalFEInstance, &                                                                      !< instance of particular chemical free energy model of each phase
-   phase_heatfluxInstance                                                                           !< instance of particular heat flux model of each phase
+   phase_heatfluxInstance, &                                                                        !< instance of particular heat flux model of each phase
+   phase_currentDensityInstance                                                                     !< instance of particular current density of each phase
 
  integer(pInt),                              dimension(:),  allocatable, public, protected :: &
    crystallite_Noutput                                                                              !< number of '(output)' items per crystallite setting
@@ -181,6 +191,8 @@ module material
    chemicalState
  type(tState),                               dimension(:),  allocatable, public            :: &
    heatfluxState
+ type(tState),                               dimension(:),  allocatable, public            :: &
+   currentDensityState  
  type(tSourceState),                         dimension(:),  allocatable, public            :: &
    sourceState
  type(tState),                               dimension(:),  allocatable, public            :: &
@@ -248,7 +260,8 @@ module material
 
  type(tPhaseMapping),                       dimension(:),  allocatable,  public            :: &
    thermalMapping, &                                                                                !< mapping for thermal state/fields
-   chemConcMapping                                                                                  !< mapping for phase fraction state/fields
+   chemConcMapping, &                                                                               !< mapping for phase fraction state/fields
+   currentDensityMapping                                                                            !< mapping for current density field    
 
  type(p_vec),                               dimension(:),  allocatable,  public            :: &
    temperature, &                                                                                   !< temperature field
@@ -258,7 +271,8 @@ module material
    phasefrac, &                                                                                     !< phase fraction field
    chemicalConc, &                                                                                  !< current component concentration field
    chemicalConc0, &                                                                                 !< previous component concentration field
-   chemicalConcRate                                                                                 !< component concentration rate field
+   chemicalConcRate, &                                                                              !< component concentration rate field
+   currentDensity                                                                                   !< current density vector field
 
  public :: &
    material_init, &
@@ -276,6 +290,8 @@ module material
    HEATFLUX_isothermalnone_ID, &
    HEATFLUX_adiabaticnone_ID, &
    HEATFLUX_joule_ID, &
+   CURRENTDENSITY_none_ID, &
+   CURRENTDENSITY_ohm_ID, &
    SOURCE_thermal_dissipation_ID, &
    SOURCE_thermal_externalheat_ID, &
    SOURCE_elastic_energy_ID, &
@@ -378,7 +394,8 @@ subroutine material_init()
 
  allocate(plasticState       (size(config_phase)))
  allocate(chemicalState      (size(config_phase)))
- allocate(heatfluxState       (size(config_phase)))
+ allocate(heatfluxState      (size(config_phase)))
+ allocate(currentDensityState(size(config_phase)))
  allocate(sourceState        (size(config_phase)))
  do myPhase = 1,size(config_phase)
    allocate(sourceState(myPhase)%p(phase_Nsources(myPhase)))
@@ -390,6 +407,8 @@ subroutine material_init()
  allocate(thermalMapping     (size(config_phase)))
  allocate(temperature        (size(config_phase)))
  allocate(temperatureRate    (size(config_phase)))
+ allocate(currentDensity     (size(config_phase)))
+ allocate(currentDensityMapping(size(config_phase)))
 
  allocate(homogState         (size(config_homogenization)))
  allocate(soluteState        (size(config_homogenization)))
@@ -673,10 +692,11 @@ subroutine material_parsePhase
  character(len=65536), dimension(:), allocatable ::  str 
 
 
- allocate(phase_elasticity(size(config_phase)),source=ELASTICITY_undefined_ID)
- allocate(phase_plasticity(size(config_phase)),source=PLASTICITY_undefined_ID)
- allocate(phase_chemicalFE(size(config_phase)),source=CHEMICALFE_none_ID)
- allocate(phase_heatflux  (size(config_phase)),source=HEATFLUX_isothermalnone_ID)
+ allocate(phase_elasticity    (size(config_phase)),source=ELASTICITY_undefined_ID)
+ allocate(phase_plasticity    (size(config_phase)),source=PLASTICITY_undefined_ID)
+ allocate(phase_chemicalFE    (size(config_phase)),source=CHEMICALFE_none_ID)
+ allocate(phase_heatflux      (size(config_phase)),source=HEATFLUX_isothermalnone_ID)
+ allocate(phase_currentDensity(size(config_phase)),source=CURRENTDENSITY_none_ID)
  allocate(phase_Nsources(size(config_phase)),              source=0_pInt)
  allocate(phase_Nkinematics(size(config_phase)),           source=0_pInt)
  allocate(phase_NstiffnessModifiers(size(config_phase)),   source=0_pInt)
@@ -744,6 +764,17 @@ subroutine material_parsePhase
      end select
    endif
 
+   if (config_phase(p)%keyExists('currentdensity')) then
+     select case (config_phase(p)%getString('currentdensity'))
+       case (CURRENTDENSITY_none_label)
+         phase_currentDensity(p) = CURRENTDENSITY_none_ID
+       case (CURRENTDENSITY_ohm_label)
+         phase_currentDensity(p) = CURRENTDENSITY_ohm_ID
+       case default
+         call IO_error(201_pInt,ext_msg=trim(config_phase(p)%getString('currentdensity')))
+     end select
+   endif
+
  enddo
 
  allocate(phase_source(maxval(phase_Nsources),size(config_phase)), source=SOURCE_undefined_ID)
@@ -806,16 +837,18 @@ subroutine material_parsePhase
    enddo
  enddo
 
- allocate(phase_plasticityInstance(size(config_phase)),   source=0_pInt)
- allocate(phase_elasticityInstance(size(config_phase)),   source=0_pInt)
- allocate(phase_chemicalFEInstance(size(config_phase)),   source=0_pInt)
- allocate(phase_heatfluxInstance  (size(config_phase)),   source=0_pInt)
+ allocate(phase_elasticityInstance    (size(config_phase)), source=0_pInt)
+ allocate(phase_plasticityInstance    (size(config_phase)), source=0_pInt)
+ allocate(phase_chemicalFEInstance    (size(config_phase)), source=0_pInt)
+ allocate(phase_heatfluxInstance      (size(config_phase)), source=0_pInt)
+ allocate(phase_currentDensityInstance(size(config_phase)), source=0_pInt) 
 
  do p=1_pInt, size(config_phase)
-   phase_elasticityInstance(p)  = count(phase_elasticity(1:p)  == phase_elasticity(p))
-   phase_plasticityInstance(p)  = count(phase_plasticity(1:p)  == phase_plasticity(p))
-   phase_chemicalFEInstance(p)  = count(phase_chemicalFE(1:p)  == phase_chemicalFE(p))
-   phase_heatfluxInstance  (p)  = count(phase_heatflux  (1:p)  == phase_heatflux  (p))
+   phase_elasticityInstance    (p) = count(phase_elasticity    (1:p) == phase_elasticity    (p))
+   phase_plasticityInstance    (p) = count(phase_plasticity    (1:p) == phase_plasticity    (p))
+   phase_chemicalFEInstance    (p) = count(phase_chemicalFE    (1:p) == phase_chemicalFE    (p))
+   phase_heatfluxInstance      (p) = count(phase_heatflux      (1:p) == phase_heatflux      (p))
+   phase_currentDensityInstance(p) = count(phase_currentDensity(1:p) == phase_currentDensity(p))
  enddo
  
  phase_maxNcomponents = maxval(phase_Ncomponents)

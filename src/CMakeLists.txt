@@ -99,6 +99,12 @@ add_library (HEATFLUX OBJECT
 add_dependencies(HEATFLUX DAMASK_HELPERS)
 list(APPEND OBJECTFILES $<TARGET_OBJECTS:HEATFLUX>)
 
+add_library (CURRENTDENSITY OBJECT
+  "currentDensity_none.f90"
+  "currentDensity_ohm.f90")
+add_dependencies(CURRENTDENSITY DAMASK_HELPERS)
+list(APPEND OBJECTFILES $<TARGET_OBJECTS:CURRENTDENSITY>)
+
 add_library (KINEMATICS OBJECT
   "kinematics_cleavage_opening.f90"
   "kinematics_slipplane_opening.f90"
@@ -114,7 +120,7 @@ add_library (SOURCE OBJECT
   "source_plastic_energy.f90"
   "source_chemical_energy.f90"
   "source_stochastic_phase_nucleation.f90")
-add_dependencies(SOURCE PLASTIC CHEMICAL HEATFLUX KINEMATICS)
+add_dependencies(SOURCE PLASTIC CHEMICAL HEATFLUX CURRENTDENSITY KINEMATICS)
 list(APPEND OBJECTFILES $<TARGET_OBJECTS:SOURCE>)
 
 add_library(CONSTITUTIVE OBJECT "constitutive.f90")

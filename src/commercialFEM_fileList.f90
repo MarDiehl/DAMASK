@@ -26,6 +26,8 @@
 #include "chemicalFE_none.f90"
 #include "chemicalFE_quadenergy.f90"
 #include "chemicalFE_thermodynamic.f90"
+#include "currentDensity_none.f90"
+#include "currentDensity_ohm.f90"
 #include "heatflux_isothermalnone.f90"
 #include "heatflux_adiabaticnone.f90"
 #include "heatflux_joule.f90"

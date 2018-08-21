@@ -14,6 +14,8 @@ module constitutive
    constitutive_plasticity_maxSizeDotState, &
    constitutive_chemicalFE_maxSizePostResults, &
    constitutive_chemicalFE_maxSizeDotState, &
+   constitutive_currentDensity_maxSizeDotState, &
+   constitutive_currentDensity_maxSizePostResults, &
    constitutive_heatflux_maxSizePostResults, &
    constitutive_heatflux_maxSizeDotState, &
    constitutive_source_maxSizePostResults, &
@@ -76,6 +78,8 @@ subroutine constitutive_init()
    phase_plasticityInstance, &
    phase_chemicalFE, &
    phase_chemicalFEInstance, &
+   phase_currentDensity, &
+   phase_currentDensityInstance, &
    phase_heatflux, &
    phase_heatfluxInstance, &
    phase_Nsources, &
@@ -92,6 +96,8 @@ subroutine constitutive_init()
    CHEMICALFE_none_ID, &
    CHEMICALFE_quadenergy_ID, &
    CHEMICALFE_thermodynamic_ID, &
+   CURRENTDENSITY_none_ID, &
+   CURRENTDENSITY_ohm_ID, &
    HEATFLUX_isothermalnone_ID, &
    HEATFLUX_adiabaticnone_ID, &
    HEATFLUX_joule_ID, &
@@ -115,6 +121,8 @@ subroutine constitutive_init()
    CHEMICALFE_none_label, &
    CHEMICALFE_quadenergy_label, &
    CHEMICALFE_thermodynamic_label, &
+   CURRENTDENSITY_none_label, &
+   CURRENTDENSITY_ohm_label, &
    HEATFLUX_isothermalnone_label, &
    HEATFLUX_adiabaticnone_label, &
    HEATFLUX_joule_label, &
@@ -125,6 +133,7 @@ subroutine constitutive_init()
    SOURCE_chemical_energy_label, &
    plasticState, &
    chemicalState, &
+   currentDensityState, &
    heatfluxState, &
    sourceState
 
@@ -138,6 +147,8 @@ subroutine constitutive_init()
  use chemicalFE_none
  use chemicalFE_quadenergy
  use chemicalFE_thermodynamic
+ use currentDensity_none
+ use currentDensity_ohm 
  use heatflux_isothermalnone
  use heatflux_adiabaticnone
  use heatflux_joule
@@ -162,7 +173,7 @@ subroutine constitutive_init()
  integer(pInt), dimension(:,:), pointer :: thisSize
  character(len=64), dimension(:,:), pointer :: thisOutput
  character(len=32) :: outputName                                                                    !< name of output, intermediate fix until HDF5 output is ready
- logical :: knownPlasticity, knownchemicalFE, knownheatflux, knownSource, &
+ logical :: knownPlasticity, knownchemicalFE, knowncurrentDensity, knownheatflux, knownSource, &
             nonlocalConstitutionPresent = .false.
 
 !--------------------------------------------------------------------------------------------------
@@ -189,6 +200,12 @@ subroutine constitutive_init()
  if (any(phase_chemicalFE == CHEMICALFE_none_ID))          call chemicalFE_none_init
  if (any(phase_chemicalFE == CHEMICALFE_quadenergy_ID))    call chemicalFE_quadenergy_init(FILEUNIT)
  if (any(phase_chemicalFE == CHEMICALFE_thermodynamic_ID)) call chemicalFE_thermodynamic_init(FILEUNIT)
+ 
+!--------------------------------------------------------------------------------------------------
+! parse current dendity models from config file
+ call IO_checkAndRewind(FILEUNIT) 
+ if (any(phase_currentDensity == CURRENTDENSITY_none_ID))  call currentDensity_none_init
+ if (any(phase_currentDensity == CURRENTDENSITY_ohm_ID))   call currentDensity_ohm_init(FILEUNIT)
 
 !--------------------------------------------------------------------------------------------------
 ! parse heat flux models from config file
@@ -298,6 +315,29 @@ subroutine constitutive_init()
            enddo OutputChemicalFELoop
          endif
        endif
+       ins = phase_currentDensityInstance(ph)
+       knowncurrentDensity = .true.                                                                     ! assume valid
+       currentDensityType: select case(phase_currentDensity(ph))
+         case (CURRENTDENSITY_none_ID) currentDensityType
+           outputName = CURRENTDENSITY_none_label
+           thisOutput => null()
+           thisSize   => null()
+         case (CURRENTDENSITY_ohm_ID) currentDensityType
+           outputName = CURRENTDENSITY_ohm_label
+           thisOutput => currentDensity_ohm_output
+           thisSize   => currentDensity_ohm_sizePostResult
+         case default currentDensityType
+           knowncurrentDensity = .false.
+       end select currentDensityType
+       if (knowncurrentDensity) then
+         write(FILEUNIT,'(a)') '(currentdensity)'//char(9)//trim(outputName)
+         if (phase_currentDensity(ph) /= CURRENTDENSITY_none_ID) then
+           OutputCurrentDensityLoop: do o = 1_pInt,size(thisOutput(:,ins))
+             if(len(trim(thisOutput(o,ins))) > 0_pInt) &
+               write(FILEUNIT,'(a,i4)') trim(thisOutput(o,ins))//char(9),thisSize(o,ins)
+           enddo OutputCurrentDensityLoop
+         endif
+       endif
        ins = phase_heatfluxInstance(ph)
        knownheatflux = .true.                                                                     ! assume valid
        heatfluxType: select case(phase_heatflux(ph))
@@ -399,6 +439,8 @@ subroutine constitutive_init()
                                                     chemicalState(ph)%sizeDotState)
    constitutive_chemicalFE_maxSizePostResults = max(constitutive_chemicalFE_maxSizePostResults, &
                                                     chemicalState(ph)%sizePostResults)
+   constitutive_currentDensity_maxSizePostResults = max(constitutive_currentDensity_maxSizePostResults, &
+                                                        currentDensityState(ph)%sizePostResults)                                                    
    constitutive_heatflux_maxSizeDotState      = max(constitutive_heatflux_maxSizeDotState,    &
                                                     heatfluxState(ph)%sizeDotState)
    constitutive_heatflux_maxSizePostResults   = max(constitutive_heatflux_maxSizePostResults, &
@@ -1031,10 +1073,12 @@ function constitutive_postResults(Tstar_v, FeArray, ipc, ip, el)
  use material, only: &
    plasticState, &
    chemicalState, &
+   currentDensityState, &
    heatfluxState, &
    sourceState, &
    phase_plasticity, &
    phase_chemicalFE, &
+   phase_currentDensity, &
    phase_heatflux, &
    phase_source, &
    phase_Nsources, &
@@ -1051,6 +1095,7 @@ function constitutive_postResults(Tstar_v, FeArray, ipc, ip, el)
    PLASTICITY_NONLOCAL_ID, &
    CHEMICALFE_quadenergy_ID, &
    CHEMICALFE_thermodynamic_ID, &
+   CURRENTDENSITY_ohm_ID, &  
    HEATFLUX_isothermalnone_ID, &
    HEATFLUX_adiabaticnone_ID, &
    HEATFLUX_joule_ID
@@ -1070,6 +1115,8 @@ function constitutive_postResults(Tstar_v, FeArray, ipc, ip, el)
    chemicalFE_quadenergy_postResults  
  use chemicalFE_thermodynamic, only: &
    chemicalFE_thermodynamic_postResults  
+ use currentDensity_ohm, only: &
+    currentDensity_ohm_postResults  
  use heatflux_isothermalnone, only: &
    heatflux_isothermalnone_postResults  
  use heatflux_adiabaticnone, only: &
@@ -1085,6 +1132,7 @@ function constitutive_postResults(Tstar_v, FeArray, ipc, ip, el)
  real(pReal), dimension(plasticState (material_phase(ipc,ip,el))%sizePostResults + &
                         chemicalState(material_phase(ipc,ip,el))%sizePostResults + &
                         heatfluxState(material_phase(ipc,ip,el))%sizePostResults + &
+                        currentDensityState(material_phase(ipc,ip,el))%sizePostResults + &
                         sum(sourceState(material_phase(ipc,ip,el))%p(:)%sizePostResults)) :: &
    constitutive_postResults
  real(pReal),  intent(in), dimension(3,3,homogenization_maxNgrains,mesh_maxNips,mesh_NcpElems) :: &
@@ -1135,6 +1183,15 @@ function constitutive_postResults(Tstar_v, FeArray, ipc, ip, el)
      constitutive_postResults(startPos:endPos) = &
        chemicalFE_thermodynamic_postResults(ipc,ip,el)
  end select chemicalFEType
+ 
+ startPos = endPos + 1_pInt
+ endPos = endPos + currentDensityState(material_phase(ipc,ip,el))%sizePostResults
+ 
+ currentDensityType: select case (phase_currentDensity(material_phase(ipc,ip,el)))
+   case (CURRENTDENSITY_ohm_ID)  currentDensityType
+     constitutive_postResults(startPos:endPos) = &
+       currentDensity_ohm_postResults(ipc,ip,el)
+ end select currentDensityType
 
  startPos = endPos + 1_pInt
  endPos = endPos + heatfluxState(material_phase(ipc,ip,el))%sizePostResults
