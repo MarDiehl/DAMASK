@@ -630,7 +630,7 @@ subroutine constitutive_LpAndItsTangent(Lp, dLp_dTstar3333, dLp_dFi3333, Tstar_v
    case (PLASTICITY_ISOTROPIC_ID) plasticityType
      call plastic_isotropic_LpAndItsTangent       (Lp,dLp_dMstar,Mstar_v,ipc,ip,el)
    case (PLASTICITY_PHENOPOWERLAW_ID) plasticityType
-     call plastic_phenopowerlaw_LpAndItsTangent   (Lp,dLp_dMstar,Mstar_v,ipc,ip,el)
+     call plastic_phenopowerlaw_LpAndItsTangent   (Lp,dLp_dMstar,Mstar_v,temperature(material_phase(ipc,ip,el))%p(tme),ipc,ip,el)
    case (PLASTICITY_KINEHARDENING_ID) plasticityType
      call plastic_kinehardening_LpAndItsTangent   (Lp,dLp_dMstar,Mstar_v,ipc,ip,el)  
    case (PLASTICITY_NONLOCAL_ID) plasticityType
@@ -981,7 +981,7 @@ subroutine constitutive_collectDotState(Tstar_v, Lp, FeArray, FpArray, subdt, su
    case (PLASTICITY_ISOTROPIC_ID) plasticityType
      call plastic_isotropic_dotState    (Tstar_v,ipc,ip,el)
    case (PLASTICITY_PHENOPOWERLAW_ID) plasticityType
-     call plastic_phenopowerlaw_dotState(Tstar_v,ipc,ip,el)
+     call plastic_phenopowerlaw_dotState(Tstar_v,temperature(material_phase(ipc,ip,el))%p(tme),ipc,ip,el)
    case (PLASTICITY_KINEHARDENING_ID) plasticityType
      call plastic_kinehardening_dotState(Tstar_v,ipc,ip,el)
    case (PLASTICITY_DISLOTWIN_ID) plasticityType
@@ -1166,7 +1166,7 @@ function constitutive_postResults(Tstar_v, FeArray, ipc, ip, el)
      constitutive_postResults(startPos:endPos) = plastic_isotropic_postResults(Tstar_v,ipc,ip,el)
    case (PLASTICITY_PHENOPOWERLAW_ID) plasticityType
      constitutive_postResults(startPos:endPos) = &
-       plastic_phenopowerlaw_postResults(Tstar_v,ipc,ip,el)
+       plastic_phenopowerlaw_postResults(Tstar_v,temperature(material_phase(ipc,ip,el))%p(tme),ipc,ip,el)
    case (PLASTICITY_KINEHARDENING_ID) plasticityType
      constitutive_postResults(startPos:endPos) = &
        plastic_kinehardening_postResults(Tstar_v,ipc,ip,el)    

@@ -52,7 +52,9 @@ module plastic_phenopowerlaw
      a_slip, &
      aTolResistance, &                                                                              ! default absolute tolerance 1 Pa
      aTolShear, &                                                                                   ! default absolute tolerance 1e-6
-     aTolTwinfrac                                                                                   ! default absolute tolerance 1e-6
+     aTolTwinfrac, &                                                                                ! default absolute tolerance 1e-6
+     refTemp, &
+     tempExp
    integer(pInt), dimension(:),   allocatable :: &
      Nslip, &                                                                                       !< active number of slip systems per family
      Ntwin                                                                                          !< active number of twin systems per family
@@ -233,6 +235,8 @@ subroutine plastic_phenopowerlaw_init
    prm%aTolResistance = config_phase(p)%getFloat('atol_resistance',defaultVal=1.0_pReal)
    prm%aTolShear      = config_phase(p)%getFloat('atol_shear',defaultVal=1.0e-6_pReal)
    prm%aTolTwinfrac   = config_phase(p)%getFloat('atol_twinfrac',defaultVal=1.0e-6_pReal)
+   prm%refTemp        = config_phase(p)%getFloat('plastic_reftemp',defaultVal=300.0_pReal) 
+   prm%tempExp        = config_phase(p)%getFloat('plastic_tempexp',defaultVal=0.0_pReal) 
 
    outputs = config_phase(p)%getStrings('(output)',defaultVal=emptyStringArray)
    allocate(prm%outputID(0))
@@ -467,7 +471,7 @@ end subroutine plastic_phenopowerlaw_init
 !--------------------------------------------------------------------------------------------------
 !> @brief calculates plastic velocity gradient and its tangent
 !--------------------------------------------------------------------------------------------------
-subroutine plastic_phenopowerlaw_LpAndItsTangent(Lp,dLp_dTstar99,Tstar_v,ipc,ip,el)
+subroutine plastic_phenopowerlaw_LpAndItsTangent(Lp,dLp_dTstar99,Tstar_v,Temperature,ipc,ip,el)
  use prec, only: &
    dNeq0
  use math, only: &
@@ -497,7 +501,9 @@ subroutine plastic_phenopowerlaw_LpAndItsTangent(Lp,dLp_dTstar99,Tstar_v,ipc,ip,
    el                                                                                               !< element
  real(pReal), dimension(6),   intent(in) :: &
    Tstar_v                                                                                          !< 2nd Piola Kirchhoff stress tensor in Mandel notation
-
+ real(pReal),                 intent(in) :: &
+   Temperature                              
+   
  integer(pInt) :: &
    index_myFamily, &
    f,i,j,k,l,m,n, &
@@ -507,7 +513,8 @@ subroutine plastic_phenopowerlaw_LpAndItsTangent(Lp,dLp_dTstar99,Tstar_v,ipc,ip,
    tau_slip_pos,tau_slip_neg, &
    gdot_slip_pos,gdot_slip_neg, &
    dgdot_dtauslip_pos,dgdot_dtauslip_neg, &
-   gdot_twin,dgdot_dtautwin,tau_twin
+   gdot_twin,dgdot_dtautwin,tau_twin, &
+   tempFactor
  real(pReal), dimension(3,3,3,3) :: &
    dLp_dTstar3333                                                                                   !< derivative of Lp with respect to Tstar as 4th order tensor
  real(pReal), dimension(3,3,2) :: &
@@ -519,6 +526,8 @@ subroutine plastic_phenopowerlaw_LpAndItsTangent(Lp,dLp_dTstar99,Tstar_v,ipc,ip,
  ph = material_phase(ipc,ip,el)
 
  associate(prm => param(phase_plasticityInstance(ph)), stt => state(phase_plasticityInstance(ph)))
+ 
+ tempFactor = (Temperature/prm%refTemp)**(-prm%tempExp)
 
  Lp = 0.0_pReal
  dLp_dTstar3333 = 0.0_pReal
@@ -548,10 +557,10 @@ subroutine plastic_phenopowerlaw_LpAndItsTangent(Lp,dLp_dTstar99,Tstar_v,ipc,ip,
                                            lattice_Sslip(1:3,1:3,2*k+1,index_myFamily+i,ph)
      enddo
      gdot_slip_pos = 0.5_pReal*prm%gdot0_slip* &
-                    ((abs(tau_slip_pos)/(stt%s_slip(j,of)))**prm%n_slip)*sign(1.0_pReal,tau_slip_pos)
+                    ((abs(tau_slip_pos)/(stt%s_slip(j,of)*tempFactor))**prm%n_slip)*sign(1.0_pReal,tau_slip_pos)
 
      gdot_slip_neg = 0.5_pReal*prm%gdot0_slip* &
-                    ((abs(tau_slip_neg)/(stt%s_slip(j,of)))**prm%n_slip)*sign(1.0_pReal,tau_slip_neg)
+                    ((abs(tau_slip_neg)/(stt%s_slip(j,of)*tempFactor))**prm%n_slip)*sign(1.0_pReal,tau_slip_neg)
 
      Lp = Lp + (1.0_pReal-stt%sumF(of))*& 
                (gdot_slip_pos+gdot_slip_neg)*lattice_Sslip(1:3,1:3,1,index_myFamily+i,ph)
@@ -586,7 +595,7 @@ subroutine plastic_phenopowerlaw_LpAndItsTangent(Lp,dLp_dTstar99,Tstar_v,ipc,ip,
      ! Calculation of Lp
      tau_twin  = dot_product(Tstar_v,lattice_Stwin_v(1:6,index_myFamily+i,ph))
      gdot_twin = (1.0_pReal-stt%sumF(of))*prm%gdot0_twin*&
-                    (abs(tau_twin)/stt%s_twin(j,of))**&
+                    (abs(tau_twin)/(stt%s_twin(j,of)*tempFactor))**&
                     prm%n_twin*max(0.0_pReal,sign(1.0_pReal,tau_twin))
      Lp = Lp + gdot_twin*lattice_Stwin(1:3,1:3,index_myFamily+i,ph)
 
@@ -610,7 +619,7 @@ end subroutine plastic_phenopowerlaw_LpAndItsTangent
 !--------------------------------------------------------------------------------------------------
 !> @brief calculates the rate of change of microstructure
 !--------------------------------------------------------------------------------------------------
-subroutine plastic_phenopowerlaw_dotState(Tstar_v,ipc,ip,el)
+subroutine plastic_phenopowerlaw_dotState(Tstar_v,Temperature,ipc,ip,el)
  use lattice, only: &
    lattice_Sslip_v, &
    lattice_Stwin_v, &
@@ -623,8 +632,11 @@ subroutine plastic_phenopowerlaw_dotState(Tstar_v,ipc,ip,el)
    phase_plasticityInstance
 
  implicit none
- real(pReal), dimension(6),  intent(in) :: &
-   Tstar_v                                                                                          !< 2nd Piola Kirchhoff stress tensor in Mandel notation
+ real(pReal), dimension(6),  intent(in) :: & 
+   Tstar_v                                                                                          !< 2nd Piola Kirchhoff stress tensor in Mandel notation    
+real(pReal),                 intent(in) :: &
+   Temperature                                                                                             
+                                                                                  
  integer(pInt),              intent(in) :: &
    ipc, &                                                                                           !< component-ID of integration point
    ip, &                                                                                            !< integration point
@@ -638,7 +650,8 @@ subroutine plastic_phenopowerlaw_dotState(Tstar_v,ipc,ip,el)
  real(pReal) :: &
    c_SlipSlip,c_TwinSlip,c_TwinTwin, &
    ssat_offset, &
-   tau_slip_pos,tau_slip_neg,tau_twin
+   tau_slip_pos,tau_slip_neg,tau_twin, &
+   tempFactor
 
  real(pReal), dimension(param(phase_plasticityInstance(material_phase(ipc,ip,el)))%totalNslip) :: &
    gdot_slip,left_SlipSlip,right_SlipSlip
@@ -653,7 +666,9 @@ subroutine plastic_phenopowerlaw_dotState(Tstar_v,ipc,ip,el)
  associate( prm => param(phase_plasticityInstance(ph)), &
             stt => state(phase_plasticityInstance(ph)), &
             dst => dotState(phase_plasticityInstance(ph)))
-
+        
+ tempFactor = (Temperature/prm%refTemp)**(-prm%tempExp)
+  
  dst%whole(:,of) = 0.0_pReal
 
 !--------------------------------------------------------------------------------------------------
@@ -685,8 +700,8 @@ subroutine plastic_phenopowerlaw_dotState(Tstar_v,ipc,ip,el)
                                    dot_product(Tstar_v,lattice_Sslip_v(1:6,2*k+1,index_myFamily+i,ph))
      enddo nonSchmidSystems
      gdot_slip(j) = prm%gdot0_slip*0.5_pReal* &
-                  ( (abs(tau_slip_pos)/(stt%s_slip(j,of)))**prm%n_slip*sign(1.0_pReal,tau_slip_pos) &
-                   +(abs(tau_slip_neg)/(stt%s_slip(j,of)))**prm%n_slip*sign(1.0_pReal,tau_slip_neg))
+                  ( (abs(tau_slip_pos)/(stt%s_slip(j,of)*tempFactor))**prm%n_slip*sign(1.0_pReal,tau_slip_pos) &
+                   +(abs(tau_slip_neg)/(stt%s_slip(j,of)*tempFactor))**prm%n_slip*sign(1.0_pReal,tau_slip_neg))
    enddo slipSystems1
  enddo slipFamilies1
 
@@ -701,7 +716,7 @@ subroutine plastic_phenopowerlaw_dotState(Tstar_v,ipc,ip,el)
      tau_twin  = dot_product(Tstar_v,lattice_Stwin_v(1:6,index_myFamily+i,ph))
      gdot_twin(j) = (1.0_pReal-stt%sumF(of))*&                                       ! 1-F
                     prm%gdot0_twin*&
-                    (abs(tau_twin)/stt%s_twin(j,of))**&
+                    (abs(tau_twin)/(stt%s_twin(j,of)*tempFactor))**&
                     prm%n_twin*max(0.0_pReal,sign(1.0_pReal,tau_twin))
     enddo twinSystems1
   enddo twinFamilies1
@@ -736,7 +751,7 @@ end subroutine plastic_phenopowerlaw_dotState
 !--------------------------------------------------------------------------------------------------
 !> @brief return array of constitutive results
 !--------------------------------------------------------------------------------------------------
-function plastic_phenopowerlaw_postResults(Tstar_v,ipc,ip,el)
+function plastic_phenopowerlaw_postResults(Tstar_v,Temperature,ipc,ip,el)
  use material, only: &
    material_phase, &
    plasticState, &
@@ -752,6 +767,9 @@ function plastic_phenopowerlaw_postResults(Tstar_v,ipc,ip,el)
  implicit none
  real(pReal), dimension(6), intent(in) :: &
    Tstar_v                                                                                          !< 2nd Piola Kirchhoff stress tensor in Mandel notation
+ real(pReal),                 intent(in) :: &
+   Temperature                  
+   
  integer(pInt),             intent(in) :: &
    ipc, &                                                                                           !< component-ID of integration point
    ip, &                                                                                            !< integration point
@@ -765,7 +783,8 @@ function plastic_phenopowerlaw_postResults(Tstar_v,ipc,ip,el)
    o,f,i,c,j,k, &
    index_myFamily
  real(pReal) :: &
-   tau_slip_pos,tau_slip_neg,tau
+   tau_slip_pos,tau_slip_neg,tau, &
+   tempFactor
 
  type(tParameters)          :: prm
  type(tPhenopowerlawState)  :: stt, dst
@@ -776,7 +795,9 @@ function plastic_phenopowerlaw_postResults(Tstar_v,ipc,ip,el)
  associate( prm => param(phase_plasticityInstance(ph)), &
             stt => state(phase_plasticityInstance(ph)), &
             dst => dotState(phase_plasticityInstance(ph)))
-
+            
+ tempFactor = (Temperature/prm%refTemp)**(-prm%tempExp)
+  
  plastic_phenopowerlaw_postResults = 0.0_pReal
  c = 0_pInt
 
@@ -805,9 +826,9 @@ function plastic_phenopowerlaw_postResults(Tstar_v,ipc,ip,el)
                                    dot_product(Tstar_v,lattice_Sslip_v(1:6,2*k+1,index_myFamily+i,ph))
            enddo
            plastic_phenopowerlaw_postResults(c+j) = prm%gdot0_slip*0.5_pReal* &
-                    ((abs(tau_slip_pos)/stt%s_slip(j,of))**prm%n_slip &
+                    ((abs(tau_slip_pos)/(stt%s_slip(j,of)*tempFactor))**prm%n_slip &
                     *sign(1.0_pReal,tau_slip_pos) &
-                    +(abs(tau_slip_neg)/(stt%s_slip(j,of)))**prm%n_slip &
+                    +(abs(tau_slip_neg)/(stt%s_slip(j,of)*tempFactor))**prm%n_slip &
                     *sign(1.0_pReal,tau_slip_neg))
          enddo slipSystems1
        enddo slipFamilies1
@@ -848,7 +869,7 @@ function plastic_phenopowerlaw_postResults(Tstar_v,ipc,ip,el)
            tau = dot_product(Tstar_v,lattice_Stwin_v(1:6,index_myFamily+i,ph))
            plastic_phenopowerlaw_postResults(c+j) = (1.0_pReal-stt%sumF(of))*&  ! 1-F
                                                          prm%gdot0_twin*&
-                                                         (abs(tau)/stt%s_twin(j,of))**&
+                                                         (abs(tau)/(stt%s_twin(j,of)*tempFactor))**&
                                            prm%n_twin*max(0.0_pReal,sign(1.0_pReal,tau))
          enddo twinSystems1
        enddo twinFamilies1
