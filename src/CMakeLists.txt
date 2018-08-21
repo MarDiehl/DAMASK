@@ -152,8 +152,14 @@ add_library(SOLUTE OBJECT
 add_dependencies(SOLUTE CRYSTALLITE)
 list(APPEND OBJECTFILES $<TARGET_OBJECTS:SOLUTE>)
 
+add_library(ELECTRICAL OBJECT
+  "electrical_none.f90"
+  "electrical_conduction.f90")
+add_dependencies(ELECTRICAL CRYSTALLITE)
+list(APPEND OBJECTFILES $<TARGET_OBJECTS:ELECTRICAL>)
+
 add_library(DAMASK_ENGINE OBJECT "homogenization.f90")
-add_dependencies(DAMASK_ENGINE THERMAL SOLUTE HOMOGENIZATION)
+add_dependencies(DAMASK_ENGINE THERMAL SOLUTE ELECTRICAL HOMOGENIZATION)
 list(APPEND OBJECTFILES $<TARGET_OBJECTS:DAMASK_ENGINE>)
 
 add_library(DAMASK_CPFE OBJECT "CPFEM2.f90")
@@ -171,7 +177,8 @@ if (PROJECT_NAME STREQUAL "DAMASK_spectral")
       "spectral_solute.f90"
       "spectral_mech_Polarisation.f90"
       "spectral_mech_Basic.f90"
-      "spectral_mech_FEM.f90")
+      "spectral_mech_FEM.f90"
+      "spectral_electrical.f90")
       add_dependencies(SPECTRAL_SOLVER SPECTRAL_UTILITIES)
       list(APPEND OBJECTFILES $<TARGET_OBJECTS:SPECTRAL_SOLVER>)
       if(NOT CMAKE_BUILD_TYPE STREQUAL "SYNTAXONLY")

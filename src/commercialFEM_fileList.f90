@@ -48,5 +48,7 @@
 #include "thermal_conduction.f90"
 #include "solute_isoconc.f90"
 #include "solute_flux.f90"
+#include "electrical_none.f90"
+#include "electrical_conduction.f90"
 #include "homogenization.f90"
 #include "CPFEM.f90"

@@ -36,7 +36,8 @@ module homogenization
    materialpoint_sizeResults, &
    homogenization_maxSizePostResults, &
    thermal_maxSizePostResults, &
-   solute_maxSizePostResults
+   solute_maxSizePostResults, &
+   electrical_maxSizePostResults
 
  real(pReal),   dimension(:,:,:,:),     allocatable, private :: &
    materialpoint_subF0, &                                                                           !< def grad of IP at beginning of homogenization increment
@@ -115,6 +116,8 @@ subroutine homogenization_init
  use thermal_conduction
  use solute_isoconc
  use solute_flux
+ use electrical_none
+ use electrical_conduction
  use IO
  use numerics, only: &
    worldrank
@@ -159,6 +162,14 @@ subroutine homogenization_init
    call solute_isoconc_init(FILEUNIT)
  if (any(solute_type == SOLUTE_flux_ID)) &
    call solute_flux_init
+
+!--------------------------------------------------------------------------------------------------
+! parse electrical from config file
+ call IO_checkAndRewind(FILEUNIT)
+ if (any(electrical_type == ELECTRICAL_none_ID)) &
+   call electrical_none_init
+ if (any(electrical_type == ELECTRICAL_conduction_ID)) &
+   call electrical_conduction_init(FILEUNIT)
 
 !--------------------------------------------------------------------------------------------------
 ! write description file for homogenization output
@@ -241,6 +252,27 @@ subroutine homogenization_init
              write(FILEUNIT,'(a,i4)') trim(thisOutput(e,i))//char(9),thisSize(e,i)
          enddo
        endif
+       i = electrical_typeInstance(p)                                                                   ! which instance of this solute type
+       valid = .true.                                                                               ! assume valid
+       select case(electrical_type(p))                                                                  ! split per solute type
+         case (ELECTRICAL_none_ID)
+           outputName = ELECTRICAL_none_label
+           thisOutput => ELECTRICAL_none_output
+           thisSize   => ELECTRICAL_none_sizePostResult
+         case (ELECTRICAL_conduction_ID)
+           outputName = ELECTRICAL_conduction_label
+           thisOutput => ELECTRICAL_conduction_output
+           thisSize   => ELECTRICAL_conduction_sizePostResult
+         case default
+           valid = .false.
+       end select
+       if (valid) then
+         write(FILEUNIT,'(a)') '(electrical)'//char(9)//trim(outputName)
+         do e = 1,size(thisOutput(:,i))
+           if(len(trim(thisOutput(e,i))) > 0_pInt) &
+             write(FILEUNIT,'(a,i4)') trim(thisOutput(e,i))//char(9),thisSize(e,i)
+         enddo
+       endif
      endif
    enddo
    close(FILEUNIT)
@@ -270,10 +302,12 @@ subroutine homogenization_init
  homogenization_maxSizePostResults = 0_pInt
  thermal_maxSizePostResults        = 0_pInt
  solute_maxSizePostResults         = 0_pInt
+ electrical_maxSizePostResults     = 0_pInt 
  do p = 1,size(config_homogenization)
    homogenization_maxSizePostResults = max(homogenization_maxSizePostResults,homogState  (p)%sizePostResults)
    thermal_maxSizePostResults        = max(thermal_maxSizePostResults,       thermalState(p)%sizePostResults)
    solute_maxSizePostResults         = max(solute_maxSizePostResults,        soluteState (p)%sizePostResults)
+   electrical_maxSizePostResults     = max(electrical_maxSizePostResults,    electricalState(p)%sizePostResults)
  enddo
 
 #ifdef FEM
@@ -281,9 +315,10 @@ subroutine homogenization_init
  allocate(crystalliteOutput(material_Ncrystallite,  homogenization_maxNgrains))
  allocate(phaseOutput      (material_Nphase,        homogenization_maxNgrains))
  do p = 1, material_Nhomogenization
-   homogOutput(p)%sizeResults = homogState  (p)%sizePostResults + &
-                                thermalState(p)%sizePostResults + &
-                                soluteState (p)%sizePostResults
+   homogOutput(p)%sizeResults = homogState     (p)%sizePostResults + &
+                                thermalState   (p)%sizePostResults + &
+                                soluteState    (p)%sizePostResults + &
+                                electricalState(p)%sizePostResult
    homogOutput(p)%sizeIpCells = count(material_homog==p)
    allocate(homogOutput(p)%output(homogOutput(p)%sizeResults,homogOutput(p)%sizeIpCells))
  enddo
@@ -307,6 +342,7 @@ subroutine homogenization_init
                            + 1 + homogenization_maxSizePostResults &                                ! homogSize & homogResult
                                + thermal_maxSizePostResults        &
                                + solute_maxSizePostResults         &
+                               + electrical_maxSizePostResults     &
                            + homogenization_maxNgrains * (1 + crystallite_maxSizePostResults &      ! crystallite size & crystallite results
                                                         + 1 + constitutive_plasticity_maxSizePostResults &     ! constitutive size & constitutive results
                                                             + constitutive_chemicalFE_maxSizePostResults &
@@ -761,6 +797,7 @@ subroutine materialpoint_postResults
    homogState, &
    thermalState, &
    soluteState, &
+   electricalState, &
 #endif
    plasticState, &
    chemicalState, &
@@ -854,9 +891,10 @@ subroutine materialpoint_postResults
      IpLooping: do i = FEsolving_execIP(1,e),FEsolving_execIP(2,e)
        thePos = 0_pInt
 
-       theSize = homogState  (mappingHomogenization(2,i,e))%sizePostResults &
-               + thermalState(mappingHomogenization(2,i,e))%sizePostResults &
-               + soluteState (mappingHomogenization(2,i,e))%sizePostResults 
+       theSize = homogState     (mappingHomogenization(2,i,e))%sizePostResults &
+               + thermalState   (mappingHomogenization(2,i,e))%sizePostResults &
+               + soluteState    (mappingHomogenization(2,i,e))%sizePostResults &
+               + electricalState(mappingHomogenization(2,i,e))%sizePostResults  
        materialpoint_results(thePos+1,i,e) = real(theSize,pReal)                                    ! tell size of homogenization results
        thePos = thePos + 1_pInt
 
@@ -1091,9 +1129,11 @@ function homogenization_postResults(ip,el)
    homogState, &
    thermalState, &
    soluteState, &
+   electricalState, &
    homogenization_type, &
    thermal_type, &
    solute_type, &
+   electrical_type, &
    HOMOGENIZATION_NONE_ID, &
    HOMOGENIZATION_ISOSTRAIN_ID, &
    HOMOGENIZATION_MULTIPHASE_ID, &
@@ -1101,7 +1141,9 @@ function homogenization_postResults(ip,el)
    THERMAL_local_ID, &
    THERMAL_conduction_ID, &
    SOLUTE_isoconc_ID, &
-   SOLUTE_flux_ID
+   SOLUTE_flux_ID, &
+   ELECTRICAL_none_ID, &
+   ELECTRICAL_conduction_ID
  use homogenization_isostrain, only: &
    homogenization_isostrain_postResults
  use homogenization_multiphase, only: &
@@ -1116,14 +1158,17 @@ function homogenization_postResults(ip,el)
    solute_isoconc_postResults
  use solute_flux, only: &
    solute_flux_postResults
+ use electrical_conduction, only: &
+   electrical_conduction_postResults  
 
  implicit none
  integer(pInt), intent(in) :: &
    ip, &                                                                                            !< integration point
    el                                                                                               !< element number
- real(pReal), dimension(  homogState  (mappingHomogenization(2,ip,el))%sizePostResults &
-                        + thermalState(mappingHomogenization(2,ip,el))%sizePostResults &
-                        + soluteState (mappingHomogenization(2,ip,el))%sizePostResults) :: &
+ real(pReal), dimension(  homogState     (mappingHomogenization(2,ip,el))%sizePostResults &
+                        + thermalState   (mappingHomogenization(2,ip,el))%sizePostResults &
+                        + soluteState    (mappingHomogenization(2,ip,el))%sizePostResults &
+                        + electricalState(mappingHomogenization(2,ip,el))%sizePostResults) :: &
    homogenization_postResults
  integer(pInt) :: &
    startPos, endPos
@@ -1181,6 +1226,14 @@ function homogenization_postResults(ip,el)
      homogenization_postResults(startPos:endPos) = &
        solute_flux_postResults(ip, el)
  end select chosenSolute
+
+ startPos = endPos + 1_pInt
+ endPos   = endPos + electricalState(mappingHomogenization(2,ip,el))%sizePostResults
+ chosenElectrical: select case (electrical_type(mesh_element(3,el)))
+   case (ELECTRICAL_conduction_ID) chosenElectrical
+     homogenization_postResults(startPos:endPos) = &
+       electrical_conduction_postResults(ip, el)
+ end select chosenElectrical
 
 end function homogenization_postResults
 

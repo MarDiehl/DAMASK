@@ -73,7 +73,9 @@ program DAMASK_spectral
    solute_type, &
    SOLUTE_flux_ID, &
    homogenization_type, &
-   HOMOGENIZATION_multiphase_ID
+   HOMOGENIZATION_multiphase_ID, & 
+   electrical_type, &
+   ELECTRICAL_conduction_ID
  use spectral_utilities, only: &
    utilities_init, &
    tSolutionState, &
@@ -84,13 +86,15 @@ program DAMASK_spectral
    FIELD_MECH_ID, &
    FIELD_THERMAL_ID, &
    FIELD_SOLUTE_ID, &
-   FIELD_MULTIPHASE_ID
+   FIELD_MULTIPHASE_ID, &
+   FIELD_ELECTRICAL_ID
  use spectral_mech_Basic
  use spectral_mech_Polarisation
  use spectral_mech_FEM
  use spectral_thermal
  use spectral_solute
  use spectral_multiphase
+ use spectral_electrical
 
  implicit none
 
@@ -171,6 +175,8 @@ program DAMASK_spectral
    nActiveFields = nActiveFields + 1
  if (all(.not. homogenization_active .or. solute_type          == SOLUTE_flux_ID              )) &
    nActiveFields = nActiveFields + 1
+ if (all(.not. homogenization_active .or. electrical_type      == ELECTRICAL_conduction_ID    )) &
+   nActiveFields = nActiveFields + 1  
  if (all(.not. homogenization_active .or. homogenization_type  == HOMOGENIZATION_multiphase_ID)) &
    nActiveFields = nActiveFields + 1
  allocate(solres(nActiveFields))
@@ -213,6 +219,10 @@ program DAMASK_spectral
      field = field + 1
      loadCases(i)%ID(field) = FIELD_SOLUTE_ID
    endif soluteActive
+   electricalActive: if (all(.not. homogenization_active .or. electrical_type      == ELECTRICAL_conduction_ID    )) then
+     field = field + 1
+     loadCases(i)%ID(field) = FIELD_ELECTRICAL_ID
+   endif electricalActive   
    multiphaseActive: if (any(homogenization_active .and. homogenization_type  == HOMOGENIZATION_MULTIPHASE_ID)) then
      field = field + 1
      loadCases(i)%ID(field) = FIELD_MULTIPHASE_ID
@@ -259,6 +269,11 @@ program DAMASK_spectral
          loadCases(currentLoadCase)%stress%maskFloat   = merge(ones,zeros,&
                                                         loadCases(currentLoadCase)%stress%maskLogical)
          loadCases(currentLoadCase)%stress%values      = math_plain9to33(temp_valueVector)
+       case('electricalfield')
+         temp_valueVector = 0.0_pReal
+         do j = 1_pInt, 3_pInt
+           loadCases(currentLoadCase)%electricalField%values(j) = IO_floatValue(line,chunkPos,i+j)  ! read value where applicable
+         enddo  
        case('t','time','delta')                                                                     ! increment time
          loadCases(currentLoadCase)%time = IO_floatValue(line,chunkPos,i+1_pInt)
        case('n','incs','increments','steps')                                                        ! number of increments
@@ -396,6 +411,9 @@ program DAMASK_spectral
 
       case(FIELD_MULTIPHASE_ID)
        call spectral_multiphase_init
+      
+      case(FIELD_ELECTRICAL_ID)
+       call spectral_electrical_init
 
    end select
  enddo
@@ -561,6 +579,8 @@ program DAMASK_spectral
              case(FIELD_SOLUTE_ID); call spectral_solute_forward()
 
              case(FIELD_MULTIPHASE_ID); call spectral_multiphase_forward()
+             
+             case(FIELD_ELECTRICAL_ID); call spectral_electrical_forward(loadCases(currentLoadCase)%ElectricalField)
 
            end select
          enddo
@@ -602,6 +622,9 @@ program DAMASK_spectral
 
                case(FIELD_MULTIPHASE_ID)
                  solres(field) = spectral_multiphase_solution(timeinc,timeIncOld)
+                 
+               case(FIELD_ELECTRICAL_ID)
+                 solres(field) = spectral_electrical_solution(loadCases(currentLoadCase)%ElectricalField)  
 
              end select
 

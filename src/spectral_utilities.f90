@@ -28,7 +28,8 @@ module spectral_utilities
                  FIELD_MECH_ID, &
                  FIELD_THERMAL_ID, &
                  FIELD_MULTIPHASE_ID, &
-                 FIELD_SOLUTE_ID
+                 FIELD_SOLUTE_ID, &
+                 FIELD_ELECTRICAL_ID
  end enum
 
 !--------------------------------------------------------------------------------------------------
@@ -94,6 +95,7 @@ module spectral_utilities
    real(pReal), dimension (3,3)   :: rotation               = math_I3                                 !< rotation of BC
    type(tTensorBoundaryCondition) :: stress, &                                                        !< stress BC
                                      deformation                                                      !< deformation BC (Fdot or L)
+   type(tVectorBoundaryCondition) :: electricalField                                                                          
    real(pReal) ::                    time                   = 0.0_pReal                               !< length of increment
    integer(pInt) ::                  incs                   = 0_pInt, &                               !< number of increments
                                      outputfrequency        = 1_pInt, &                               !< frequency of result writes
@@ -105,6 +107,7 @@ module spectral_utilities
 
  type, public :: tSolutionParams                                                                    !< @todo use here the type definition for a full loadcase
    real(pReal), dimension(3,3) :: stress_mask, stress_BC, rotation_BC
+   real(pReal), dimension(3)   :: electricalField_BC
    real(pReal) :: timeinc
    real(pReal) :: timeincOld
  end type tSolutionParams
@@ -151,7 +154,8 @@ module spectral_utilities
    FIELD_MECH_ID, &
    FIELD_THERMAL_ID, &
    FIELD_SOLUTE_ID, &
-   FIELD_MULTIPHASE_ID
+   FIELD_MULTIPHASE_ID, &
+   FIELD_ELECTRICAL_ID
  private :: &
    utilities_getFreqDerivative
  external :: &

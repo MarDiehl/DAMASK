@@ -74,7 +74,9 @@ module numerics
    err_thermal_tolAbs         =  1.0e-2_pReal, &                                                    !< absolute tolerance for thermal equilibrium
    err_thermal_tolRel         =  1.0e-6_pReal, &                                                    !< relative tolerance for thermal equilibrium
    err_phasefr_tolAbs         =  1.0e-6_pReal, &                                                    !< absolute tolerance for phase evolution
-   err_conc_tolAbs            =  1.0e-6_pReal                                                       !< absolute tolerance for solute concentration
+   err_conc_tolAbs            =  1.0e-6_pReal, &                                                    !< absolute tolerance for solute concentration
+   err_elecPot_tolAbs         =  1.0e-10_pReal, &                                                   !< absolute tolerance for electrical equilibrium
+   err_elecPot_tolRel         =  1.0e-6_pReal                                                       !< relative tolerance for electrical equilibrium
  integer(pInt), protected, public :: &
    itmax                      =  250_pInt, &                                                        !< maximum number of iterations
    itmin                      =  1_pInt, &                                                          !< minimum number of iterations

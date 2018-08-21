@@ -54,6 +54,8 @@ module material
    THERMAL_conduction_label                 = 'conduction', &
    SOLUTE_isoconc_label                     = 'isoconc', &
    SOLUTE_flux_label                        = 'flux', &
+   ELECTRICAL_none_label                    = 'none', &
+   ELECTRICAL_conduction_label              = 'conduction', &
    HOMOGENIZATION_none_label                = 'none', &
    HOMOGENIZATION_isostrain_label           = 'isostrain', &
    HOMOGENIZATION_rgc_label                 = 'rgc', &
@@ -124,6 +126,10 @@ module material
  end enum
 
  enum, bind(c)
+   enumerator :: ELECTRICAL_none_ID, &
+                 ELECTRICAL_conduction_ID
+ end enum
+ enum, bind(c)
    enumerator :: HOMOGENIZATION_undefined_ID, &
                  HOMOGENIZATION_none_ID, &
                  HOMOGENIZATION_isostrain_ID, &
@@ -145,6 +151,8 @@ module material
    thermal_type                                                                                     !< thermal transport model
  integer(kind(SOLUTE_isoconc_ID)),           dimension(:),   allocatable, public, protected :: &
    solute_type                                                                                      !< solute transport model
+ integer(kind(ELECTRICAL_none_ID)),          dimension(:),   allocatable, public, protected :: &
+   electrical_type                                                                                  !< electron transport model
 
  integer(kind(SOURCE_undefined_ID)),         dimension(:,:), allocatable, public, protected :: &
    phase_source, &                                                                                  !< active sources mechanisms of each phase
@@ -181,6 +189,7 @@ module material
    homogenization_typeInstance, &                                                                   !< instance of particular type of each homogenization
    thermal_typeInstance, &                                                                          !< instance of particular type of each thermal transport
    solute_typeInstance, &                                                                           !< instance of particular type of each solute transport
+   electrical_typeInstance, &                                                                       !< instance of particular type of each electron transport
    microstructure_crystallite                                                                       !< crystallite setting ID of each microstructure
 
  integer(pInt),                          dimension(:,:,:),  allocatable, public            :: &
@@ -200,7 +209,8 @@ module material
  type(tState),                               dimension(:),  allocatable, public            :: &
    homogState, &
    soluteState, &
-   thermalState
+   thermalState, &
+   electricalState
 
  integer(pInt),                          dimension(:,:,:),  allocatable, public, protected :: &
    material_texture                                                                                 !< texture (index) of each grain,IP,element
@@ -309,6 +319,8 @@ module material
    THERMAL_conduction_ID, &
    SOLUTE_isoconc_ID, &
    SOLUTE_flux_ID, &
+   ELECTRICAL_none_ID, &
+   ELECTRICAL_conduction_ID, &
    HOMOGENIZATION_none_ID, &
    HOMOGENIZATION_isostrain_ID, &
    HOMOGENIZATION_multiphase_ID, &
@@ -419,6 +431,7 @@ subroutine material_init()
  allocate(soluteMapping      (size(config_homogenization)))
  allocate(phasefracMapping   (size(config_homogenization)))
  allocate(phasefrac          (size(config_homogenization)))
+ allocate(electricalState    (size(config_homogenization)))
 
  do m = 1_pInt,size(config_microstructure)
    if(microstructure_crystallite(m) < 1_pInt .or. &
@@ -503,12 +516,14 @@ subroutine material_parseHomogenization
  integer(pInt)        :: h
  character(len=65536) :: tag
 
- allocate(homogenization_type(size(config_homogenization)),           source=HOMOGENIZATION_undefined_ID)
- allocate(thermal_type(size(config_homogenization)),                  source=THERMAL_local_ID)
- allocate(solute_type (size(config_homogenization)),                  source=SOLUTE_isoconc_ID)
+ allocate(homogenization_type(size(config_homogenization)), source=HOMOGENIZATION_undefined_ID)
+ allocate(thermal_type       (size(config_homogenization)), source=THERMAL_local_ID)
+ allocate(solute_type        (size(config_homogenization)), source=SOLUTE_isoconc_ID)
+ allocate(electrical_type    (size(config_homogenization)), source=ELECTRICAL_none_ID)
  allocate(homogenization_typeInstance(size(config_homogenization)),   source=0_pInt)
  allocate(thermal_typeInstance(size(config_homogenization)),          source=0_pInt)
  allocate(solute_typeInstance(size(config_homogenization)),           source=0_pInt)
+ allocate(electrical_typeInstance(size(config_homogenization)),       source=0_pInt)
  allocate(homogenization_Ngrains(size(config_homogenization)),        source=0_pInt)
  allocate(homogenization_Ncomponents(size(config_homogenization)),    source=0_pInt)
  allocate(homogenization_Noutput(size(config_homogenization)),        source=0_pInt)
@@ -569,12 +584,27 @@ subroutine material_parseHomogenization
 
    endif
 
+   if (config_homogenization(h)%keyExists('electrical')) then
+    
+     tag = config_homogenization(h)%getString('electrical')
+     select case (trim(tag))
+       case(ELECTRICAL_none_label)
+         electrical_type(h) = ELECTRICAL_none_ID
+       case(ELECTRICAL_conduction_label)
+         electrical_type(h) = ELECTRICAL_conduction_ID
+       case default
+         call IO_error(500_pInt,ext_msg=trim(tag))
+     end select
+
+   endif
+   
  enddo
 
  do h=1_pInt, size(config_homogenization)
    homogenization_typeInstance(h)  = count(homogenization_type(1:h)  == homogenization_type(h))
    thermal_typeInstance(h)         = count(thermal_type       (1:h)  == thermal_type       (h))
    solute_typeInstance(h)          = count(solute_type        (1:h)  == solute_type        (h))
+   electrical_typeInstance(h)      = count(electrical_type    (1:h)  == electrical_type    (h))
  enddo
 
  homogenization_maxNgrains     = maxval(homogenization_Ngrains,    homogenization_active)
