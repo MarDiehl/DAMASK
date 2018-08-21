@@ -188,7 +188,7 @@ type(tSolutionState) function spectral_multiphase_solution(timeinc,timeinc_old)
    phasefracMapping, &
    phasefrac
  use spectral_utilities, only: &
-   tBoundaryCondition, &
+   tTensorBoundaryCondition, &
    wgt
  use homogenization_multiphase, only: &
    homogenization_multiphase_putPhaseFrac, &
