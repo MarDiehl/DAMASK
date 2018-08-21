@@ -103,6 +103,7 @@ subroutine constitutive_init()
    HEATFLUX_joule_ID, &
    SOURCE_thermal_dissipation_ID, &
    SOURCE_thermal_externalheat_ID, &
+   SOURCE_thermal_jouleheating_ID, &
    SOURCE_elastic_energy_ID, &
    SOURCE_plastic_energy_ID, &
    SOURCE_chemical_energy_ID, &
@@ -128,6 +129,7 @@ subroutine constitutive_init()
    HEATFLUX_joule_label, &
    SOURCE_thermal_dissipation_label, &
    SOURCE_thermal_externalheat_label, &
+   SOURCE_thermal_jouleheating_label, &
    SOURCE_elastic_energy_label, &
    SOURCE_plastic_energy_label, &
    SOURCE_chemical_energy_label, &
@@ -154,6 +156,7 @@ subroutine constitutive_init()
  use heatflux_joule
  use source_thermal_dissipation
  use source_thermal_externalheat
+ use source_thermal_jouleheating
  use source_elastic_energy
  use source_plastic_energy
  use source_chemical_energy
@@ -219,6 +222,7 @@ subroutine constitutive_init()
  call IO_checkAndRewind(FILEUNIT)
  if (any(phase_source == SOURCE_thermal_dissipation_ID))     call source_thermal_dissipation_init(FILEUNIT)
  if (any(phase_source == SOURCE_thermal_externalheat_ID))    call source_thermal_externalheat_init(FILEUNIT)
+ if (any(phase_source == SOURCE_thermal_jouleheating_ID))    call SOURCE_thermal_jouleheating_init(FILEUNIT)
  if (any(phase_source == SOURCE_elastic_energy_ID))          call source_elastic_energy_init
  if (any(phase_source == SOURCE_plastic_energy_ID))          call source_plastic_energy_init(FILEUNIT)
  if (any(phase_source == SOURCE_chemical_energy_ID))         call source_chemical_energy_init
@@ -376,6 +380,11 @@ subroutine constitutive_init()
              outputName = SOURCE_thermal_externalheat_label
              thisOutput => source_thermal_externalheat_output
              thisSize   => source_thermal_externalheat_sizePostResult
+           case (SOURCE_thermal_jouleheating_ID) sourceType
+             ins = source_thermal_jouleheating_instance(ph)
+             outputName = SOURCE_thermal_jouleheating_label
+             thisOutput => source_thermal_jouleheating_output
+             thisSize   => source_thermal_jouleheating_sizePostResult  
            case (SOURCE_elastic_energy_ID) sourceType
              ins = source_elastic_energy_instance(ph)
              outputName = SOURCE_elastic_energy_label

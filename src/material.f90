@@ -41,6 +41,7 @@ module material
    CURRENTDENSITY_ohm_label                 = 'ohm', &
    SOURCE_thermal_dissipation_label         = 'thermal_dissipation', &
    SOURCE_thermal_externalheat_label        = 'thermal_externalheat', &
+   SOURCE_thermal_jouleheating_label        = 'thermal_jouleheating', &
    SOURCE_elastic_energy_label              = 'elastic_energy', &
    SOURCE_plastic_energy_label              = 'plastic_energy', &
    SOURCE_chemical_energy_label             = 'chemical_energy', &
@@ -93,6 +94,7 @@ module material
    enumerator :: SOURCE_undefined_ID, &
                  SOURCE_thermal_dissipation_ID, &
                  SOURCE_thermal_externalheat_ID, &
+                 SOURCE_thermal_jouleheating_ID, &
                  SOURCE_elastic_energy_ID, &
                  SOURCE_plastic_energy_ID, &
                  SOURCE_chemical_energy_ID, &
@@ -294,6 +296,7 @@ module material
    CURRENTDENSITY_ohm_ID, &
    SOURCE_thermal_dissipation_ID, &
    SOURCE_thermal_externalheat_ID, &
+   SOURCE_thermal_jouleheating_ID, &   
    SOURCE_elastic_energy_ID, &
    SOURCE_plastic_energy_ID, &
    SOURCE_chemical_energy_ID, &
@@ -795,6 +798,8 @@ subroutine material_parsePhase
          phase_source(sourceCtr,p) = SOURCE_thermal_dissipation_ID
        case (SOURCE_thermal_externalheat_label)
          phase_source(sourceCtr,p) = SOURCE_thermal_externalheat_ID
+       case (SOURCE_thermal_jouleheating_label)
+         phase_source(sourceCtr,p) = SOURCE_thermal_jouleheating_ID  
        case (SOURCE_elastic_energy_label)
          phase_source(sourceCtr,p) = SOURCE_elastic_energy_ID
        case (SOURCE_plastic_energy_label)

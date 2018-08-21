@@ -66,7 +66,7 @@ subroutine thermal_local_init(fileUnit)
  integer :: &
    maxNinstance, &
    homog, &
-   instance
+   instance   
  integer :: &
    NofmyThermal                                                                                       ! no pInt (stores a system dependen value from 'count'
  character(len=65536) :: &
@@ -234,11 +234,14 @@ function thermal_local_getHeatSource(ip,el)
    phase_Nsources, &
    phase_source, &
    SOURCE_thermal_dissipation_ID, &
-   SOURCE_thermal_externalheat_ID
+   SOURCE_thermal_externalheat_ID, &
+   SOURCE_thermal_jouleheating_ID
  use source_thermal_dissipation, only: &
    source_thermal_dissipation_getRateAndItsTangent
  use source_thermal_externalheat, only: &
    source_thermal_externalheat_getRateAndItsTangent
+ use source_thermal_jouleheating, only: &
+   source_thermal_jouleheating_getRateAndItsTangent      
  use crystallite, only: &
    crystallite_Tstar_v, &
    crystallite_Lp  
@@ -272,7 +275,10 @@ function thermal_local_getHeatSource(ip,el)
        case (SOURCE_thermal_externalheat_ID)
         call source_thermal_externalheat_getRateAndItsTangent(localHeatSource, localHeatSourceTangent, &
                                                               grain, ip, el)
-
+       
+       case (SOURCE_thermal_jouleheating_ID)
+        call source_thermal_jouleheating_getRateAndItsTangent(localHeatSource, localHeatSourceTangent, &
+                                                             grain, ip, el)             
        case default
         localHeatSource = 0.0_pReal
 
@@ -345,7 +351,7 @@ function thermal_local_postResults(ip,el)
    ip, &                                                                                            !< integration point number
    el                                                                                               !< element number
  real(pReal),  dimension(thermal_local_sizePostResults(thermal_typeInstance(material_homog(ip,el)))) :: &
-   thermal_local_postResults
+  thermal_local_postResults
  
  integer(pInt) :: &
    homID, &
@@ -355,7 +361,7 @@ function thermal_local_postResults(ip,el)
  homID = thermal_typeInstance(material_homog(ip,el))
  thermal_local_postResults = 0.0_pReal
  
- do o = 1_pInt,homogenization_Noutput(material_homog(ip,el))
+  do o = 1_pInt, size(param(homID)%outputID)
    select case(param(homID)%outputID(o))
      case (avgtemperature_ID)
        do gr = 1_pInt, homogenization_Ngrains(material_homog(ip,el))

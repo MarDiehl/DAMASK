@@ -33,6 +33,7 @@
 #include "heatflux_joule.f90"
 #include "source_thermal_dissipation.f90"
 #include "source_thermal_externalheat.f90"
+#include "source_thermal_jouleheating.f90"
 #include "source_elastic_energy.f90"
 #include "source_plastic_energy.f90"
 #include "source_chemical_energy.f90"

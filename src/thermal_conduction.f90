@@ -365,11 +365,14 @@ function thermal_conduction_getHeatSource(ip,el)
    phase_Nsources, &
    phase_source, &
    SOURCE_thermal_dissipation_ID, &
-   SOURCE_thermal_externalheat_ID
+   SOURCE_thermal_externalheat_ID, &
+   SOURCE_thermal_jouleheating_ID
  use source_thermal_dissipation, only: &
    source_thermal_dissipation_getRateAndItsTangent
  use source_thermal_externalheat, only: &
    source_thermal_externalheat_getRateAndItsTangent
+ use source_thermal_jouleheating, only: &
+   source_thermal_jouleheating_getRateAndItsTangent        
  use crystallite, only: &
    crystallite_Tstar_v, &
    crystallite_Lp  
@@ -403,7 +406,11 @@ function thermal_conduction_getHeatSource(ip,el)
        case (SOURCE_thermal_externalheat_ID)
         call source_thermal_externalheat_getRateAndItsTangent(localHeatSource, localHeatSourceTangent, &
                                                               grain, ip, el)
-
+                                                              
+       case (SOURCE_thermal_jouleheating_ID)
+        call source_thermal_jouleheating_getRateAndItsTangent(localHeatSource, localHeatSourceTangent, &
+                                                             grain, ip, el)                                                       
+                                                                                                                    
        case default
         localHeatSource = 0.0_pReal
 

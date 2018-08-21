@@ -116,6 +116,7 @@ list(APPEND OBJECTFILES $<TARGET_OBJECTS:KINEMATICS>)
 add_library (SOURCE OBJECT
   "source_thermal_dissipation.f90"
   "source_thermal_externalheat.f90"
+  "source_thermal_jouleheating.f90"
   "source_elastic_energy.f90"
   "source_plastic_energy.f90"
   "source_chemical_energy.f90"
