@@ -95,6 +95,7 @@ subroutine homogenization_init
  use constitutive, only: &
    constitutive_plasticity_maxSizePostResults, &
    constitutive_chemicalFE_maxSizePostResults, &
+   constitutive_currentDensity_maxSizePostResults, &
    constitutive_heatflux_maxSizePostResults, &
    constitutive_source_maxSizePostResults, &
    constitutive_currentDensity_maxSizePostResults
@@ -409,11 +410,13 @@ subroutine materialpoint_stressAndItsTangent(updateJaco,dt)
  use material, only: &
    plasticState, &
    chemicalState, &
+   currentDensityState, &
    heatfluxState, &
    sourceState, &
    homogState, &
    thermalState, &
    soluteState, &
+   electricalState, &
    phase_Nsources, &
    phasefrac, &
    phasefracMapping, &
@@ -487,12 +490,14 @@ subroutine materialpoint_stressAndItsTangent(updateJaco,dt)
    myNgrains = homogenization_Ngrains(mesh_element(3,e))
    do i = FEsolving_execIP(1,e),FEsolving_execIP(2,e); do g = 1,myNgrains
 
-     plasticState    (phaseAt(g,i,e))%partionedState0(:,phasememberAt(g,i,e)) = &
-     plasticState    (phaseAt(g,i,e))%state0(         :,phasememberAt(g,i,e))
-     chemicalState   (phaseAt(g,i,e))%partionedState0(:,phasememberAt(g,i,e)) = &
-     chemicalState   (phaseAt(g,i,e))%state0(         :,phasememberAt(g,i,e))
-     heatfluxState   (phaseAt(g,i,e))%partionedState0(:,phasememberAt(g,i,e)) = &
-     heatfluxState   (phaseAt(g,i,e))%state0(         :,phasememberAt(g,i,e))
+     plasticState          (phaseAt(g,i,e))%partionedState0(:,phasememberAt(g,i,e)) = &
+     plasticState          (phaseAt(g,i,e))%state0(         :,phasememberAt(g,i,e))
+     chemicalState         (phaseAt(g,i,e))%partionedState0(:,phasememberAt(g,i,e)) = &
+     chemicalState         (phaseAt(g,i,e))%state0(         :,phasememberAt(g,i,e))
+     currentDensityState   (phaseAt(g,i,e))%partionedState0(:,phasememberAt(g,i,e)) = &
+     currentDensityState   (phaseAt(g,i,e))%state0(         :,phasememberAt(g,i,e))
+     heatfluxState         (phaseAt(g,i,e))%partionedState0(:,phasememberAt(g,i,e)) = &
+     heatfluxState         (phaseAt(g,i,e))%state0(         :,phasememberAt(g,i,e))
      do mySource = 1_pInt, phase_Nsources(phaseAt(g,i,e))
        sourceState(phaseAt(g,i,e))%p(mySource)%partionedState0(:,phasememberAt(g,i,e)) = &
        sourceState(phaseAt(g,i,e))%p(mySource)%state0(         :,phasememberAt(g,i,e))
@@ -526,6 +531,10 @@ subroutine materialpoint_stressAndItsTangent(updateJaco,dt)
      soluteState(mappingHomogenization(2,i,e))%sizeState > 0_pInt) &
        soluteState(mappingHomogenization(2,i,e))%subState0(:,mappingHomogenization(1,i,e)) = &
        soluteState(mappingHomogenization(2,i,e))%State0(   :,mappingHomogenization(1,i,e))         ! ...internal solute state
+   forall(i = FEsolving_execIP(1,e):FEsolving_execIP(2,e), &
+     electricalState(mappingHomogenization(2,i,e))%sizeState > 0_pInt) &
+       electricalState(mappingHomogenization(2,i,e))%subState0(:,mappingHomogenization(1,i,e)) = &
+       electricalState(mappingHomogenization(2,i,e))%State0(   :,mappingHomogenization(1,i,e))         ! ...internal solute state    
  enddo
  NiterationHomog = 0_pInt
 
@@ -581,12 +590,14 @@ subroutine materialpoint_stressAndItsTangent(updateJaco,dt)
              crystallite_Tstar_v(1:6,1:myNgrains,i,e)                                               ! ...2nd PK stress
 
            do g = 1,myNgrains
-             plasticState    (phaseAt(g,i,e))%partionedState0(:,phasememberAt(g,i,e)) = &
-             plasticState    (phaseAt(g,i,e))%state(          :,phasememberAt(g,i,e))
-             chemicalState   (phaseAt(g,i,e))%partionedState0(:,phasememberAt(g,i,e)) = &
-             chemicalState   (phaseAt(g,i,e))%state(          :,phasememberAt(g,i,e))
-             heatfluxState   (phaseAt(g,i,e))%partionedState0(:,phasememberAt(g,i,e)) = &
-             heatfluxState   (phaseAt(g,i,e))%state(          :,phasememberAt(g,i,e))
+             plasticState          (phaseAt(g,i,e))%partionedState0(:,phasememberAt(g,i,e)) = &
+             plasticState          (phaseAt(g,i,e))%state(          :,phasememberAt(g,i,e))
+             chemicalState         (phaseAt(g,i,e))%partionedState0(:,phasememberAt(g,i,e)) = &
+             chemicalState         (phaseAt(g,i,e))%state(          :,phasememberAt(g,i,e))
+             currentDensityState   (phaseAt(g,i,e))%partionedState0(:,phasememberAt(g,i,e)) = &
+             currentDensityState   (phaseAt(g,i,e))%state(          :,phasememberAt(g,i,e))
+             heatfluxState         (phaseAt(g,i,e))%partionedState0(:,phasememberAt(g,i,e)) = &
+             heatfluxState         (phaseAt(g,i,e))%state(          :,phasememberAt(g,i,e))
              do mySource = 1_pInt, phase_Nsources(phaseAt(g,i,e))
                sourceState(phaseAt(g,i,e))%p(mySource)%partionedState0(:,phasememberAt(g,i,e)) = &
                sourceState(phaseAt(g,i,e))%p(mySource)%state(          :,phasememberAt(g,i,e))
@@ -605,6 +616,10 @@ subroutine materialpoint_stressAndItsTangent(updateJaco,dt)
              soluteState(mappingHomogenization(2,i,e))%sizeState > 0_pInt) &
                soluteState(mappingHomogenization(2,i,e))%subState0(:,mappingHomogenization(1,i,e)) = &
                soluteState(mappingHomogenization(2,i,e))%State(    :,mappingHomogenization(1,i,e)) ! ...internal solute state
+           forall(i = FEsolving_execIP(1,e):FEsolving_execIP(2,e), &
+             electricalState(mappingHomogenization(2,i,e))%sizeState > 0_pInt) &
+               electricalState(mappingHomogenization(2,i,e))%subState0(:,mappingHomogenization(1,i,e)) = &
+               electricalState(mappingHomogenization(2,i,e))%State(    :,mappingHomogenization(1,i,e)) ! ...internal solute state    
            materialpoint_subF0(1:3,1:3,i,e) = materialpoint_subF(1:3,1:3,i,e)                       ! ...def grad
            !$OMP FLUSH(materialpoint_subF0)
          endif steppingNeeded
@@ -651,12 +666,14 @@ subroutine materialpoint_stressAndItsTangent(updateJaco,dt)
            crystallite_Tstar_v(1:6,1:myNgrains,i,e) = &
               crystallite_partionedTstar0_v(1:6,1:myNgrains,i,e)                                    ! ...2nd PK stress
            do g = 1, myNgrains
-             plasticState    (phaseAt(g,i,e))%state(          :,phasememberAt(g,i,e)) = &
-             plasticState    (phaseAt(g,i,e))%partionedState0(:,phasememberAt(g,i,e))
-             chemicalState   (phaseAt(g,i,e))%state(          :,phasememberAt(g,i,e)) = &
-             chemicalState   (phaseAt(g,i,e))%partionedState0(:,phasememberAt(g,i,e))
-             heatfluxState   (phaseAt(g,i,e))%state(          :,phasememberAt(g,i,e)) = &
-             heatfluxState   (phaseAt(g,i,e))%partionedState0(:,phasememberAt(g,i,e))
+             plasticState          (phaseAt(g,i,e))%state(          :,phasememberAt(g,i,e)) = &
+             plasticState          (phaseAt(g,i,e))%partionedState0(:,phasememberAt(g,i,e))
+             chemicalState         (phaseAt(g,i,e))%state(          :,phasememberAt(g,i,e)) = &
+             chemicalState         (phaseAt(g,i,e))%partionedState0(:,phasememberAt(g,i,e))
+             currentDensityState   (phaseAt(g,i,e))%state(          :,phasememberAt(g,i,e)) = &
+             currentDensityState   (phaseAt(g,i,e))%partionedState0(:,phasememberAt(g,i,e))
+             heatfluxState         (phaseAt(g,i,e))%state(          :,phasememberAt(g,i,e)) = &
+             heatfluxState         (phaseAt(g,i,e))%partionedState0(:,phasememberAt(g,i,e))
              do mySource = 1_pInt, phase_Nsources(phaseAt(g,i,e))
                sourceState(phaseAt(g,i,e))%p(mySource)%state(          :,phasememberAt(g,i,e)) = &
                sourceState(phaseAt(g,i,e))%p(mySource)%partionedState0(:,phasememberAt(g,i,e))
@@ -674,6 +691,10 @@ subroutine materialpoint_stressAndItsTangent(updateJaco,dt)
              soluteState(mappingHomogenization(2,i,e))%sizeState > 0_pInt) &
                soluteState(mappingHomogenization(2,i,e))%State(    :,mappingHomogenization(1,i,e)) = &
                soluteState(mappingHomogenization(2,i,e))%subState0(:,mappingHomogenization(1,i,e)) ! ...internal solute state
+           forall(i = FEsolving_execIP(1,e):FEsolving_execIP(2,e), &
+             electricalState(mappingHomogenization(2,i,e))%sizeState > 0_pInt) &
+               electricalState(mappingHomogenization(2,i,e))%State(    :,mappingHomogenization(1,i,e)) = &
+               electricalState(mappingHomogenization(2,i,e))%subState0(:,mappingHomogenization(1,i,e)) ! ...internal solute state    
          endif
        endif converged
 
@@ -801,6 +822,7 @@ subroutine materialpoint_postResults
 #endif
    plasticState, &
    chemicalState, &
+   currentDensityState, &
    heatfluxState, &
    currentDensityState, &
    sourceState, &
@@ -857,8 +879,8 @@ subroutine materialpoint_postResults
        crystalliteResults(1:1+crystallite_sizePostResults(myCrystallite) + &
                             1+plasticState(myPhase)%sizePostResults + &
                               chemicalState(myPhase)%sizePostResults + &
-                              heatfluxState(myPhase)%sizePostResults + &
                               currentDensityState(myPhase)%sizePostResults + &
+                              heatfluxState(myPhase)%sizePostResults + &
                               sum(sourceState(myPhase)%p(:)%sizePostResults)) = crystallite_postResults(g,i,e)
        if (microstructure_crystallite(mesh_element(4,e)) == myCrystallite .and. &
            homogenization_Ngrains    (mesh_element(3,e)) >= g) then
@@ -875,8 +897,8 @@ subroutine materialpoint_postResults
                                 1 + crystalliteOutput(myCrystallite,g)%sizeResults + &
                                 1 + plasticState       (myphase)%sizePostResults + &
                                     chemicalState      (myPhase)%sizePostResults + &
-                                    heatfluxState      (myPhase)%sizePostResults + &
                                     currentDensityState(myPhase)%sizePostResults + &
+                                    heatfluxState      (myPhase)%sizePostResults + &
                                     sum(sourceState    (myphase)%p(:)%sizePostResults))
        endif
      enddo grainLooping
@@ -910,8 +932,8 @@ subroutine materialpoint_postResults
          theSize = 1 + crystallite_sizePostResults(myCrystallite) + &
                    1 + plasticState       (material_phase(g,i,e))%sizePostResults + &                    !ToDo
                        chemicalState      (material_phase(g,i,e))%sizePostResults + &
-                       heatfluxState      (material_phase(g,i,e))%sizePostResults + &
                        currentDensityState(material_phase(g,i,e))%sizePostResults + &
+                       heatfluxState      (material_phase(g,i,e))%sizePostResults + &
                        sum(sourceState(material_phase(g,i,e))%p(:)%sizePostResults)
          materialpoint_results(thePos+1:thePos+theSize,i,e) = crystallite_postResults(g,i,e)        ! tell crystallite results
          thePos = thePos + theSize

@@ -34,6 +34,7 @@ module currentDensity_ohm
 
  public :: &
    currentDensity_ohm_init, &
+   currentdensity_ohm_dotState, &
    currentDensity_ohm_getFlux, &
    currentDensity_ohm_getFluxTangent, &
    currentDensity_ohm_getElectricField, &
@@ -180,6 +181,25 @@ subroutine currentDensity_ohm_init
 
 end subroutine currentDensity_ohm_init
 
+!--------------------------------------------------------------------------------------------------
+!> @brief returns the chemical current density dot state
+!--------------------------------------------------------------------------------------------------
+subroutine currentdensity_ohm_dotState(ipc,ip,el)
+ use material, only: &
+   currentDensityState, &
+   currentDensityMapping, &
+   material_phase
+   
+ implicit none
+ integer(pInt), intent(in) :: &
+   ipc, ip, el
+ integer(pInt) :: &
+   phase
+
+ phase = material_phase(ipc,ip,el) 
+ currentDensityState(phase)%dotState(1,currentDensityMapping(phase)%p(ipc,ip,el)) = 0.0_pReal
+
+end subroutine currentdensity_ohm_dotState
 
 !--------------------------------------------------------------------------------------------------
 !> @brief returns the current density per (ipc,ip,el)

@@ -301,11 +301,13 @@ subroutine CPFEM_general(mode, parallelExecution, ffn, ffn1, temperature_inp, dt
    microstructure_elemhomo, &
    plasticState, &
    chemicalState, &
+   currentDensityState, &
    heatfluxState, &
    sourceState, &
    homogState, &
    thermalState, &
    soluteState, &
+   electricalState, &
    phaseAt, phasememberAt, &
    material_phase, &
    phase_plasticity, &
@@ -407,6 +409,7 @@ subroutine CPFEM_general(mode, parallelExecution, ffn, ffn1, temperature_inp, dt
    forall ( i = 1:size(plasticState    )) plasticState (i)%state0    = plasticState (i)%state  ! copy state in this lenghty way because: A component cannot be an array if the encompassing structure is an array
    forall ( i = 1:size(chemicalState   )) chemicalState(i)%state0    = chemicalState(i)%state  ! copy state in this lenghty way because: A component cannot be an array if the encompassing structure is an array
    forall ( i = 1:size(heatfluxState   )) heatfluxState(i)%state0    = heatfluxState(i)%state  ! copy state in this lenghty way because: A component cannot be an array if the encompassing structure is an array
+   forall ( i = 1:size(currentDensityState)) currentDensityState(i)%state0 = currentDensityState(i)%state  ! copy state in this lenghty way because: A component cannot be an array if the encompassing structure is an array
    do i = 1, size(sourceState)
      do mySource = 1,phase_Nsources(i)
        sourceState(i)%p(mySource)%state0 = sourceState(i)%p(mySource)%state                    ! copy state in this lenghty way because: A component cannot be an array if the encompassing structure is an array
@@ -424,6 +427,7 @@ subroutine CPFEM_general(mode, parallelExecution, ffn, ffn1, temperature_inp, dt
      homogState       (homog)%state0 =  homogState       (homog)%state
      thermalState     (homog)%state0 =  thermalState     (homog)%state
      soluteState      (homog)%state0 =  soluteState      (homog)%state
+     electricalState  (homog)%state0 =  electricalState  (homog)%state
    enddo
   
 

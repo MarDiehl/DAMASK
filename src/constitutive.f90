@@ -420,6 +420,8 @@ subroutine constitutive_init()
  constitutive_plasticity_maxSizePostResults = 0_pInt
  constitutive_chemicalFE_maxSizeDotState = 0_pInt
  constitutive_chemicalFE_maxSizePostResults = 0_pInt
+ constitutive_currentDensity_maxSizeDotState = 0_pInt
+ constitutive_currentDensity_maxSizePostResults = 0_pInt
  constitutive_heatflux_maxSizeDotState = 0_pInt
  constitutive_heatflux_maxSizePostResults = 0_pInt
  constitutive_source_maxSizeDotState = 0_pInt
@@ -432,6 +434,8 @@ subroutine constitutive_init()
    plasticState(ph)%State           = plasticState(ph)%State0
    chemicalState(ph)%partionedState0= chemicalState(ph)%State0
    chemicalState(ph)%State          = chemicalState(ph)%State0
+   currentDensityState(ph)%partionedState0= currentDensityState(ph)%State0
+   currentDensityState(ph)%State          = currentDensityState(ph)%State0
    heatfluxState(ph)%partionedState0 = heatfluxState(ph)%State0
    heatfluxState(ph)%State           = heatfluxState(ph)%State0
    forall(s = 1_pInt:phase_Nsources(ph))
@@ -448,6 +452,8 @@ subroutine constitutive_init()
                                                     chemicalState(ph)%sizeDotState)
    constitutive_chemicalFE_maxSizePostResults = max(constitutive_chemicalFE_maxSizePostResults, &
                                                     chemicalState(ph)%sizePostResults)
+   constitutive_currentDensity_maxSizeDotState = max(constitutive_currentDensity_maxSizeDotState,    &
+                                                     currentDensityState(ph)%sizeDotState)                                                 
    constitutive_currentDensity_maxSizePostResults = max(constitutive_currentDensity_maxSizePostResults, &
                                                         currentDensityState(ph)%sizePostResults)                                                    
    constitutive_heatflux_maxSizeDotState      = max(constitutive_heatflux_maxSizeDotState,    &
@@ -903,6 +909,7 @@ subroutine constitutive_collectDotState(Tstar_v, Lp, FeArray, FpArray, subdt, su
  use material, only: &
    phase_plasticity, &
    phase_chemicalFE, &
+   phase_currentDensity, &
    phase_heatflux, &
    phase_source, &
    phase_Nsources, &
@@ -919,6 +926,8 @@ subroutine constitutive_collectDotState(Tstar_v, Lp, FeArray, FpArray, subdt, su
    PLASTICITY_nonlocal_ID, &
    CHEMICALFE_quadenergy_ID, &
    CHEMICALFE_thermodynamic_ID, &
+   CURRENTDENSITY_none_ID, &
+   CURRENTDENSITY_ohm_ID, &
    HEATFLUX_adiabaticnone_ID, &
    HEATFLUX_joule_ID, &
    SOURCE_thermal_externalheat_ID, &
@@ -939,6 +948,8 @@ subroutine constitutive_collectDotState(Tstar_v, Lp, FeArray, FpArray, subdt, su
    chemicalFE_quadenergy_dotState  
  use chemicalFE_thermodynamic, only: &
    chemicalFE_thermodynamic_dotState  
+ use currentDensity_ohm, only: &
+   currentDensity_ohm_dotState    
  use heatflux_adiabaticnone, only: &
    heatflux_adiabaticnone_dotState  
  use heatflux_joule, only: &
@@ -1002,6 +1013,11 @@ subroutine constitutive_collectDotState(Tstar_v, Lp, FeArray, FpArray, subdt, su
    case (CHEMICALFE_thermodynamic_ID) chemicalType
      call chemicalFE_thermodynamic_dotState(ipc,ip,el)
  end select chemicalType
+ 
+ currentDensityType: select case (phase_currentDensity(material_phase(ipc,ip,el)))
+   case (CURRENTDENSITY_ohm_ID) currentDensityType
+     call currentDensity_ohm_dotState   (ipc,ip,el)
+ end select currentDensityType
 
  heatfluxType: select case (phase_heatflux(material_phase(ipc,ip,el)))
    case (HEATFLUX_adiabaticnone_ID) heatfluxType

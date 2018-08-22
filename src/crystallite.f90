@@ -521,6 +521,7 @@ subroutine crystallite_stressAndItsTangent(updateJaco)
    homogenization_Ngrains, &
    plasticState, &
    chemicalState, &
+   currentDensityState, &
    heatfluxState, &
    sourceState, &
    phase_Nsources, &
@@ -598,12 +599,14 @@ subroutine crystallite_stressAndItsTangent(updateJaco)
      myNcomponents = homogenization_Ngrains(mesh_element(3,e))
      do i = FEsolving_execIP(1,e),FEsolving_execIP(2,e); do c = 1_pInt,myNcomponents
        if (crystallite_requested(c,i,e)) then
-         plasticState    (phaseAt(c,i,e))%subState0(      :,phasememberAt(c,i,e)) = &
-         plasticState    (phaseAt(c,i,e))%partionedState0(:,phasememberAt(c,i,e))
-         chemicalState   (phaseAt(c,i,e))%subState0(      :,phasememberAt(c,i,e)) = &
-         chemicalState   (phaseAt(c,i,e))%partionedState0(:,phasememberAt(c,i,e))
-         heatfluxState   (phaseAt(c,i,e))%subState0(      :,phasememberAt(c,i,e)) = &
-         heatfluxState   (phaseAt(c,i,e))%partionedState0(:,phasememberAt(c,i,e))
+         plasticState          (phaseAt(c,i,e))%subState0(      :,phasememberAt(c,i,e)) = &
+         plasticState          (phaseAt(c,i,e))%partionedState0(:,phasememberAt(c,i,e))
+         chemicalState         (phaseAt(c,i,e))%subState0(      :,phasememberAt(c,i,e)) = &
+         chemicalState         (phaseAt(c,i,e))%partionedState0(:,phasememberAt(c,i,e))
+         currentDensityState   (phaseAt(c,i,e))%subState0(      :,phasememberAt(c,i,e)) = &
+         currentDensityState   (phaseAt(c,i,e))%partionedState0(:,phasememberAt(c,i,e))
+         heatfluxState         (phaseAt(c,i,e))%subState0(      :,phasememberAt(c,i,e)) = &
+         heatfluxState         (phaseAt(c,i,e))%partionedState0(:,phasememberAt(c,i,e))
          do mySource = 1_pInt, phase_Nsources(phaseAt(c,i,e))
            sourceState(phaseAt(c,i,e))%p(mySource)%subState0(      :,phasememberAt(c,i,e)) = &
            sourceState(phaseAt(c,i,e))%p(mySource)%partionedState0(:,phasememberAt(c,i,e))
@@ -884,12 +887,14 @@ subroutine crystallite_stressAndItsTangent(updateJaco)
                                                                                crystallite_invFp(1:3,1:3,c,i,e)), &
                                                                  crystallite_invFi(1:3,1:3,c,i,e))  ! only needed later on for stiffness calculation
                !if abbrevation, make c and p private in omp
-               plasticState    (phaseAt(c,i,e))%subState0(:,phasememberAt(c,i,e)) = &
-               plasticState    (phaseAt(c,i,e))%state(    :,phasememberAt(c,i,e))
-               chemicalState   (phaseAt(c,i,e))%subState0(:,phasememberAt(c,i,e)) = &
-               chemicalState   (phaseAt(c,i,e))%state(    :,phasememberAt(c,i,e))
-               heatfluxState   (phaseAt(c,i,e))%subState0(:,phasememberAt(c,i,e)) = &
-               heatfluxState   (phaseAt(c,i,e))%state(    :,phasememberAt(c,i,e))
+               plasticState          (phaseAt(c,i,e))%subState0(:,phasememberAt(c,i,e)) = &
+               plasticState          (phaseAt(c,i,e))%state(    :,phasememberAt(c,i,e))
+               chemicalState         (phaseAt(c,i,e))%subState0(:,phasememberAt(c,i,e)) = &
+               chemicalState         (phaseAt(c,i,e))%state(    :,phasememberAt(c,i,e))
+               currentDensityState   (phaseAt(c,i,e))%subState0(:,phasememberAt(c,i,e)) = &
+               currentDensityState   (phaseAt(c,i,e))%state(    :,phasememberAt(c,i,e))
+               heatfluxState         (phaseAt(c,i,e))%subState0(:,phasememberAt(c,i,e)) = &
+               heatfluxState         (phaseAt(c,i,e))%state(    :,phasememberAt(c,i,e))
                do mySource = 1_pInt, phase_Nsources(phaseAt(c,i,e))
                  sourceState(phaseAt(c,i,e))%p(mySource)%subState0(:,phasememberAt(c,i,e)) = &
                  sourceState(phaseAt(c,i,e))%p(mySource)%state(    :,phasememberAt(c,i,e))
@@ -935,12 +940,14 @@ subroutine crystallite_stressAndItsTangent(updateJaco)
              !$OMP FLUSH(crystallite_invFi)
              crystallite_Lp(1:3,1:3,c,i,e)    = crystallite_subLp0(1:3,1:3,c,i,e)                    ! ...plastic velocity grad
              crystallite_Li(1:3,1:3,c,i,e)    = crystallite_subLi0(1:3,1:3,c,i,e)                    ! ...intermediate velocity grad
-             plasticState    (phaseAt(c,i,e))%state(    :,phasememberAt(c,i,e)) = &
-             plasticState    (phaseAt(c,i,e))%subState0(:,phasememberAt(c,i,e))
-             chemicalState   (phaseAt(c,i,e))%state(    :,phasememberAt(c,i,e)) = &
-             chemicalState   (phaseAt(c,i,e))%subState0(:,phasememberAt(c,i,e))
-             heatfluxState   (phaseAt(c,i,e))%state(    :,phasememberAt(c,i,e)) = &
-             heatfluxState   (phaseAt(c,i,e))%subState0(:,phasememberAt(c,i,e))
+             plasticState          (phaseAt(c,i,e))%state(    :,phasememberAt(c,i,e)) = &
+             plasticState          (phaseAt(c,i,e))%subState0(:,phasememberAt(c,i,e))
+             chemicalState         (phaseAt(c,i,e))%state(    :,phasememberAt(c,i,e)) = &
+             chemicalState         (phaseAt(c,i,e))%subState0(:,phasememberAt(c,i,e))
+             currentDensityState   (phaseAt(c,i,e))%state(    :,phasememberAt(c,i,e)) = &
+             currentDensityState   (phaseAt(c,i,e))%subState0(:,phasememberAt(c,i,e))
+             heatfluxState         (phaseAt(c,i,e))%state(    :,phasememberAt(c,i,e)) = &
+             heatfluxState         (phaseAt(c,i,e))%subState0(:,phasememberAt(c,i,e))
              do mySource = 1_pInt, phase_Nsources(phaseAt(c,i,e))
                sourceState(phaseAt(c,i,e))%p(mySource)%state(    :,phasememberAt(c,i,e)) = &
                sourceState(phaseAt(c,i,e))%p(mySource)%subState0(:,phasememberAt(c,i,e))
@@ -1235,6 +1242,7 @@ subroutine crystallite_integrateStateRK4()
    homogenization_Ngrains, &
    plasticState, &
    chemicalState, &
+   currentDensityState, &
    heatfluxState, &
    sourceState, &
    phase_Nsources, &
@@ -1260,6 +1268,7 @@ subroutine crystallite_integrateStateRK4()
                                                mySource, &
                                                mySizePlasticDotState, &
                                                mySizeChemicalDotState, &
+                                               mySizecurrentDensityDotState, &
                                                mySizeheatfluxDotState, &
                                                mySizeSourceDotState
  integer(pInt), dimension(2) ::                eIter                                                 ! bounds for element iteration
@@ -1282,6 +1291,7 @@ subroutine crystallite_integrateStateRK4()
    do p = 1_pInt, material_Nphase
      plasticState(p)%RK4dotState = 0.0_pReal
      chemicalState(p)%RK4dotState = 0.0_pReal
+     currentDensityState(p)%RK4dotState = 0.0_pReal
      heatfluxState(p)%RK4dotState = 0.0_pReal
      do mySource = 1_pInt, phase_Nsources(p)
        sourceState(p)%p(mySource)%RK4dotState = 0.0_pReal
@@ -1293,6 +1303,7 @@ subroutine crystallite_integrateStateRK4()
    do g = gIter(1,e), gIter(2,e)
      plasticState(phaseAt(g,i,e))%RK4dotState(:,phasememberAt(g,i,e)) = 0.0_pReal
      chemicalState(phaseAt(g,i,e))%RK4dotState(:,phasememberAt(g,i,e)) = 0.0_pReal
+     currentDensityState(phaseAt(g,i,e))%RK4dotState(:,phasememberAt(g,i,e)) = 0.0_pReal
      heatfluxState(phaseAt(g,i,e))%RK4dotState(:,phasememberAt(g,i,e)) = 0.0_pReal
      do mySource = 1_pInt, phase_Nsources(phaseAt(g,i,e))
        sourceState(phaseAt(g,i,e))%p(mySource)%RK4dotState(:,phasememberAt(g,i,e)) = 0.0_pReal
@@ -1322,6 +1333,7 @@ subroutine crystallite_integrateStateRK4()
        p = phaseAt(g,i,e)
        NaN = any(IEEE_is_NaN(plasticState(p)%dotState(:,c)))
        NaN = NaN .or. any(IEEE_is_NaN(chemicalState(p)%dotState(:,c)))
+       NaN = NaN .or. any(IEEE_is_NaN(currentDensityState(p)%dotState(:,c)))
        NaN = NaN .or. any(IEEE_is_NaN(heatfluxState(p)%dotState(:,c)))
        do mySource = 1_pInt, phase_Nsources(p)
          NaN = NaN .or. any(IEEE_is_NaN(sourceState(p)%p(mySource)%dotState(:,c)))
@@ -1355,6 +1367,8 @@ subroutine crystallite_integrateStateRK4()
                                           + weight(n)*plasticState(p)%dotState(:,c)
          chemicalState(p)%RK4dotState(:,c) = chemicalState(p)%RK4dotState(:,c) &
                                           + weight(n)*chemicalState(p)%dotState(:,c)
+         currentDensityState(p)%RK4dotState(:,c) = currentDensityState(p)%RK4dotState(:,c) &
+                                          + weight(n)*currentDensityState(p)%dotState(:,c)                                 
          heatfluxState(p)%RK4dotState(:,c) = heatfluxState(p)%RK4dotState(:,c) &
                                           + weight(n)*heatfluxState(p)%dotState(:,c)
          do mySource = 1_pInt, phase_Nsources(p)
@@ -1365,7 +1379,8 @@ subroutine crystallite_integrateStateRK4()
      enddo; enddo; enddo
    !$OMP ENDDO
 
-   !$OMP DO PRIVATE(mySizePlasticDotState,mySizeChemicalDotState,mySizeHeatfluxDotState,mySizeSourceDotState,p,c)
+   !$OMP DO PRIVATE(mySizePlasticDotState,mySizeChemicalDotState,mySizecurrentDensityDotState, & 
+   !$OMP&           mySizeHeatfluxDotState,mySizeSourceDotState,p,c)
      do e = eIter(1),eIter(2); do i = iIter(1,e),iIter(2,e); do g = gIter(1,e),gIter(2,e)                  ! iterate over elements, ips and grains
        if (crystallite_todo(g,i,e)) then
 
@@ -1380,6 +1395,11 @@ subroutine crystallite_integrateStateRK4()
          chemicalState(p)%state    (1:mySizeChemicalDotState,c) = &
          chemicalState(p)%subState0(1:mySizeChemicalDotState,c) &
        + chemicalState(p)%dotState (1:mySizeChemicalDotState,c) &
+       * crystallite_subdt(g,i,e) * timeStepFraction(n)
+         mySizecurrentDensityDotState = currentDensityState(p)%sizeDotState
+         currentDensityState(p)%state    (1:mySizecurrentDensityDotState,c) = &
+         currentDensityState(p)%subState0(1:mySizecurrentDensityDotState,c) &
+       + currentDensityState(p)%dotState (1:mySizecurrentDensityDotState,c) &
        * crystallite_subdt(g,i,e) * timeStepFraction(n)
          mySizeheatfluxDotState = heatfluxState(p)%sizeDotState
          heatfluxState(p)%state    (1:mySizeheatfluxDotState,c) = &
@@ -1483,6 +1503,7 @@ subroutine crystallite_integrateStateRK4()
            c = phasememberAt(g,i,e)
            NaN = any(IEEE_is_NaN(plasticState(p)%dotState(:,c)))
            NaN = NaN .or. any(IEEE_is_NaN(chemicalState(p)%dotState(:,c)))
+           NaN = NaN .or. any(IEEE_is_NaN(currentDensityState(p)%dotState(:,c)))
            NaN = NaN .or. any(IEEE_is_NaN(heatfluxState(p)%dotState(:,c)))
            do mySource = 1_pInt, phase_Nsources(p)
              NaN = NaN .or. any(IEEE_is_NaN(sourceState(p)%p(mySource)%dotState(:,c)))
@@ -1555,6 +1576,7 @@ subroutine crystallite_integrateStateRKCK45()
    homogenization_Ngrains, &
    plasticState, &
    chemicalState, &
+   currentDensityState, & 
    heatfluxState, &
    sourceState, &
    phase_Nsources, &
@@ -1564,6 +1586,7 @@ subroutine crystallite_integrateStateRKCK45()
    constitutive_collectDotState, &
    constitutive_plasticity_maxSizeDotState, &
    constitutive_chemicalFE_maxSizeDotState, &
+   constitutive_currentDensity_maxSizeDotState, &
    constitutive_heatflux_maxSizeDotState, &
    constitutive_source_maxSizeDotState, &
    constitutive_microstructure
@@ -1601,6 +1624,7 @@ subroutine crystallite_integrateStateRKCK45()
    mySource, &
    mySizePlasticDotState, &                                                                         ! size of dot States
    mySizeChemicalDotState, &                                                                         ! size of dot States
+   mySizecurrentDensityDotState, &
    mySizeheatfluxDotState, &                                                                         ! size of dot States
    mySizeSourceDotState
  integer(pInt), dimension(2) :: &
@@ -1617,6 +1641,10 @@ subroutine crystallite_integrateStateRKCK45()
                         homogenization_maxNgrains,mesh_maxNips,mesh_NcpElems) :: &
    chemicalStateResiduum, &                                                                          ! residuum from evolution in microstructure
    relChemicalStateResiduum                                                                          ! relative residuum from evolution in microstructure
+ real(pReal), dimension(constitutive_currentDensity_maxSizeDotState,            &
+                        homogenization_maxNgrains,mesh_maxNips,mesh_NcpElems) :: &
+   currentDensityStateResiduum, &                                                                    ! residuum from evolution in microstructure
+   relcurrentDensityStateResiduum                                                                    ! relative residuum from evolution in microstructure    
  real(pReal), dimension(constitutive_heatflux_maxSizeDotState,            &
                         homogenization_maxNgrains,mesh_maxNips,mesh_NcpElems) :: &
    heatfluxStateResiduum, &                                                                          ! residuum from evolution in microstructure
@@ -1665,6 +1693,7 @@ subroutine crystallite_integrateStateRKCK45()
        p = phaseAt(g,i,e)
        NaN = any(IEEE_is_NaN(plasticState(p)%dotState(:,cc)))
        NaN = NaN .or. any(IEEE_is_NaN(chemicalState(p)%dotState(:,cc)))
+       NaN = NaN .or. any(IEEE_is_NaN(currentDensityState(p)%dotState(:,cc)))
        NaN = NaN .or. any(IEEE_is_NaN(heatfluxState(p)%dotState(:,cc)))
        do mySource = 1_pInt, phase_Nsources(p)
          NaN = NaN .or. any(IEEE_is_NaN(sourceState(p)%p(mySource)%dotState(:,cc)))
@@ -1698,6 +1727,7 @@ subroutine crystallite_integrateStateRKCK45()
          cc = phasememberAt(g,i,e)
          plasticState(p)%RKCK45dotState(stage,:,cc) = plasticState(p)%dotState(:,cc)                       ! store Runge-Kutta dotState
          chemicalState(p)%RKCK45dotState(stage,:,cc) = chemicalState(p)%dotState(:,cc)                       ! store Runge-Kutta dotState
+         currentDensityState(p)%RKCK45dotState(stage,:,cc) = currentDensityState(p)%dotState(:,cc)                       ! store Runge-Kutta dotState
          heatfluxState(p)%RKCK45dotState(stage,:,cc) = heatfluxState(p)%dotState(:,cc)                       ! store Runge-Kutta dotState
          do mySource = 1_pInt, phase_Nsources(p)
            sourceState(p)%p(mySource)%RKCK45dotState(stage,:,cc) = sourceState(p)%p(mySource)%dotState(:,cc)
@@ -1714,6 +1744,7 @@ subroutine crystallite_integrateStateRKCK45()
 
          plasticState(p)%dotState(:,cc) = A(1,stage) * plasticState(p)%RKCK45dotState(1,:,cc)
          chemicalState(p)%dotState(:,cc) = A(1,stage) * chemicalState(p)%RKCK45dotState(1,:,cc)
+         currentDensityState(p)%dotState(:,cc) = A(1,stage) * currentDensityState(p)%RKCK45dotState(1,:,cc)
          heatfluxState(p)%dotState(:,cc) = A(1,stage) * heatfluxState(p)%RKCK45dotState(1,:,cc)
          do mySource = 1_pInt, phase_Nsources(p)
            sourceState(p)%p(mySource)%dotState(:,cc) = A(1,stage) * sourceState(p)%p(mySource)%RKCK45dotState(1,:,cc)
@@ -1723,6 +1754,8 @@ subroutine crystallite_integrateStateRKCK45()
            plasticState(p)%dotState(:,cc) + A(n,stage) * plasticState(p)%RKCK45dotState(n,:,cc)
            chemicalState(p)%dotState(:,cc) = &
            chemicalState(p)%dotState(:,cc) + A(n,stage) * chemicalState(p)%RKCK45dotState(n,:,cc)
+           currentDensityState(p)%dotState(:,cc) = &
+           currentDensityState(p)%dotState(:,cc) + A(n,stage) * currentDensityState(p)%RKCK45dotState(n,:,cc)
            heatfluxState(p)%dotState(:,cc) = &
            heatfluxState(p)%dotState(:,cc) + A(n,stage) * heatfluxState(p)%RKCK45dotState(n,:,cc)
            do mySource = 1_pInt, phase_Nsources(p)
@@ -1734,7 +1767,8 @@ subroutine crystallite_integrateStateRKCK45()
      enddo; enddo; enddo
    !$OMP ENDDO
 
-   !$OMP DO PRIVATE(mySizePlasticDotState,mySizeChemicalDotState,mySizeheatfluxDotState,mySizeSourceDotState,p,cc)
+   !$OMP DO PRIVATE(mySizePlasticDotState,mySizeChemicalDotState,mySizecurrentDensityDotState, &
+   !$OMP&           mySizeheatfluxDotState,mySizeSourceDotState,p,cc)
      do e = eIter(1),eIter(2); do i = iIter(1,e),iIter(2,e); do g = gIter(1,e),gIter(2,e)                  ! iterate over elements, ips and grains
        if (crystallite_todo(g,i,e)) then
          p = phaseAt(g,i,e)
@@ -1749,6 +1783,11 @@ subroutine crystallite_integrateStateRKCK45()
          chemicalState    (p)%subState0(1:mySizeChemicalDotState,    cc) &
        + chemicalState    (p)%dotState (1:mySizeChemicalDotState,    cc) &
        * crystallite_subdt(g,i,e)
+         mySizecurrentDensityDotState = currentDensityState(p)%sizeDotState
+         currentDensityState    (p)%state    (1:mySizecurrentDensityDotState,    cc) = &
+         currentDensityState    (p)%subState0(1:mySizecurrentDensityDotState,    cc) &
+       + currentDensityState    (p)%dotState (1:mySizecurrentDensityDotState,    cc) &
+       * crystallite_subdt(g,i,e)      
          mySizeheatfluxDotState = heatfluxState(p)%sizeDotState
          heatfluxState    (p)%state    (1:mySizeheatfluxDotState,    cc) = &
          heatfluxState    (p)%subState0(1:mySizeheatfluxDotState,    cc) &
@@ -1840,6 +1879,7 @@ subroutine crystallite_integrateStateRKCK45()
          cc = phasememberAt(g,i,e)
          NaN = any(IEEE_is_NaN(plasticState(p)%dotState(:,cc)))
          NaN = NaN .or. any(IEEE_is_NaN(chemicalState(p)%dotState(:,cc)))
+         NaN = NaN .or. any(IEEE_is_NaN(currentDensityState(p)%dotState(:,cc)))
          NaN = NaN .or. any(IEEE_is_NaN(heatfluxState(p)%dotState(:,cc)))
          do mySource = 1_pInt, phase_Nsources(p)
            NaN = NaN .or. any(IEEE_is_NaN(sourceState(p)%p(mySource)%dotState(:,cc)))
@@ -1866,6 +1906,7 @@ subroutine crystallite_integrateStateRKCK45()
 
  relPlasticStateResiduum = 0.0_pReal
  relChemicalStateResiduum = 0.0_pReal
+ relcurrentDensityStateResiduum = 0.0_pReal
  relheatfluxStateResiduum = 0.0_pReal
  relSourceStateResiduum = 0.0_pReal
  !$OMP PARALLEL
@@ -1876,6 +1917,7 @@ subroutine crystallite_integrateStateRKCK45()
        cc = phasememberAt(g,i,e)
        plasticState(p)%RKCK45dotState(6,:,cc) = plasticState (p)%dotState(:,cc)                            ! store Runge-Kutta dotState
        chemicalState(p)%RKCK45dotState(6,:,cc) = chemicalState (p)%dotState(:,cc)                            ! store Runge-Kutta dotState
+       currentDensityState(p)%RKCK45dotState(6,:,cc) = currentDensityState (p)%dotState(:,cc)                ! store Runge-Kutta dotState
        heatfluxState(p)%RKCK45dotState(6,:,cc) = heatfluxState (p)%dotState(:,cc)                            ! store Runge-Kutta dotState
        do mySource = 1_pInt, phase_Nsources(p)
          sourceState(p)%p(mySource)%RKCK45dotState(6,:,cc) = sourceState(p)%p(mySource)%dotState(:,cc)     ! store Runge-Kutta dotState
@@ -1884,7 +1926,8 @@ subroutine crystallite_integrateStateRKCK45()
    enddo; enddo; enddo
  !$OMP ENDDO
 
- !$OMP DO PRIVATE(mySizePlasticDotState,mySizeChemicalDotState,mySizeheatfluxDotState,mySizeSourceDotState,p,cc)
+ !$OMP DO PRIVATE(mySizePlasticDotState,mySizeChemicalDotState,mySizecurrentDensityDotState, &
+ !$OMP&           mySizeheatfluxDotState,mySizeSourceDotState,p,cc)
    do e = eIter(1),eIter(2); do i = iIter(1,e),iIter(2,e); do g = gIter(1,e),gIter(2,e)                    ! iterate over elements, ips and grains
      if (crystallite_todo(g,i,e)) then
        p = phaseAt(g,i,e)
@@ -1898,6 +1941,10 @@ subroutine crystallite_integrateStateRKCK45()
        mySizeChemicalDotState = chemicalState(p)%sizeDotState
        chemicalStateResiduum(1:mySizeChemicalDotState,g,i,e) = &
          matmul(transpose(chemicalState(p)%RKCK45dotState(1:6,1:mySizeChemicalDotState,cc)),DB) &
+       * crystallite_subdt(g,i,e)
+       mySizecurrentDensityDotState = currentDensityState(p)%sizeDotState
+       currentDensityStateResiduum(1:mySizecurrentDensityDotState,g,i,e) = &
+         matmul(transpose(currentDensityState(p)%RKCK45dotState(1:6,1:mySizecurrentDensityDotState,cc)),DB) &
        * crystallite_subdt(g,i,e)
        mySizeheatfluxDotState = heatfluxState(p)%sizeDotState
        heatfluxStateResiduum(1:mySizeheatfluxDotState,g,i,e) = &
@@ -1915,6 +1962,8 @@ subroutine crystallite_integrateStateRKCK45()
          matmul(transpose(plasticState(p)%RKCK45dotState(1:6,1:mySizePlasticDotState,cc)), B)
        chemicalState(p)%dotState(:,cc) =  &
          matmul(transpose(chemicalState(p)%RKCK45dotState(1:6,1:mySizeChemicalDotState,cc)), B)
+       currentDensityState(p)%dotState(:,cc) =  &
+         matmul(transpose(currentDensityState(p)%RKCK45dotState(1:6,1:mySizecurrentDensityDotState,cc)), B)  
        heatfluxState(p)%dotState(:,cc) =  &
          matmul(transpose(heatfluxState(p)%RKCK45dotState(1:6,1:mySizeheatfluxDotState,cc)), B)
        do mySource = 1_pInt, phase_Nsources(p)
@@ -1928,7 +1977,8 @@ subroutine crystallite_integrateStateRKCK45()
 
  ! --- state and update ---
 
- !$OMP DO PRIVATE(mySizePlasticDotState,mySizeChemicalDotState,mySizeheatfluxDotState,mySizeSourceDotState,p,cc)
+ !$OMP DO PRIVATE(mySizePlasticDotState,mySizeChemicalDotState,mySizecurrentDensityDotState, &
+ !$OMP&           mySizeheatfluxDotState,mySizeSourceDotState,p,cc)
    do e = eIter(1),eIter(2); do i = iIter(1,e),iIter(2,e); do g = gIter(1,e),gIter(2,e)                    ! iterate over elements, ips and grains
      if (crystallite_todo(g,i,e)) then
 
@@ -1943,6 +1993,11 @@ subroutine crystallite_integrateStateRKCK45()
          chemicalState(p)%state    (1:mySizeChemicalDotState,cc) = &
          chemicalState(p)%subState0(1:mySizeChemicalDotState,cc) &
        + chemicalState(p)%dotState (1:mySizeChemicalDotState,cc) &
+       * crystallite_subdt(g,i,e)
+         mySizecurrentDensityDotState = currentDensityState(p)%sizeDotState
+         currentDensityState(p)%state    (1:mySizecurrentDensityDotState,cc) = &
+         currentDensityState(p)%subState0(1:mySizecurrentDensityDotState,cc) &
+       + currentDensityState(p)%dotState (1:mySizecurrentDensityDotState,cc) &
        * crystallite_subdt(g,i,e)
          mySizeheatfluxDotState = heatfluxState(p)%sizeDotState
          heatfluxState(p)%state    (1:mySizeheatfluxDotState,cc) = &
@@ -1962,7 +2017,8 @@ subroutine crystallite_integrateStateRKCK45()
 
  ! --- relative residui and state convergence ---
 
- !$OMP DO PRIVATE(mySizePlasticDotState,mySizeChemicalDotState,mySizeheatfluxDotState,mySizeSourceDotState,p,cc,s)
+ !$OMP DO PRIVATE(mySizePlasticDotState,mySizeChemicalDotState,mySizecurrentDensityDotState, &
+ !$OMP&           mySizeheatfluxDotState,mySizeSourceDotState,p,cc,s)
    do e = eIter(1),eIter(2); do i = iIter(1,e),iIter(2,e); do g = gIter(1,e),gIter(2,e)                    ! iterate over elements, ips and grains
      if (crystallite_todo(g,i,e)) then
        p  = phaseAt(g,i,e)
@@ -1975,6 +2031,10 @@ subroutine crystallite_integrateStateRKCK45()
        forall (s = 1_pInt:mySizeChemicalDotState,    abs(chemicalState(p)%state(s,cc)) > 0.0_pReal) &
          relChemicalStateResiduum(s,g,i,e) = &
             chemicalStateResiduum(s,g,i,e) / chemicalState(p)%state(s,cc)
+       mySizecurrentDensityDotState = currentDensityState(p)%sizeDotState
+       forall (s = 1_pInt:mySizecurrentDensityDotState,    abs(currentDensityState(p)%state(s,cc)) > 0.0_pReal) &
+         relcurrentDensityStateResiduum(s,g,i,e) = &
+            currentDensityStateResiduum(s,g,i,e) / currentDensityState(p)%state(s,cc)     
        mySizeheatfluxDotState = heatfluxState(p)%sizeDotState
        forall (s = 1_pInt:mySizeheatfluxDotState,    abs(heatfluxState(p)%state(s,cc)) > 0.0_pReal) &
          relheatfluxStateResiduum(s,g,i,e) = &
@@ -1988,6 +2048,7 @@ subroutine crystallite_integrateStateRKCK45()
        enddo
        !$OMP FLUSH(relPlasticStateResiduum)
        !$OMP FLUSH(relChemicalStateResiduum)
+       !$OMP FLUSH(relcurrentDensityStateResiduum)
        !$OMP FLUSH(relheatfluxStateResiduum)
        !$OMP FLUSH(relSourceStateResiduum)
 ! @Martin: do we need flushing? why..?
@@ -2000,6 +2061,11 @@ subroutine crystallite_integrateStateRKCK45()
                                      rTol_crystalliteState .or. &
                                      abs(chemicalStateResiduum(1:mySizeChemicalDotState,g,i,e)) < &
                                      chemicalState(p)%aTolState(1:mySizeChemicalDotState))
+       crystallite_todo(g,i,e) = crystallite_todo(g,i,e) .and. &
+                                 all(abs(relcurrentDensityStateResiduum(1:mySizecurrentDensityDotState,g,i,e)) < &
+                                     rTol_crystalliteState .or. &
+                                     abs(currentDensityStateResiduum(1:mySizecurrentDensityDotState,g,i,e)) < &
+                                     currentDensityState(p)%aTolState(1:mySizecurrentDensityDotState))                              
        crystallite_todo(g,i,e) = crystallite_todo(g,i,e) .and. &
                                  all(abs(relheatfluxStateResiduum(1:mySizeheatfluxDotState,g,i,e)) < &
                                      rTol_crystalliteState .or. &
@@ -2135,6 +2201,7 @@ subroutine crystallite_integrateStateAdaptiveEuler()
    homogenization_Ngrains, &
    plasticState, &
    chemicalState, &
+   currentdensityState, &
    heatfluxState, &
    sourceState, &
    phaseAt, phasememberAt, &
@@ -2145,6 +2212,7 @@ subroutine crystallite_integrateStateAdaptiveEuler()
    constitutive_microstructure, &
    constitutive_plasticity_maxSizeDotState, &
    constitutive_chemicalFE_maxSizeDotState, &
+   constitutive_currentDensity_maxSizeDotState, &
    constitutive_heatflux_maxSizeDotState, &
    constitutive_source_maxSizeDotState
 
@@ -2159,6 +2227,7 @@ subroutine crystallite_integrateStateAdaptiveEuler()
    mySource, &
    mySizePlasticDotState, &                                                                         ! size of dot states
    mySizeChemicalDotState, &                                                                         ! size of dot states
+   mySizecurrentDensityDotState, &                                                                   ! size of dot states
    mySizeheatfluxDotState, &                                                                         ! size of dot states
    mySizeSourceDotState
  integer(pInt), dimension(2) :: &
@@ -2174,6 +2243,10 @@ subroutine crystallite_integrateStateAdaptiveEuler()
                         homogenization_maxNgrains,mesh_maxNips,mesh_NcpElems) :: &
    chemicalStateResiduum, &                                                                         ! residuum from evolution in micrstructure
    relChemicalStateResiduum                                                                         ! relative residuum from evolution in microstructure
+ real(pReal), dimension(constitutive_currentDensity_maxSizeDotState,            &
+                        homogenization_maxNgrains,mesh_maxNips,mesh_NcpElems) :: &
+   currentdensityStateResiduum, &                                                                   ! residuum from evolution in micrstructure
+   relcurrentDensityStateResiduum                                                                   ! relative residuum from evolution in microstructure  
  real(pReal), dimension(constitutive_heatflux_maxSizeDotState,            &
                         homogenization_maxNgrains,mesh_maxNips,mesh_NcpElems) :: &
    heatfluxStateResiduum, &                                                                         ! residuum from evolution in micrstructure
@@ -2204,6 +2277,8 @@ subroutine crystallite_integrateStateAdaptiveEuler()
  relPlasticStateResiduum = 0.0_pReal
  chemicalStateResiduum = 0.0_pReal
  relChemicalStateResiduum = 0.0_pReal
+ currentDensityStateResiduum = 0.0_pReal
+ relcurrentDensityStateResiduum = 0.0_pReal
  heatfluxStateResiduum = 0.0_pReal
  relheatfluxStateResiduum = 0.0_pReal
  sourceStateResiduum = 0.0_pReal
@@ -2232,6 +2307,7 @@ subroutine crystallite_integrateStateAdaptiveEuler()
          c = phasememberAt(g,i,e)
          NaN = any(IEEE_is_NaN(plasticState(p)%dotState(:,c)))
          NaN = NaN .or. any(IEEE_is_NaN(chemicalState(p)%dotState(:,c)))
+         NaN = NaN .or. any(IEEE_is_NaN(currentDensityState(p)%dotState(:,c)))
          NaN = NaN .or. any(IEEE_is_NaN(heatfluxState(p)%dotState(:,c)))
          do mySource = 1_pInt, phase_Nsources(p)
            NaN = NaN .or. any(IEEE_is_NaN(sourceState(p)%p(mySource)%dotState(:,c)))
@@ -2252,7 +2328,8 @@ subroutine crystallite_integrateStateAdaptiveEuler()
 
    ! --- STATE UPDATE (EULER INTEGRATION) ---
 
-   !$OMP DO PRIVATE(mySizePlasticDotState,mySizeChemicalDotState,mySizeheatfluxDotState,mySizeSourceDotState,p,c)
+   !$OMP DO PRIVATE(mySizePlasticDotState,mySizeChemicalDotState,mySizecurrentDensityDotState, & 
+   !$OMP&           mySizeheatfluxDotState,mySizeSourceDotState,p,c)
      do e = eIter(1),eIter(2); do i = iIter(1,e),iIter(2,e); do g = gIter(1,e),gIter(2,e)                    ! iterate over elements, ips and grains
        if (crystallite_todo(g,i,e)) then
          p = phaseAt(g,i,e)
@@ -2274,6 +2351,15 @@ subroutine crystallite_integrateStateAdaptiveEuler()
          chemicalState(p)%state   (1:mySizeChemicalDotState,c) = &
          chemicalState(p)%state   (1:mySizeChemicalDotState,c) &
        + chemicalState(p)%dotstate(1:mySizeChemicalDotState,c) &
+       * crystallite_subdt(g,i,e)
+         mySizecurrentDensityDotState = currentDensityState(p)%sizeDotState
+         currentDensityStateResiduum(1:mySizecurrentDensityDotState,g,i,e) = &
+       - 0.5_pReal &
+       * currentDensityState(p)%dotstate(1:mySizecurrentDensityDotState,c) &
+       * crystallite_subdt(g,i,e)                                                                            ! contribution to absolute residuum in state
+         currentDensityState(p)%state   (1:mySizecurrentDensityDotState,c) = &
+         currentDensityState(p)%state   (1:mySizecurrentDensityDotState,c) &
+       + currentDensityState(p)%dotstate(1:mySizecurrentDensityDotState,c) &
        * crystallite_subdt(g,i,e)
          mySizeheatfluxDotState = heatfluxState(p)%sizeDotState
          heatfluxStateResiduum(1:mySizeheatfluxDotState,g,i,e) = &
@@ -2374,6 +2460,7 @@ subroutine crystallite_integrateStateAdaptiveEuler()
          c = phasememberAt(g,i,e)
          NaN = any(IEEE_is_NaN(plasticState(p)%dotState(:,c)))
          NaN = NaN .or. any(IEEE_is_NaN(chemicalState(p)%dotState(:,c)))
+         NaN = NaN .or. any(IEEE_is_NaN(currentDensityState(p)%dotState(:,c)))
          NaN = NaN .or. any(IEEE_is_NaN(heatfluxState(p)%dotState(:,c)))
          do mySource = 1_pInt, phase_Nsources(p)
            NaN = NaN .or. any(IEEE_is_NaN(sourceState(p)%p(mySource)%dotState(:,c)))
@@ -2397,11 +2484,13 @@ subroutine crystallite_integrateStateAdaptiveEuler()
    !$OMP SINGLE
    relPlasticStateResiduum = 0.0_pReal
    relChemicalStateResiduum = 0.0_pReal
+   relcurrentDensityStateResiduum = 0.0_pReal
    relheatfluxStateResiduum = 0.0_pReal
    relSourceStateResiduum = 0.0_pReal
    !$OMP END SINGLE
 
-   !$OMP DO PRIVATE(mySizePlasticDotState,mySizeChemicalDotState,mySizeheatfluxDotState,mySizeSourceDotState,converged,p,c,s)
+   !$OMP DO PRIVATE(mySizePlasticDotState,mySizeChemicalDotState,mySizecurrentDensityDotState, &
+   !$OMP&           mySizeheatfluxDotState,mySizeSourceDotState,converged,p,c,s)
      do e = eIter(1),eIter(2); do i = iIter(1,e),iIter(2,e); do g = gIter(1,e),gIter(2,e)                   ! iterate over elements, ips and grains
        if (crystallite_todo(g,i,e)) then
          p = phaseAt(g,i,e)
@@ -2417,6 +2506,11 @@ subroutine crystallite_integrateStateAdaptiveEuler()
          chemicalStateResiduum(1:mySizeChemicalDotState,g,i,e) &
        + 0.5_pReal * chemicalState(p)%dotState(:,c) &
        * crystallite_subdt(g,i,e)                                                                           ! contribution to absolute residuum in state
+         mySizecurrentDensityDotState = currentDensityState(p)%sizeDotState
+         currentDensityStateResiduum(1:mySizecurrentDensityDotState,g,i,e) = &
+         currentDensityStateResiduum(1:mySizecurrentDensityDotState,g,i,e) &
+       + 0.5_pReal * currentDensityState(p)%dotState(:,c) &
+       * crystallite_subdt(g,i,e)                                                                           ! contribution to absolute residuum in state
          mySizeheatfluxDotState = heatfluxState(p)%sizeDotState
          heatfluxStateResiduum(1:mySizeheatfluxDotState,g,i,e) = &
          heatfluxStateResiduum(1:mySizeheatfluxDotState,g,i,e) &
@@ -2431,6 +2525,7 @@ subroutine crystallite_integrateStateAdaptiveEuler()
          enddo
          !$OMP FLUSH(plasticStateResiduum)
          !$OMP FLUSH(chemicalStateResiduum)
+         !$OMP FLUSH(currentDensityStateResiduum)
          !$OMP FLUSH(heatfluxStateResiduum)
          !$OMP FLUSH(sourceStateResiduum)
 
@@ -2441,6 +2536,9 @@ subroutine crystallite_integrateStateAdaptiveEuler()
          forall (s = 1_pInt:mySizeChemicalDotState, abs(chemicalState(p)%dotState(s,c)) > 0.0_pReal) &
            relChemicalStateResiduum(s,g,i,e) = &
               chemicalStateResiduum(s,g,i,e) / chemicalState(p)%dotState(s,c)
+         forall (s = 1_pInt:mySizecurrentDensityDotState, abs(currentDensityState(p)%dotState(s,c)) > 0.0_pReal) &
+           relcurrentDensityStateResiduum(s,g,i,e) = &
+              currentdensityStateResiduum(s,g,i,e) / currentDensityState(p)%dotState(s,c)     
          forall (s = 1_pInt:mySizeheatfluxDotState, abs(heatfluxState(p)%dotState(s,c)) > 0.0_pReal) &
            relheatfluxStateResiduum(s,g,i,e) = &
               heatfluxStateResiduum(s,g,i,e) / heatfluxState(p)%dotState(s,c)
@@ -2452,6 +2550,7 @@ subroutine crystallite_integrateStateAdaptiveEuler()
          enddo
          !$OMP FLUSH(relPlasticStateResiduum)
          !$OMP FLUSH(relChemicalStateResiduum)
+         !$OMP FLUSH(relcurrentDensityStateResiduum)
          !$OMP FLUSH(relheatfluxStateResiduum)
          !$OMP FLUSH(relSourceStateResiduum)
 
@@ -2481,6 +2580,11 @@ subroutine crystallite_integrateStateAdaptiveEuler()
                          rTol_crystalliteState .or. &
                          abs(chemicalStateResiduum(1:mySizeChemicalDotState,g,i,e)) < &
                          chemicalState(p)%aTolState(1:mySizeChemicalDotState))
+         converged = converged .and. &
+                     all(abs(relcurrentDensityStateResiduum(1:mySizecurrentDensityDotState,g,i,e)) < &
+                         rTol_crystalliteState .or. &
+                         abs(currentDensityStateResiduum(1:mySizecurrentDensityDotState,g,i,e)) < &
+                         currentdensityState(p)%aTolState(1:mySizecurrentDensityDotState))                
          converged = converged .and. &
                      all(abs(relheatfluxStateResiduum(1:mySizeheatfluxDotState,g,i,e)) < &
                          rTol_crystalliteState .or. &
@@ -2558,6 +2662,7 @@ subroutine crystallite_integrateStateEuler()
  use material, only: &
    plasticState, &
    chemicalState, &
+   currentDensityState, &
    heatfluxState, &
    sourceState, &
    phaseAt, phasememberAt, &
@@ -2578,6 +2683,7 @@ subroutine crystallite_integrateStateEuler()
    mySource, &
    mySizePlasticDotState, &
    mySizeChemicalDotState, &
+   mySizecurrentDensityDotState, &
    mySizeheatfluxDotState, &
    mySizeSourceDotState
  integer(pInt), dimension(2) :: &
@@ -2621,6 +2727,7 @@ eIter = FEsolving_execElem(1:2)
          p = phaseAt(g,i,e)
          NaN = any(IEEE_is_NaN(plasticState(p)%dotState(:,c)))
          NaN = NaN .or. any(IEEE_is_NaN(chemicalState(p)%dotState(:,c)))
+         NaN = NaN .or. any(IEEE_is_NaN(currentDensityState(p)%dotState(:,c)))
          NaN = NaN .or. any(IEEE_is_NaN(heatfluxState(p)%dotState(:,c)))
          do mySource = 1_pInt, phase_Nsources(p)
            NaN = NaN .or. any(IEEE_is_NaN(sourceState(p)%p(mySource)%dotState(:,c)))
@@ -2641,7 +2748,8 @@ eIter = FEsolving_execElem(1:2)
 
    ! --- UPDATE STATE  ---
 
-   !$OMP DO PRIVATE(mySizePlasticDotState,mySizeChemicalDotState,mySizeheatfluxDotState,mySizeSourceDotState,p,c)
+   !$OMP DO PRIVATE(mySizePlasticDotState,mySizeChemicalDotState,mySizecurrentDensityDotState, &
+   !$OMP&           mySizeheatfluxDotState,mySizeSourceDotState,p,c)
      do e = eIter(1),eIter(2); do i = iIter(1,e),iIter(2,e); do g = gIter(1,e),gIter(2,e)                    ! iterate over elements, ips and grains
        if (crystallite_todo(g,i,e) .and. .not. crystallite_converged(g,i,e)) then
          p = phaseAt(g,i,e)
@@ -2655,6 +2763,11 @@ eIter = FEsolving_execElem(1:2)
          chemicalState(p)%state(   1:mySizeChemicalDotState,c) = &
          chemicalState(p)%state(   1:mySizeChemicalDotState,c) &
        + chemicalState(p)%dotState(1:mySizeChemicalDotState,c) &
+       * crystallite_subdt(g,i,e)
+         mySizecurrentDensityDotState = currentDensityState(p)%sizeDotState
+         currentDensityState(p)%state(   1:mySizecurrentDensityDotState,c) = &
+         currentDensityState(p)%state(   1:mySizecurrentDensityDotState,c) &
+       + currentDensityState(p)%dotState(1:mySizecurrentDensityDotState,c) &
        * crystallite_subdt(g,i,e)
          mySizeheatfluxDotState = heatfluxState(p)%sizeDotState
          heatfluxState(p)%state(   1:mySizeheatfluxDotState,c) = &
@@ -2792,6 +2905,7 @@ subroutine crystallite_integrateStateFPI()
  use material, only: &
    plasticState, &
    chemicalState, &
+   currentDensityState, &
    heatfluxState, &
    sourceState, &
    phaseAt, phasememberAt, &
@@ -2802,6 +2916,7 @@ subroutine crystallite_integrateStateFPI()
    constitutive_microstructure, &
    constitutive_plasticity_maxSizeDotState, &
    constitutive_chemicalFE_maxSizeDotState, &
+   constitutive_currentDensity_maxSizeDotState, &
    constitutive_heatflux_maxSizeDotState, &
    constitutive_source_maxSizeDotState
 
@@ -2817,6 +2932,7 @@ subroutine crystallite_integrateStateFPI()
    mySource, &
    mySizePlasticDotState, &                                                                         ! size of dot states
    mySizeChemicalDotState, &                                                                         ! size of dot states
+   mySizecurrentDensityDotState, &
    mySizeheatfluxDotState, &                                                                         ! size of dot states
    mySizeSourceDotState
  integer(pInt), dimension(2) :: &
@@ -2829,6 +2945,7 @@ subroutine crystallite_integrateStateFPI()
    dot_prod22, &
    plasticStateDamper, &                                                                            ! damper for integration of state
    chemicalStateDamper, &                                                                           ! damper for integration of state
+   currentDensityStateDamper, &                                                                           ! damper for integration of state
    heatfluxStateDamper, &                                                                           ! damper for integration of state
    sourceStateDamper
  real(pReal), dimension(constitutive_plasticity_maxSizeDotState) :: &
@@ -2837,6 +2954,9 @@ subroutine crystallite_integrateStateFPI()
  real(pReal), dimension(constitutive_chemicalFE_maxSizeDotState) :: &
    chemicalStateResiduum, &
    tempChemicalState
+ real(pReal), dimension(constitutive_currentDensity_maxSizeDotState) :: &
+   currentDensityStateResiduum, &
+   tempcurrentDensityState  
  real(pReal), dimension(constitutive_heatflux_maxSizeDotState) :: &
    heatfluxStateResiduum, &
    tempheatfluxState
@@ -2871,6 +2991,10 @@ subroutine crystallite_integrateStateFPI()
      chemicalState(p)%previousDotState  = 0.0_pReal
      chemicalState(p)%previousDotState2 = 0.0_pReal
    end forall
+   forall(p = 1_pInt:size(currentDensityState))
+     currentDensityState(p)%previousDotState  = 0.0_pReal
+     currentDensityState(p)%previousDotState2 = 0.0_pReal
+   end forall
    forall(p = 1_pInt:size(heatfluxState))
      heatfluxState(p)%previousDotState  = 0.0_pReal
      heatfluxState(p)%previousDotState2 = 0.0_pReal
@@ -2889,6 +3013,8 @@ subroutine crystallite_integrateStateFPI()
      plasticState(p)%previousDotState2(:,c) = 0.0_pReal
      chemicalState(p)%previousDotState (:,c) = 0.0_pReal
      chemicalState(p)%previousDotState2(:,c) = 0.0_pReal
+     currentDensityState(p)%previousDotState (:,c) = 0.0_pReal
+     currentDensityState(p)%previousDotState2(:,c) = 0.0_pReal
      heatfluxState(p)%previousDotState (:,c) = 0.0_pReal
      heatfluxState(p)%previousDotState2(:,c) = 0.0_pReal
      do mySource = 1_pInt, phase_Nsources(p)
@@ -2922,6 +3048,7 @@ subroutine crystallite_integrateStateFPI()
        c = phasememberAt(g,i,e)
        NaN = any(IEEE_is_NaN(plasticState(p)%dotState(:,c)))
        NaN = NaN .or. any(IEEE_is_NaN(chemicalState(p)%dotState(:,c)))
+       NaN = NaN .or. any(IEEE_is_NaN(currentDensityState(p)%dotState(:,c)))
        NaN = NaN .or. any(IEEE_is_NaN(heatfluxState(p)%dotState(:,c)))
        do mySource = 1_pInt, phase_Nsources(p)
          NaN = NaN .or. any(IEEE_is_NaN(sourceState(p)%p(mySource)%dotState(:,c)))
@@ -2946,7 +3073,8 @@ subroutine crystallite_integrateStateFPI()
    write(6,'(a,i8,a)') '<< CRYST >> ', count(crystallite_todo(:,:,:)),' grains todo after preguess of state'
 
 
- !$OMP DO PRIVATE(mySizePlasticDotState,mySizeChemicalDotState,mySizeheatfluxDotState,mySizeSourceDotState,p,c)
+ !$OMP DO PRIVATE(mySizePlasticDotState,mySizeChemicalDotState,mySizecurrentDensityDotState, &
+ !$OMP&           mySizeheatfluxDotState,mySizeSourceDotState,p,c)
    do e = eIter(1),eIter(2); do i = iIter(1,e),iIter(2,e); do g = gIter(1,e),gIter(2,e)                    ! iterate over elements, ips and grains
      if (crystallite_todo(g,i,e)) then
        p = phaseAt(g,i,e)
@@ -2960,6 +3088,11 @@ subroutine crystallite_integrateStateFPI()
        chemicalState(p)%state(1:mySizeChemicalDotState,c) = &
          chemicalState(p)%subState0(1:mySizeChemicalDotState,c) &
        + chemicalState(p)%dotState (1:mySizeChemicalDotState,c) &
+       * crystallite_subdt(g,i,e)
+       mySizecurrentDensityDotState = currentDensityState(p)%sizeDotState
+       currentDensityState(p)%state(1:mySizecurrentDensityDotState,c) = &
+         currentDensityState(p)%subState0(1:mySizecurrentDensityDotState,c) &
+       + currentDensityState(p)%dotState (1:mySizecurrentDensityDotState,c) &
        * crystallite_subdt(g,i,e)
        mySizeheatfluxDotState = heatfluxState(p)%sizeDotState
        heatfluxState(p)%state(1:mySizeheatfluxDotState,c) = &
@@ -3003,6 +3136,8 @@ subroutine crystallite_integrateStateFPI()
        plasticState(p)%previousDotState (:,c) = plasticState(p)%dotState(:,c)
        chemicalState(p)%previousDotState2(:,c) = chemicalState(p)%previousDotState(:,c)
        chemicalState(p)%previousDotState (:,c) = chemicalState(p)%dotState(:,c)
+       currentDensityState(p)%previousDotState2(:,c) = currentDensityState(p)%previousDotState(:,c)
+       currentDensityState(p)%previousDotState (:,c) = currentDensityState(p)%dotState(:,c)
        heatfluxState(p)%previousDotState2(:,c) = heatfluxState(p)%previousDotState(:,c)
        heatfluxState(p)%previousDotState (:,c) = heatfluxState(p)%dotState(:,c)
        do mySource = 1_pInt, phase_Nsources(p)
@@ -3061,6 +3196,7 @@ subroutine crystallite_integrateStateFPI()
          c = phasememberAt(g,i,e)
          NaN = any(IEEE_is_NaN(plasticState(p)%dotState(:,c)))
          NaN = NaN .or. any(IEEE_is_NaN(chemicalState(p)%dotState(:,c)))
+         NaN = NaN .or. any(IEEE_is_NaN(currentDensityState(p)%dotState(:,c)))
          NaN = NaN .or. any(IEEE_is_NaN(heatfluxState(p)%dotState(:,c)))
          do mySource = 1_pInt, phase_Nsources(p)
            NaN = NaN .or. any(IEEE_is_NaN(sourceState(p)%p(mySource)%dotState(:,c)))
@@ -3082,10 +3218,14 @@ subroutine crystallite_integrateStateFPI()
    ! --- UPDATE STATE  ---
 
    !$OMP DO PRIVATE(dot_prod12,dot_prod22, &
-   !$OMP&           mySizePlasticDotState,mySizeChemicalDotState,mySizeheatfluxDotState,mySizeSourceDotState, &
-   !$OMP&           plasticStateResiduum,chemicalStateResiduum,heatfluxStateResiduum,sourceStateResiduum, &
-   !$OMP&           plasticStatedamper,chemicalStatedamper,heatfluxStatedamper,sourceStateDamper, &
-   !$OMP&           tempPlasticState,tempChemicalState,tempheatfluxState,tempSourceState,converged,p,c)
+   !$OMP&           mySizePlasticDotState,mySizeChemicalDotState,mySizecurrentDensityDotState, &
+   !$OMP&           mySizeheatfluxDotState,mySizeSourceDotState, &
+   !$OMP&           plasticStateResiduum,chemicalStateResiduum,currentDensityStateResiduum, &
+   !$OMP&           heatfluxStateResiduum,sourceStateResiduum, &
+   !$OMP&           plasticStatedamper,chemicalStatedamper,currentDensityStateDamper, &
+   !$OMP&           heatfluxStatedamper,sourceStateDamper, &
+   !$OMP&           tempPlasticState,tempChemicalState,tempcurrentDensityState, &
+   !$OMP&           tempheatfluxState,tempSourceState,converged,p,c)
      do e = eIter(1),eIter(2); do i = iIter(1,e),iIter(2,e); do g = gIter(1,e),gIter(2,e)           ! iterate over elements, ips and grains
        if (crystallite_todo(g,i,e) .and. .not. crystallite_converged(g,i,e)) then
 
@@ -3164,6 +3304,43 @@ subroutine crystallite_integrateStateFPI()
          chemicalState(p)%dotState(:,c) = chemicalState(p)%dotState(:,c) * chemicalStateDamper &
                                         + chemicalState(p)%previousDotState(:,c) &
                                         * (1.0_pReal - chemicalStateDamper)
+                                        
+         dot_prod12 = dot_product(  currentDensityState(p)%dotState         (:,c) &
+                                  - currentDensityState(p)%previousDotState (:,c), &
+                                    currentDensityState(p)%previousDotState (:,c) &
+                                  - currentDensityState(p)%previousDotState2(:,c))
+         dot_prod22 = dot_product(  currentDensityState(p)%previousDotState (:,c) &
+                                  - currentDensityState(p)%previousDotState2(:,c), &
+                                    currentDensityState(p)%previousDotState (:,c) &
+                                  - currentDensityState(p)%previousDotState2(:,c))
+         if (      dot_prod22 > 0.0_pReal &
+             .and. (     dot_prod12 < 0.0_pReal &
+                    .or. dot_product(currentDensityState(p)%dotState(:,c), &
+                                     currentDensityState(p)%previousDotState(:,c)) < 0.0_pReal) ) then
+           currentDensityStateDamper = 0.75_pReal + 0.25_pReal * tanh(2.0_pReal + 4.0_pReal * dot_prod12 / dot_prod22)
+         else
+           currentDensityStateDamper = 1.0_pReal
+         endif
+         ! --- get residui ---
+
+         mySizecurrentDensityDotState = currentDensityState(p)%sizeDotState
+         currentDensityStateResiduum(1:mySizecurrentDensityDotState) = &
+           currentDensityState(p)%state(1:mySizecurrentDensityDotState,c)      &
+         - currentDensityState(p)%subState0(1:mySizecurrentDensityDotState,c)  &
+         - (  currentDensityState(p)%dotState(1:mySizecurrentDensityDotState,c) * currentDensityStateDamper &
+            + currentDensityState(p)%previousDotState(1:mySizecurrentDensityDotState,c) &
+            * (1.0_pReal - currentDensityStateDamper)) * crystallite_subdt(g,i,e)
+
+         ! --- correct state with residuum ---
+         tempcurrentDensityState(1:mySizecurrentDensityDotState) = &
+           currentDensityState(p)%state(1:mySizecurrentDensityDotState,c) &
+         - currentDensityStateResiduum(1:mySizecurrentDensityDotState)                              ! need to copy to local variable, since we cant flush a pointer in openmp
+
+         ! --- store corrected dotState --- (cannot do this before state update, because not sure how to flush pointers in openmp)
+
+         currentDensityState(p)%dotState(:,c) = currentDensityState(p)%dotState(:,c) * currentDensityStateDamper &
+                                        + currentDensityState(p)%previousDotState(:,c) &
+                                        * (1.0_pReal - currentDensityStateDamper)                               
 
          dot_prod12 = dot_product(  heatfluxState(p)%dotState         (:,c) &
                                   - heatfluxState(p)%previousDotState (:,c), &
@@ -3268,6 +3445,11 @@ subroutine crystallite_integrateStateFPI()
                         .or. abs(chemicalStateResiduum(1:mySizeChemicalDotState)) < &
                              rTol_crystalliteState * abs(tempchemicalState(1:mySizeChemicalDotState)))
          converged = converged .and. &
+                     all(    abs(currentDensityStateResiduum(1:mySizecurrentDensityDotState)) < &
+                             currentDensityState(p)%aTolState(1:mySizecurrentDensityDotState) &
+                        .or. abs(currentDensityStateResiduum(1:mySizecurrentDensityDotState)) < &
+                             rTol_crystalliteState * abs(tempcurrentDensityState(1:mySizecurrentDensityDotState)))                    
+         converged = converged .and. &
                      all(    abs(heatfluxStateResiduum(1:mySizeheatfluxDotState)) < &
                              heatfluxState(p)%aTolState(1:mySizeheatfluxDotState) &
                         .or. abs(heatfluxStateResiduum(1:mySizeheatfluxDotState)) < &
@@ -3286,6 +3468,8 @@ subroutine crystallite_integrateStateFPI()
            tempPlasticState(1:mySizePlasticDotState)
          chemicalState(p)%state(1:mySizeChemicalDotState,c) = &
            tempchemicalState(1:mySizeChemicalDotState)
+         currentDensityState(p)%state(1:mySizecurrentDensityDotState,c) = &
+           tempcurrentDensityState(1:mySizecurrentDensityDotState)  
          heatfluxState(p)%state(1:mySizeheatfluxDotState,c) = &
            tempheatfluxState(1:mySizeheatfluxDotState)
          do mySource = 1_pInt, phase_Nsources(p)
@@ -3373,6 +3557,7 @@ logical function crystallite_stateJump(ipc,ip,el)
  use material, only: &
    plasticState, &
    chemicalState, &
+   currentDensityState, &
    heatfluxState, &
    sourceState, &
    phase_Nsources, &
@@ -3394,6 +3579,8 @@ logical function crystallite_stateJump(ipc,ip,el)
    mySizePlasticDeltaState, &
    myOffsetChemicalDeltaState, &
    mySizeChemicalDeltaState, &
+   myOffsetcurrentDensityDeltaState, &
+   mySizecurrentDensityDeltaState, &
    myOffsetheatfluxDeltaState, &
    mySizeheatfluxDeltaState, &
    myOffsetSourceDeltaState, &
@@ -3431,6 +3618,20 @@ logical function crystallite_stateJump(ipc,ip,el)
  chemicalState(p)%state(myOffsetChemicalDeltaState + 1_pInt                 : &
                        myOffsetChemicalDeltaState + mySizeChemicalDeltaState,c) + &
     chemicalState(p)%deltaState(1:mySizeChemicalDeltaState,c)
+    
+ myOffsetcurrentDensityDeltaState = currentDensityState(p)%offsetDeltaState
+ mySizecurrentDensityDeltaState   = currentDensityState(p)%sizeDeltaState
+
+ if( any(IEEE_is_NaN(currentDensityState(p)%deltaState(1:mySizecurrentDensityDeltaState,c)))) then                                       ! NaN occured in deltaState
+   crystallite_stateJump = .false.
+   return
+ endif
+
+ currentDensityState(p)%state(myOffsetcurrentDensityDeltaState + 1_pInt      : &
+                       myOffsetcurrentDensityDeltaState + mySizecurrentDensityDeltaState,c) = &
+ currentDensityState(p)%state(myOffsetcurrentDensityDeltaState + 1_pInt                 : &
+                       myOffsetcurrentDensityDeltaState + mySizecurrentDensityDeltaState,c) + &
+    currentDensityState(p)%deltaState(1:mySizecurrentDensityDeltaState,c)   
 
  myOffsetheatfluxDeltaState = heatfluxState(p)%offsetDeltaState
  mySizeheatfluxDeltaState   = heatfluxState(p)%sizeDeltaState
@@ -4112,8 +4313,8 @@ function crystallite_postResults(ipc, ip, el)
  use material, only: &
    plasticState, &
    chemicalState, &
-   heatfluxState, &
    currentDensityState, &
+   heatfluxState, &
    sourceState, &
    microstructure_crystallite, &
    crystallite_Noutput, &
