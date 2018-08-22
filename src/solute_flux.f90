@@ -40,6 +40,7 @@ module solute_flux
    solute_flux_calComponentConcandTangent, &
    solute_flux_getComponentConc, &
    solute_flux_getComponentMobility, &
+   solute_flux_getEffChargeNumber, &
    solute_flux_calAndPutComponentConcRate, &
    solute_flux_postResults
 
@@ -389,6 +390,58 @@ function solute_flux_getComponentMobility(ip,el)
  enddo
 
 end function solute_flux_getComponentMobility
+
+
+!--------------------------------------------------------------------------------------------------
+!> @brief return component mobility at material point 
+!--------------------------------------------------------------------------------------------------
+function solute_flux_getEffChargeNumber(ip,el)
+ use material, only: &
+   material_homog, &
+   homogenization_Ngrains, &
+   material_phase, &
+   homogenization_maxNcomponents, &
+   phase_chemicalFE, &
+   CHEMICALFE_quadenergy_ID, &
+   CHEMICALFE_thermodynamic_ID, &
+   phasefracMapping, &
+   phasefrac
+ use chemicalFE_quadenergy, only: &
+   chemicalFE_quadenergy_getEffChargeNumber  
+ use chemicalFE_thermodynamic, only: &
+   chemicalFE_thermodynamic_getEffChargeNumber  
+ 
+ implicit none
+ integer(pInt),                             intent(in) :: &
+   ip, el                                                                                      !< element number
+ real(pReal), dimension(homogenization_maxNcomponents) :: &
+   solute_flux_getEffChargeNumber
+ integer(pInt) :: &
+   gr, &
+   homog, & 
+   offset
+
+ homog = material_homog(ip,el)
+ offset = phasefracMapping(homog)%p(ip,el)
+ solute_flux_getEffChargeNumber = 0.0_pReal
+ do gr = 1_pInt, homogenization_Ngrains(homog)
+   chemicalFEType: select case (phase_chemicalFE(material_phase(gr,ip,el)))
+     case (CHEMICALFE_quadenergy_ID) chemicalFEType
+       solute_flux_getEffChargeNumber = &
+         solute_flux_getEffChargeNumber + &
+         phasefrac(homog)%p(gr,offset)* &
+         chemicalFE_quadenergy_getEffChargeNumber(gr,ip,el)
+
+     case (CHEMICALFE_thermodynamic_ID) chemicalFEType
+       solute_flux_getEffChargeNumber = &
+         solute_flux_getEffChargeNumber + &
+         phasefrac(homog)%p(gr,offset)* &
+         chemicalFE_thermodynamic_getEffChargeNumber(gr,ip,el)
+
+   end select chemicalFEType
+ enddo
+
+end function solute_flux_getEffChargeNumber
 
 
 !--------------------------------------------------------------------------------------------------

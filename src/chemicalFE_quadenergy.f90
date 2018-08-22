@@ -35,6 +35,7 @@ module chemicalFE_quadenergy
      QuadraticCoeffInv
    real(pReal), dimension(:  ), allocatable :: &
      Mobility, &
+     EffChargeNumber, &
      EqConc, &
      InitialAvgConc, &
      InitialDeltaConc, &
@@ -53,6 +54,7 @@ module chemicalFE_quadenergy
    chemicalFE_quadenergy_getEnergy, &
    chemicalFE_quadenergy_calConcandTangent, &
    chemicalFE_quadenergy_getMobility, &
+   chemicalFE_quadenergy_getEffChargeNumber, &
    chemicalFE_quadenergy_postResults
 
 contains
@@ -124,6 +126,7 @@ subroutine chemicalFE_quadenergy_init(fileUnit)
    line = ''
  real(pReal), dimension(:,:), allocatable :: &
    tempMobility, &
+   tempEffChargeNumber, &   
    tempEqConc, &
    tempInitialAvgConc, &
    tempInitialDeltaConc, &
@@ -161,6 +164,7 @@ subroutine chemicalFE_quadenergy_init(fileUnit)
  
  allocate(tempOutputID        (maxval(phase_Noutput)  ,maxNinstance))
  allocate(tempMobility        (phase_maxNcomponents,maxNinstance),source=0.0_pReal)
+ allocate(tempEffChargeNumber (phase_maxNcomponents,maxNinstance),source=0.0_pReal)
  allocate(tempEqConc          (phase_maxNcomponents,maxNinstance),source=0.0_pReal)
  allocate(tempInitialAvgConc  (phase_maxNcomponents,maxNinstance),source=0.0_pReal)
  allocate(tempInitialDeltaConc(phase_maxNcomponents,maxNinstance),source=0.0_pReal)
@@ -222,6 +226,13 @@ subroutine chemicalFE_quadenergy_init(fileUnit)
            tempMobility(j,instance) = IO_floatValue(line,chunkPos,1_pInt+j)
          enddo
          
+        case ('effective_charge_number')
+         if (chunkPos(1) /= phase_Ncomponents(phase) + 1_pInt) &
+           call IO_error(150_pInt,ext_msg=trim(tag)//' ('//CHEMICALFE_QUADENERGY_label//')')
+         do j = 1_pInt, phase_Ncomponents(phase)
+           tempEffChargeNumber(j,instance) = IO_floatValue(line,chunkPos,1_pInt+j)
+       enddo  
+       
        case ('component_eqconc')
          if (chunkPos(1) /= phase_Ncomponents(phase) + 1_pInt) &
            call IO_error(150_pInt,ext_msg=trim(tag)//' ('//CHEMICALFE_QUADENERGY_label//')')
@@ -285,6 +296,7 @@ subroutine chemicalFE_quadenergy_init(fileUnit)
      allocate(param(instance)%OutputID         (chemicalFE_quadenergy_Noutput(instance)))
      param(instance)%OutputID = tempOutputID(1:chemicalFE_quadenergy_Noutput(instance),instance)
      allocate(param(instance)%Mobility         (phase_Ncomponents(phase)))
+     allocate(param(instance)%EffChargeNumber  (phase_Ncomponents(phase)))
      allocate(param(instance)%EqConc           (phase_Ncomponents(phase)))
      allocate(param(instance)%InitialAvgConc   (phase_Ncomponents(phase)))
      allocate(param(instance)%InitialDeltaConc (phase_Ncomponents(phase)))
@@ -295,6 +307,7 @@ subroutine chemicalFE_quadenergy_init(fileUnit)
      allocate(param(instance)%QuadraticCoeffInv(phase_Ncomponents(phase), &
                                                 phase_Ncomponents(phase)))
      param(instance)%Mobility        = tempMobility        (1:phase_Ncomponents(phase),instance)
+     param(instance)%EffChargeNumber = tempEffChargeNumber (1:phase_Ncomponents(phase),instance)
      param(instance)%EqConc          = tempEqConc          (1:phase_Ncomponents(phase),instance)
      param(instance)%InitialAvgConc  = tempInitialAvgConc  (1:phase_Ncomponents(phase),instance)
      param(instance)%InitialDeltaConc= tempInitialDeltaConc(1:phase_Ncomponents(phase),instance)
@@ -542,6 +555,37 @@ function chemicalFE_quadenergy_getMobility(ipc,ip,el)
  enddo
 
 end function chemicalFE_quadenergy_getMobility
+
+
+!--------------------------------------------------------------------------------------------------
+!> @brief returns the component charge number for a given instance of this model
+!--------------------------------------------------------------------------------------------------
+function chemicalFE_quadenergy_getEffChargeNumber(ipc,ip,el)
+ use material, only: &
+   material_phase, &
+   phase_Ncomponents, &
+   phase_chemicalFEInstance
+
+ implicit none
+ integer(pInt), intent(in) :: &
+   ipc, ip, el
+ real(pReal), dimension(phase_Ncomponents(material_phase(ipc,ip,el))) :: &
+   chemicalFE_quadenergy_getEffChargeNumber
+ integer(pInt) :: &
+   cp, &
+   phase, &
+   instance    
+
+ phase = material_phase(ipc,ip,el)
+ instance = phase_chemicalFEInstance(phase)
+ chemicalFE_quadenergy_getEffChargeNumber = 0.0_pReal
+ do cp = 1_pInt, phase_Ncomponents(phase)
+   chemicalFE_quadenergy_getEffChargeNumber(cp) = &
+     param(instance)%EffChargeNumber(cp)
+ enddo
+
+end function chemicalFE_quadenergy_getEffChargeNumber
+
 
 
 !--------------------------------------------------------------------------------------------------
