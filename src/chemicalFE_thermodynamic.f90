@@ -431,7 +431,8 @@ function chemicalFE_thermodynamic_getEnergy(ipc,ip,el)
  real(pReal) :: &
    chemicalFE_thermodynamic_getEnergy
  real(pReal), dimension(phase_Ncomponents(material_phase(ipc,ip,el))) :: &
-   conc
+   conc, &
+   chemPot
  integer(pInt) :: &
    cpI, cpJ, &
    phase, &
@@ -444,6 +445,16 @@ function chemicalFE_thermodynamic_getEnergy(ipc,ip,el)
  do cpI = 1_pInt, phase_Ncomponents(phase)
    conc(cpI) = chemicalConc(phase)%p(cpI,chemConcMapping(phase)%p(ipc, ip, el))
  enddo
+ chempot = 0.0_pReal
+ do cpI = 1_pInt, phase_Ncomponents(phase)
+   chemPot(cpI) = chemPot(cpI) + &
+                  param(instance)%SolutionEnergy(cpI) + &
+                  R*T*log(conc(cpI)/(1.0_pReal - sum(conc(1:phase_Ncomponents(phase))))) 
+   do cpJ = 1_pInt, phase_Ncomponents(phase)
+     chemPot(cpI) = chempot(cpI) + & 
+                    param(instance)%InteractionEnergy(cpI,cpJ)*conc(cpJ)
+   enddo
+ enddo
  chemicalFE_thermodynamic_getEnergy = &
    R*T*(1.0_pReal - sum(conc(1:phase_Ncomponents(phase))))* &
    log(1.0_pReal - sum(conc(1:phase_Ncomponents(phase))))
@@ -452,14 +463,15 @@ function chemicalFE_thermodynamic_getEnergy(ipc,ip,el)
      chemicalFE_thermodynamic_getEnergy + &
      param(instance)%ConstantEnergy(cpI) + &
      param(instance)%SolutionEnergy(cpI)*conc(cpI) + &
-     R*T*conc(cpI)*log(conc(cpI))
+     R*T*conc(cpI)*log(conc(cpI)) - &
+     chemPot(cpI)*conc(cpI)
    do cpJ = 1_pInt, phase_Ncomponents(phase)  
      chemicalFE_thermodynamic_getEnergy = &
        chemicalFE_thermodynamic_getEnergy + &
-       param(instance)%InteractionEnergy(cpI,cpJ)*conc(cpI)*conc(cpJ)
+       0.5_pReal*param(instance)%InteractionEnergy(cpI,cpJ)*conc(cpI)*conc(cpJ)
    enddo
  enddo
-
+ 
 end function chemicalFE_thermodynamic_getEnergy
 
 

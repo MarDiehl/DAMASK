@@ -439,7 +439,8 @@ function chemicalFE_quadenergy_getEnergy(ipc,ip,el)
  integer(pInt), intent(in) :: &
    ipc, ip, el
  real(pReal), dimension(phase_Ncomponents(material_phase(ipc,ip,el))) :: &
-   conc
+   conc, &
+   chemPot
  real(pReal) :: &
    chemicalFE_quadenergy_getEnergy
  integer(pInt) :: &
@@ -453,13 +454,24 @@ function chemicalFE_quadenergy_getEnergy(ipc,ip,el)
  do cpI = 1_pInt, phase_Ncomponents(phase)
    conc(cpI) = chemicalConc(phase)%p(cpI,chemConcMapping(phase)%p(ipc, ip, el))
  enddo
+ chemPot = 0.0_pReal
+ do cpI = 1_pInt, phase_Ncomponents(phase)
+   chemPot(cpI) = chemPot(cpI) + &
+                  param(instance)%LinearCoeff(cpI)
+    do cpJ = 1_pInt, phase_Ncomponents(phase)
+      chemPot(cpI) = chempot(cpI) + &
+                     param(instance)%QuadraticCoeff(cpI,cpJ)* &
+                     (conc(cpJ)-param(instance)%EqConc(cpJ))
+    enddo                 
+ enddo
  chemicalFE_quadenergy_getEnergy = &
    param(instance)%ConstantCoeff
  do cpI = 1_pInt, phase_Ncomponents(phase)
    chemicalFE_quadenergy_getEnergy = &
      chemicalFE_quadenergy_getEnergy + &
      param(instance)%LinearCoeff(cpI)* &
-     (conc(cpI) - param(instance)%EqConc(cpI))
+     (conc(cpI) - param(instance)%EqConc(cpI)) - &
+     chemPot(cpI)*conc(cpI)
    do cpJ = 1_pInt, phase_Ncomponents(phase)  
      chemicalFE_quadenergy_getEnergy = &
        chemicalFE_quadenergy_getEnergy + &
