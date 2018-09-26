@@ -18,10 +18,6 @@ module spectral_solute
  private
 
 !--------------------------------------------------------------------------------------------------
-real(pReal),                                          parameter,           private :: &
-   electronic_charge            = 1.60217662e-19_pReal, &                                                           !< electronic charge in coulombs
-   avogadro_number              = 6.023e023  
-
 ! derived types
  type(tSolutionParams), private :: params
 
@@ -272,8 +268,7 @@ subroutine spectral_solute_formResidual(da_local,solution_current_local,residual
    charLength
  use solute_flux, only: &
    solute_flux_calComponentConcandTangent, &
-   solute_flux_getComponentMobility, &
-   solute_flux_getEffChargeNumber
+   solute_flux_getComponentMobility
  use electrical_conduction, only: &
    electrical_conduction_getavgElectricalField_from_currentDensity
 
@@ -325,17 +320,9 @@ subroutine spectral_solute_formResidual(da_local,solution_current_local,residual
                                                1,cell)
    conc_current(1:Ncomponents,i,j,k) = Conc
    
-   call electrical_conduction_getavgElectricalField_from_currentDensity(avgElfield, 1, cell)
-   
    gradChempot      = matmul(BMat,solution_current_elem(1:4,1:Ncomponents))
    
-   do grad_dim = 1,3
-    elecMigrateForce(grad_dim,1:Ncomponents) = solute_flux_getEffChargeNumber(1,cell) * electronic_charge * avgElfield(grad_dim) * &
-                                                avogadro_number 
-   enddo
-   
-   totdrivForce =  gradChempot + elecMigrateForce
-   totFlux = transpose(spread(solute_flux_getComponentMobility(1,cell),dim=2,ncopies=3))* totdrivForce
+   totFlux = transpose(spread(solute_flux_getComponentMobility(1,cell),dim=2,ncopies=3))* gradChempot
    
    residual_current_elem = 0.0_pReal
    residual_current_elem(1  ,            1:  Ncomponents) = &

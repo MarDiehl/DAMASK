@@ -235,7 +235,7 @@ subroutine chemicalFE_thermodynamic_init(fileUnit)
          do j = 1_pInt, phase_Ncomponents(phase)
            tempEffChargeNumber(j,instance) = IO_floatValue(line,chunkPos,1_pInt+j)
        enddo    
-         
+           
        case ('component_solutione','component_solutionenergy')
          if (chunkPos(1) /= phase_Ncomponents(phase) + 1_pInt) &
            call IO_error(150_pInt,ext_msg=trim(tag)//' ('//CHEMICALFE_THERMODYNAMIC_label//')')
@@ -479,7 +479,7 @@ end function chemicalFE_thermodynamic_getEnergy
 !> @brief returns the component concentration tangent for a given instance of this model
 !--------------------------------------------------------------------------------------------------
 subroutine chemicalFE_thermodynamic_calConcandTangent(Conc,dConcdChemPot,dConcdGradC, &
-                                                      ChemPot,GradC,MechChemPot,IntfChemPot,ipc,ip,el)
+                                                      ChemPot,GradC,MechChemPot,IntfChemPot,ElectroChemPot,ipc,ip,el)
  use IO, only: &
    IO_error
  use numerics, only: &
@@ -500,7 +500,8 @@ subroutine chemicalFE_thermodynamic_calConcandTangent(Conc,dConcdChemPot,dConcdG
    ChemPot, &
    GradC, &
    MechChemPot, &
-   IntfChemPot
+   IntfChemPot, &
+   ElectroChemPot
  real(pReal), dimension(phase_Ncomponents(material_phase(ipc,ip,el))), intent(out) :: &
    Conc
  real(pReal), dimension(phase_Ncomponents(material_phase(ipc,ip,el)), &
@@ -552,7 +553,8 @@ subroutine chemicalFE_thermodynamic_calConcandTangent(Conc,dConcdChemPot,dConcdG
        param(instance)%SolutionEnergy(cpI) - &
        param(instance)%GradientCoeff(cpI)*(Conc(cpI) - GradC(cpI))/charLength/charLength - &
        IntfChemPot(cpI) - &
-       param(instance)%MolarVolume*MechChemPot(cpI)
+       param(instance)%MolarVolume*MechChemPot(cpI) - &
+       ElectroChemPot(cpI)
      do cpJ = 1_pInt, phase_Ncomponents(phase)
        TempPerComponent(cpI) = &
          tempPerComponent(cpI) - &
@@ -652,6 +654,8 @@ function chemicalFE_thermodynamic_getMobility(ipc,ip,el)
 end function chemicalFE_thermodynamic_getMobility
 
 
+
+
 !--------------------------------------------------------------------------------------------------
 !> @brief returns the component mobility for a given instance of this model
 !--------------------------------------------------------------------------------------------------
@@ -680,6 +684,10 @@ function chemicalFE_thermodynamic_getEffChargeNumber(ipc,ip,el)
  enddo
 
 end function chemicalFE_thermodynamic_getEffChargeNumber
+
+
+
+
 
 
 !--------------------------------------------------------------------------------------------------

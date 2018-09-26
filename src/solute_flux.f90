@@ -10,6 +10,11 @@ module solute_flux
  
  implicit none
  private
+
+ real(pReal),                                          parameter,           private :: &
+   electronic_charge            = 1.60217662e-19_pReal, &                                          !< electronic charge in coulombs
+   avogadro_number              = 6.023e023  
+
  integer(pInt),             dimension(:,:),   allocatable, target, public :: &
    solute_flux_sizePostResult
  
@@ -27,7 +32,7 @@ module solute_flux
    integer(kind(undefined_ID)), dimension(:), allocatable :: & 
      outputID
    real(pReal),   dimension(:), allocatable :: &
-     initialChemPot
+     initialChemPot  
    type(p_2Dvec), dimension(:), allocatable :: &
      interfaceChemPot
  end type
@@ -212,7 +217,12 @@ subroutine solute_flux_phase_calComponentConcandTangent(Conc_local,dConcdChemPot
    phasefrac, &
    phase_Nkinematics, &
    phase_kinematics, &
-   KINEMATICS_solute_strain_ID
+   KINEMATICS_solute_strain_ID, &
+   ELECTRICAL_conduction_ID, &
+   electrical_type, &
+   electricPotentialMapping, &
+   electricPotential
+   
  use crystallite, only: &
    crystallite_Tstar_v
  use kinematics_solute_strain, only: &
@@ -236,7 +246,8 @@ subroutine solute_flux_phase_calComponentConcandTangent(Conc_local,dConcdChemPot
    dConcdGradC_local
  real(pReal), dimension(homogenization_maxNcomponents) :: &
    MechChemPot, &
-   InftChemPot
+   InftChemPot, &
+   ElectroChemPot
  integer(pInt) :: &
    gr, grI, grJ, k, &
    homog, &
@@ -270,15 +281,26 @@ subroutine solute_flux_phase_calComponentConcandTangent(Conc_local,dConcdChemPot
 
     end select kinematicsType
   enddo KinematicsLoop
+  
+  ElectroChemPot = 0.0_pReal
+  ElectricalType: select case (electrical_type(homog))
+  case (ELECTRICAL_conduction_ID) ElectricalType
+  ElectroChemPot = &
+               avogadro_number* &
+               electronic_charge* &
+               solute_flux_getEffChargeNumber(ip,el)* &
+               electricPotential(homog)%p(electricPotentialMapping(homog)%p(ip,el))      
+
+  end select ElectricalType   
 
   chemicalFEType: select case (phase_chemicalFE(material_phase(ipc,ip,el)))
     case (CHEMICALFE_quadenergy_ID) chemicalFEType
       call chemicalFE_quadenergy_calConcandTangent(Conc_local,dConcdChemPot_local,dConcdGradC_local, & 
-                                                    ChemPot,GradC,MechChemPot,InftChemPot,ipc,ip,el)
+                                                    ChemPot,GradC,MechChemPot,InftChemPot,ElectroChemPot,ipc,ip,el)
 
      case (CHEMICALFE_thermodynamic_ID) chemicalFEType
        call chemicalFE_thermodynamic_calConcandTangent(Conc_local,dConcdChemPot_local,dConcdGradC_local, & 
-                                                       ChemPot,GradC,MechChemPot,InftChemPot,ipc,ip,el)
+                                                       ChemPot,GradC,MechChemPot,InftChemPot,ElectroChemPot,ipc,ip,el)
 
      case default
        Conc_local = 0.0_pReal
@@ -496,6 +518,8 @@ function solute_flux_getEffChargeNumber(ip,el)
  enddo
 
 end function solute_flux_getEffChargeNumber
+
+
 
 
 !--------------------------------------------------------------------------------------------------

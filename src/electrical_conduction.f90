@@ -34,6 +34,7 @@ module electrical_conduction
    electrical_conduction_getFlux, &  
    electrical_conduction_getFluxTangent, &
    electrical_conduction_calAndPutCurrentDensity, &
+   electrical_conduction_calAndPutElectricPotential, &
    electrical_conduction_getavgElectricalField_from_currentDensity, &
    electrical_conduction_postResults
 
@@ -123,6 +124,9 @@ subroutine electrical_conduction_init(fileUnit)
      allocate(electricalState(homog)%state0   (sizeState,NofmyElectrical))
      allocate(electricalState(homog)%subState0(sizeState,NofmyElectrical))
      allocate(electricalState(homog)%state    (sizeState,NofmyElectrical))
+     
+     electricPotentialMapping(homog)%p => mappingHomogenization(1,:,:)
+     allocate  (electricPotential(homog)%p(NofmyElectrical))
 
      
    endif myElectrical
@@ -285,6 +289,33 @@ use currentDensity_ohm, only: &
    enddo
 
 end subroutine electrical_conduction_calAndPutCurrentDensity
+
+
+
+
+!--------------------------------------------------------------------------------------------------
+!> @brief store electric potential at material point 
+!--------------------------------------------------------------------------------------------------
+subroutine electrical_conduction_calAndPutElectricPotential(ElecPot,ip,el)
+ use material, only: &
+   material_homog, &
+   electricPotential, &
+   electricPotentialMapping
+  
+ implicit none
+ integer(pInt),             intent(in)  :: &
+   ip, el                                                                                      !< element number
+ real(pReal), intent(in)  :: &
+   ElecPot
+ integer(pInt) :: &
+    homog
+
+   homog = material_homog(ip,el)
+   electricPotential(homog)% &
+       p(electricPotentialMapping(homog)%p(ip,el)) = ElecPot
+
+end subroutine electrical_conduction_calAndPutElectricPotential
+
 
 
 

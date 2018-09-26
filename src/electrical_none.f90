@@ -77,6 +77,9 @@ subroutine electrical_none_init
      allocate(electricalState(homog)%state0   (sizeState,NofmyElectrical))
      allocate(electricalState(homog)%subState0(sizeState,NofmyElectrical))
      allocate(electricalState(homog)%state    (sizeState,NofmyElectrical))
+     
+     electricPotentialMapping(homog)%p => mappingHomogenization(1,:,:)
+     allocate  (electricPotential(homog)%p(NofmyElectrical))
 
      
    endif myElectrical

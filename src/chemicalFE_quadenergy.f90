@@ -232,7 +232,7 @@ subroutine chemicalFE_quadenergy_init(fileUnit)
          do j = 1_pInt, phase_Ncomponents(phase)
            tempEffChargeNumber(j,instance) = IO_floatValue(line,chunkPos,1_pInt+j)
        enddo  
-       
+  
        case ('component_eqconc')
          if (chunkPos(1) /= phase_Ncomponents(phase) + 1_pInt) &
            call IO_error(150_pInt,ext_msg=trim(tag)//' ('//CHEMICALFE_QUADENERGY_label//')')
@@ -489,7 +489,7 @@ end function chemicalFE_quadenergy_getEnergy
 !> @brief returns the component concentration tangent for a given instance of this model
 !--------------------------------------------------------------------------------------------------
 subroutine chemicalFE_quadenergy_calConcandTangent(Conc,dConcdChemPot,dConcdGradC, & 
-                                                   ChemPot,GradC,MechChemPot,IntfChemPot,ipc,ip,el)
+                                                   ChemPot,GradC,MechChemPot,IntfChemPot,ElectroChemPot,ipc,ip,el)
  use numerics, only: &
    charLength
  use material, only: &
@@ -503,6 +503,7 @@ subroutine chemicalFE_quadenergy_calConcandTangent(Conc,dConcdChemPot,dConcdGrad
  real(pReal), dimension(phase_Ncomponents(material_phase(ipc,ip,el))), intent(in)  :: &
    MechChemPot, &
    IntfChemPot, &
+   ElectroChemPot, &
    ChemPot, &
    GradC
  real(pReal), dimension(phase_Ncomponents(material_phase(ipc,ip,el))), intent(out) :: &
@@ -526,7 +527,8 @@ subroutine chemicalFE_quadenergy_calConcandTangent(Conc,dConcdChemPot,dConcdGrad
    do cpJ = 1_pInt, phase_Ncomponents(phase)
      Conc(cpI) = Conc(cpI) + &
                  param(instance)%QuadraticCoeffInv(cpI,cpJ)* &
-                 (ChemPot(cpJ) - MechChemPot(cpJ) - IntfChemPot(cpJ) - param(instance)%LinearCoeff(cpJ) + &
+                 (ChemPot(cpJ) - MechChemPot(cpJ) - IntfChemPot(cpJ) - &
+                  ElectroChemPot(cpJ) - param(instance)%LinearCoeff(cpJ) + &
                   GradC(cpJ)*param(instance)%GradientCoeff(cpJ)/charLength/charLength)
      dConcdChemPot(cpI,cpJ) = &
        param(instance)%QuadraticCoeffInv(cpI,cpJ)
@@ -597,6 +599,7 @@ function chemicalFE_quadenergy_getEffChargeNumber(ipc,ip,el)
  enddo
 
 end function chemicalFE_quadenergy_getEffChargeNumber
+
 
 
 

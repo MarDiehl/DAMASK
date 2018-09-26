@@ -2635,7 +2635,7 @@ end subroutine homogenization_multiphase_putInterfaceNormals
 !--------------------------------------------------------------------------------------------------
 !> @brief return array of homogenization results for post file inclusion 
 !--------------------------------------------------------------------------------------------------
-pure function homogenization_multiphase_postResults(ip,el,avgP,avgF)
+ pure function homogenization_multiphase_postResults(ip,el,avgP,avgF)
  use mesh, only: &
    mesh_ipCoordinates
  use material, only: &
@@ -2666,7 +2666,7 @@ pure function homogenization_multiphase_postResults(ip,el,avgP,avgF)
  homogenization_multiphase_postResults = 0.0_pReal
  
  do o = 1_pInt,homogenization_Noutput(material_homog(ip,el))
-   select case(param(homID)%outputID(o))
+  select case(param(homID)%outputID(o))
      case (nconstituents_ID)
        homogenization_multiphase_postResults(c+1_pInt) = real(homogenization_Ngrains(material_homog(ip,el)),pReal)
        c = c + 1_pInt

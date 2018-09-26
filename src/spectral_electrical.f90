@@ -157,7 +157,8 @@ type(tSolutionState) function spectral_electrical_solution(avgElectricalField)
  use spectral_utilities, only: &
    tVectorBoundaryCondition
  use electrical_conduction, only: &
-   electrical_conduction_calAndPutCurrentDensity
+   electrical_conduction_calAndPutCurrentDensity, &
+   electrical_conduction_calAndPutElectricPotential
  use FEsolving, only: &
    terminallyIll
    
@@ -239,6 +240,8 @@ type(tSolutionState) function spectral_electrical_solution(avgElectricalField)
                          x_scal_current(i ,  j   ,k-1 ))/(doubledelta(3))) + params%electricalField_BC(3)                                               
    
    call electrical_conduction_calAndPutCurrentDensity(ElectricalField,1,cell)
+   call electrical_conduction_calAndPutElectricPotential(potential_current,1,cell)
+
 enddo; enddo; enddo
 
  call MPI_Allreduce(MPI_IN_PLACE,minPotential    ,1,MPI_DOUBLE,MPI_MIN,PETSC_COMM_WORLD,ierr)
@@ -448,7 +451,8 @@ subroutine spectral_electrical_forward(avgElectricalField)
  use spectral_utilities, only: &
    cutBack
  use electrical_conduction, only: &
-    electrical_conduction_calAndPutCurrentDensity    
+    electrical_conduction_calAndPutCurrentDensity, &
+    electrical_conduction_calAndPutElectricPotential
  use spectral_utilities, only: &
    tVectorBoundaryCondition    
     
@@ -460,7 +464,8 @@ subroutine spectral_electrical_forward(avgElectricalField)
  Vec :: solution_current_local
  PetscScalar, pointer :: solution_current_scal(:,:,:)
  integer(pInt) :: i, j, k, cell
- real(pReal) :: ElectricalField(3)
+ real(pReal) :: ElectricalField(3), &
+                ElectricPotential
  PetscErrorCode :: ierr
  
 
@@ -484,8 +489,11 @@ subroutine spectral_electrical_forward(avgElectricalField)
                            solution_current_scal(i,  j-1   ,k  ))/(doubledelta(2))) + avgElectricalField%values(2)        
      ElectricalField(3)= ((solution_current_scal(i ,  j    ,k+1) - &
                            solution_current_scal(i,   j    ,k-1))/(doubledelta(3))) + avgElectricalField%values(3)                                                  
+                           
+     ElectricPotential = solution_current_scal(i,  j   ,k)                      
      
      call electrical_conduction_calAndPutCurrentDensity(ElectricalField,1,cell)
+     call electrical_conduction_calAndPutElectricPotential(ElectricPotential,1,cell)
    enddo; enddo; enddo
    call DMDAVecRestoreArrayF90(da_local,solution_current_local,solution_current_scal,ierr)
    CHKERRQ(ierr)

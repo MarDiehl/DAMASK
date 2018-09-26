@@ -268,7 +268,8 @@ module material
 
  type(tHomogMapping),                       dimension(:),  allocatable,  public            :: &
    soluteMapping, &                                                                                 !< mapping for solute state/fields
-   phasefracMapping                                                                                 !< mapping for phase fraction state/fields
+   phasefracMapping, &                                                                              !< mapping for phase fraction state/fields
+   electricPotentialMapping
 
  type(tPhaseMapping),                       dimension(:),  allocatable,  public            :: &
    thermalMapping, &                                                                                !< mapping for thermal state/fields
@@ -277,7 +278,8 @@ module material
 
  type(p_vec),                               dimension(:),  allocatable,  public            :: &
    temperature, &                                                                                   !< temperature field
-   temperatureRate                                                                                  !< temperature change rate field
+   temperatureRate, &                                                                               !< temperature change rate field
+   electricPotential                                                                                !< electric potential field
 
  type(p_2Dvec),                             dimension(:),  allocatable,  public            :: &
    phasefrac, &                                                                                     !< phase fraction field
@@ -432,6 +434,9 @@ subroutine material_init()
  allocate(phasefracMapping   (size(config_homogenization)))
  allocate(phasefrac          (size(config_homogenization)))
  allocate(electricalState    (size(config_homogenization)))
+ allocate(electricPotential  (size(config_homogenization)))
+ allocate(electricPotentialMapping(size(config_homogenization)))
+
 
  do m = 1_pInt,size(config_microstructure)
    if(microstructure_crystallite(m) < 1_pInt .or. &
