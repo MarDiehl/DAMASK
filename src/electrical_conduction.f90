@@ -34,7 +34,7 @@ module electrical_conduction
    electrical_conduction_getFlux, &  
    electrical_conduction_getFluxTangent, &
    electrical_conduction_calAndPutCurrentDensity, &
-   electrical_conduction_calAndPutElectricPotential, &
+   electrical_conduction_PutElectricPotential, &
    electrical_conduction_getavgElectricalField_from_currentDensity, &
    electrical_conduction_postResults
 
@@ -296,7 +296,7 @@ end subroutine electrical_conduction_calAndPutCurrentDensity
 !--------------------------------------------------------------------------------------------------
 !> @brief store electric potential at material point 
 !--------------------------------------------------------------------------------------------------
-subroutine electrical_conduction_calAndPutElectricPotential(ElecPot,ip,el)
+subroutine electrical_conduction_PutElectricPotential(ElecPot,ip,el)
  use material, only: &
    material_homog, &
    electricPotential, &
@@ -314,7 +314,7 @@ subroutine electrical_conduction_calAndPutElectricPotential(ElecPot,ip,el)
    electricPotential(homog)% &
        p(electricPotentialMapping(homog)%p(ip,el)) = ElecPot
 
-end subroutine electrical_conduction_calAndPutElectricPotential
+end subroutine electrical_conduction_PutElectricPotential
 
 
 

@@ -12,8 +12,8 @@ module solute_flux
  private
 
  real(pReal),                                          parameter,           private :: &
-   electronic_charge            = 1.60217662e-19_pReal, &                                          !< electronic charge in coulombs
-   avogadro_number              = 6.023e023  
+   electromigration_const            = 9.649909782e04_pReal                                        !< electronic charge in coulombs
+     
 
  integer(pInt),             dimension(:,:),   allocatable, target, public :: &
    solute_flux_sizePostResult
@@ -286,8 +286,7 @@ subroutine solute_flux_phase_calComponentConcandTangent(Conc_local,dConcdChemPot
   ElectricalType: select case (electrical_type(homog))
   case (ELECTRICAL_conduction_ID) ElectricalType
   ElectroChemPot = &
-               avogadro_number* &
-               electronic_charge* &
+               electromigration_const* &
                solute_flux_getEffChargeNumber(ip,el)* &
                electricPotential(homog)%p(electricPotentialMapping(homog)%p(ip,el))      
 

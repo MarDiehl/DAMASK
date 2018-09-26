@@ -158,7 +158,7 @@ type(tSolutionState) function spectral_electrical_solution(avgElectricalField)
    tVectorBoundaryCondition
  use electrical_conduction, only: &
    electrical_conduction_calAndPutCurrentDensity, &
-   electrical_conduction_calAndPutElectricPotential
+   electrical_conduction_PutElectricPotential
  use FEsolving, only: &
    terminallyIll
    
@@ -240,7 +240,7 @@ type(tSolutionState) function spectral_electrical_solution(avgElectricalField)
                          x_scal_current(i ,  j   ,k-1 ))/(doubledelta(3))) + params%electricalField_BC(3)                                               
    
    call electrical_conduction_calAndPutCurrentDensity(ElectricalField,1,cell)
-   call electrical_conduction_calAndPutElectricPotential(potential_current,1,cell)
+   call electrical_conduction_PutElectricPotential(potential_current,1,cell)
 
 enddo; enddo; enddo
 
@@ -452,7 +452,7 @@ subroutine spectral_electrical_forward(avgElectricalField)
    cutBack
  use electrical_conduction, only: &
     electrical_conduction_calAndPutCurrentDensity, &
-    electrical_conduction_calAndPutElectricPotential
+    electrical_conduction_PutElectricPotential
  use spectral_utilities, only: &
    tVectorBoundaryCondition    
     
@@ -493,7 +493,7 @@ subroutine spectral_electrical_forward(avgElectricalField)
      ElectricPotential = solution_current_scal(i,  j   ,k)                      
      
      call electrical_conduction_calAndPutCurrentDensity(ElectricalField,1,cell)
-     call electrical_conduction_calAndPutElectricPotential(ElectricPotential,1,cell)
+     call electrical_conduction_PutElectricPotential(ElectricPotential,1,cell)
    enddo; enddo; enddo
    call DMDAVecRestoreArrayF90(da_local,solution_current_local,solution_current_scal,ierr)
    CHKERRQ(ierr)
