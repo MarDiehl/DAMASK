@@ -2671,10 +2671,10 @@ pure function homogenization_multiphase_postResults(ip,el,avgP,avgF)
        homogenization_multiphase_postResults(c+1_pInt) = real(homogenization_Ngrains(material_homog(ip,el)),pReal)
        c = c + 1_pInt
      case (avgdefgrad_ID)
-       homogenization_multiphase_postResults(c+1_pInt:c+9_pInt) = reshape(avgF,[9])
+       homogenization_multiphase_postResults(c+1_pInt:c+9_pInt) = reshape(transpose(avgF),[9])
        c = c + 9_pInt
      case (avgfirstpiola_ID)
-       homogenization_multiphase_postResults(c+1_pInt:c+9_pInt) = reshape(avgP,[9])
+       homogenization_multiphase_postResults(c+1_pInt:c+9_pInt) = reshape(transpose(avgP),[9])
        c = c + 9_pInt
      case (phasefrac_ID)
        do gr = 1_pInt, homogenization_Ngrains(material_homog(ip,el))

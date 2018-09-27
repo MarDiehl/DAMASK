@@ -1501,7 +1501,7 @@ subroutine lattice_init
        ctr = 0_pInt
        do j = 1_pInt, 3_pInt; do i = 1_pInt, 3_pInt
          ctr = ctr + 1_pInt
-         lattice_initialPlasticStrain(i,j,section) = IO_floatValue(line,chunkPos,1_pInt+ctr)
+         lattice_initialPlasticStrain(j,i,section) = IO_floatValue(line,chunkPos,1_pInt+ctr)
        enddo; enddo  
      end select
    endif
