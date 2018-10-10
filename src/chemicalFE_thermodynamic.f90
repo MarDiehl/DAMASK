@@ -39,12 +39,16 @@ module chemicalFE_thermodynamic
      ConstantEnergy = 0.0_pReal, &
      MolarVolume, &
      aTol = 1e-12_pReal
+   real(pReal), dimension(:,:,:,:), allocatable :: &
+     QuaternaryEnergy
+   real(pReal), dimension(:,:,:), allocatable :: &
+     TernaryEnergy
    real(pReal), dimension(:,:), allocatable :: &
-     InteractionEnergy
+     BinaryEnergy
    real(pReal), dimension(:  ), allocatable :: &
      Mobility, &
      EffChargeNumber, &
-     SolutionEnergy, &
+     UnaryEnergy, &
      InitialAvgConc, &
      InitialDeltaConc, &
      GradientCoeff
@@ -119,7 +123,7 @@ subroutine chemicalFE_thermodynamic_init(fileUnit)
  integer(pInt), allocatable, dimension(:) :: chunkPos
  integer(pInt) :: &
    maxNinstance, &
-   instance,phase,j,k,o, &
+   instance,phase,j,k,l,m,o, &
    NipcMyPhase, &
    mySize=0_pInt,sizeState,sizeDotState, sizeDeltaState
  character(len=65536) :: &
@@ -128,12 +132,16 @@ subroutine chemicalFE_thermodynamic_init(fileUnit)
  real(pReal), dimension(:,:), allocatable :: &
    tempMobility, &
    tempEffChargeNumber, &
-   tempSolutionEnergy, &
+   tempUnaryEnergy, &
    tempInitialAvgConc, &
    tempInitialDeltaConc, &
    tempGradCoeff
  real(pReal), dimension(:,:,:), allocatable :: &
-   tempInteractionEnergy
+   tempBinaryEnergy
+ real(pReal), dimension(:,:,:,:), allocatable :: &
+   tempTernaryEnergy
+ real(pReal), dimension(:,:,:,:,:), allocatable :: &
+   tempQuaternaryEnergy
  real(pReal) :: &
    randNum, &
    InitialConc
@@ -163,12 +171,19 @@ subroutine chemicalFE_thermodynamic_init(fileUnit)
  allocate(tempOutputID         (maxval(phase_Noutput)  ,maxNinstance))
  allocate(tempMobility         (phase_maxNcomponents,maxNinstance),source=0.0_pReal)
  allocate(tempEffChargeNumber  (phase_maxNcomponents,maxNinstance),source=0.0_pReal)
- allocate(tempSolutionEnergy   (phase_maxNcomponents,maxNinstance),source=0.0_pReal)
+ allocate(tempUnaryEnergy      (phase_maxNcomponents,maxNinstance),source=0.0_pReal)
  allocate(tempInitialAvgConc   (phase_maxNcomponents,maxNinstance),source=0.0_pReal)
  allocate(tempInitialDeltaConc (phase_maxNcomponents,maxNinstance),source=0.0_pReal)
  allocate(tempGradCoeff        (phase_maxNcomponents,maxNinstance),source=0.0_pReal)
- allocate(tempInteractionEnergy(phase_maxNcomponents, &
+ allocate(tempBinaryEnergy     (phase_maxNcomponents, &
                                 phase_maxNcomponents,maxNinstance),source=0.0_pReal)
+ allocate(tempTernaryEnergy    (phase_maxNcomponents, &
+                                phase_maxNcomponents, &
+                                phase_maxNcomponents, maxNinstance),source=0.0_pReal)
+ allocate(tempQuaternaryEnergy (phase_maxNcomponents, &
+                                phase_maxNcomponents, &
+                                phase_maxNcomponents, &
+                                phase_maxNcomponents, maxNinstance),source=0.0_pReal)
 
  rewind(fileUnit)
  phase = 0_pInt
@@ -234,16 +249,90 @@ subroutine chemicalFE_thermodynamic_init(fileUnit)
            tempEffChargeNumber(j,instance) = IO_floatValue(line,chunkPos,1_pInt+j)
        enddo    
            
-       case ('component_solutione','component_solutionenergy')
+        case ('component_constantenergy')
+          param(instance)%ConstantEnergy = IO_floatValue(line,chunkPos,2_pInt)
+         
+       case ('component_unaryenergy')
          if (chunkPos(1) /= phase_Ncomponents(phase) + 1_pInt) &
            call IO_error(150_pInt,ext_msg=trim(tag)//' ('//CHEMICALFE_THERMODYNAMIC_label//')')
          do j = 1_pInt, phase_Ncomponents(phase)
-           tempSolutionEnergy(j,instance) = IO_floatValue(line,chunkPos,1_pInt+j)
+           tempUnaryEnergy(j,instance) = IO_floatValue(line,chunkPos,1_pInt+j)
          enddo
          
-        case ('component_constantenergy')
-         param(instance)%ConstantEnergy = IO_floatValue(line,chunkPos,2_pInt)
-         
+       case ('component_binaryenergy')
+         if (chunkPos(1) /= phase_Ncomponents(phase)* &
+                            (phase_Ncomponents(phase) + 1_pInt)/2_pInt + 1_pInt) &
+           call IO_error(150_pInt,ext_msg=trim(tag)//' ('//CHEMICALFE_THERMODYNAMIC_label//')')
+         o = 0_pInt
+         do j = 1_pInt, phase_Ncomponents(phase)
+           do k = j, phase_Ncomponents(phase)
+             o = o + 1_pInt
+             tempBinaryEnergy(j,k,instance) = IO_floatValue(line,chunkPos,1_pInt+o)
+             tempBinaryEnergy(k,j,instance) = IO_floatValue(line,chunkPos,1_pInt+o)
+           enddo
+         enddo
+
+       case ('component_ternaryenergy')
+!          if (chunkPos(1) /= phase_Ncomponents(phase)* &
+!                             (phase_Ncomponents(phase) + 1_pInt)/2_pInt + 1_pInt) &
+!            call IO_error(150_pInt,ext_msg=trim(tag)//' ('//CHEMICALFE_THERMODYNAMIC_label//')')
+         o = 0_pInt
+         do j = 1_pInt, phase_Ncomponents(phase)
+           do k = j, phase_Ncomponents(phase)
+             do l = k, phase_Ncomponents(phase)
+               o = o + 1_pInt
+               tempTernaryEnergy(j,k,l,instance) = IO_floatValue(line,chunkPos,1_pInt+o)
+               tempTernaryEnergy(j,l,k,instance) = IO_floatValue(line,chunkPos,1_pInt+o)
+               tempTernaryEnergy(k,j,l,instance) = IO_floatValue(line,chunkPos,1_pInt+o)
+               tempTernaryEnergy(k,l,j,instance) = IO_floatValue(line,chunkPos,1_pInt+o)
+               tempTernaryEnergy(l,j,k,instance) = IO_floatValue(line,chunkPos,1_pInt+o)
+               tempTernaryEnergy(l,k,j,instance) = IO_floatValue(line,chunkPos,1_pInt+o)
+             enddo
+           enddo
+         enddo
+
+       case ('component_quaternaryenergy')
+!          if (chunkPos(1) /= phase_Ncomponents(phase)* &
+!                             (phase_Ncomponents(phase) + 1_pInt)/2_pInt + 1_pInt) &
+!            call IO_error(150_pInt,ext_msg=trim(tag)//' ('//CHEMICALFE_THERMODYNAMIC_label//')')
+         o = 0_pInt
+         do j = 1_pInt, phase_Ncomponents(phase)
+           do k = j, phase_Ncomponents(phase)
+             do l = k, phase_Ncomponents(phase)
+               do m = l, phase_Ncomponents(phase)
+                 o = o + 1_pInt
+                 tempQuaternaryEnergy(j,k,l,m,instance) = IO_floatValue(line,chunkPos,1_pInt+o)
+                 tempQuaternaryEnergy(j,k,m,l,instance) = IO_floatValue(line,chunkPos,1_pInt+o)
+                 tempQuaternaryEnergy(j,l,k,m,instance) = IO_floatValue(line,chunkPos,1_pInt+o)
+                 tempQuaternaryEnergy(j,l,m,k,instance) = IO_floatValue(line,chunkPos,1_pInt+o)
+                 tempQuaternaryEnergy(j,m,k,l,instance) = IO_floatValue(line,chunkPos,1_pInt+o)
+                 tempQuaternaryEnergy(j,m,l,k,instance) = IO_floatValue(line,chunkPos,1_pInt+o)
+                 
+                 tempQuaternaryEnergy(k,j,l,m,instance) = IO_floatValue(line,chunkPos,1_pInt+o)
+                 tempQuaternaryEnergy(k,j,m,l,instance) = IO_floatValue(line,chunkPos,1_pInt+o)
+                 tempQuaternaryEnergy(k,l,j,m,instance) = IO_floatValue(line,chunkPos,1_pInt+o)
+                 tempQuaternaryEnergy(k,l,m,j,instance) = IO_floatValue(line,chunkPos,1_pInt+o)
+                 tempQuaternaryEnergy(k,m,j,l,instance) = IO_floatValue(line,chunkPos,1_pInt+o)
+                 tempQuaternaryEnergy(k,m,l,j,instance) = IO_floatValue(line,chunkPos,1_pInt+o)
+
+                 tempQuaternaryEnergy(l,j,k,m,instance) = IO_floatValue(line,chunkPos,1_pInt+o)
+                 tempQuaternaryEnergy(l,j,m,k,instance) = IO_floatValue(line,chunkPos,1_pInt+o)
+                 tempQuaternaryEnergy(l,k,j,m,instance) = IO_floatValue(line,chunkPos,1_pInt+o)
+                 tempQuaternaryEnergy(l,k,m,j,instance) = IO_floatValue(line,chunkPos,1_pInt+o)
+                 tempQuaternaryEnergy(l,m,j,k,instance) = IO_floatValue(line,chunkPos,1_pInt+o)
+                 tempQuaternaryEnergy(l,m,k,j,instance) = IO_floatValue(line,chunkPos,1_pInt+o)
+
+                 tempQuaternaryEnergy(m,j,k,l,instance) = IO_floatValue(line,chunkPos,1_pInt+o)
+                 tempQuaternaryEnergy(m,j,l,k,instance) = IO_floatValue(line,chunkPos,1_pInt+o)
+                 tempQuaternaryEnergy(m,k,j,l,instance) = IO_floatValue(line,chunkPos,1_pInt+o)
+                 tempQuaternaryEnergy(m,k,l,j,instance) = IO_floatValue(line,chunkPos,1_pInt+o)
+                 tempQuaternaryEnergy(m,l,j,k,instance) = IO_floatValue(line,chunkPos,1_pInt+o)
+                 tempQuaternaryEnergy(m,l,k,j,instance) = IO_floatValue(line,chunkPos,1_pInt+o)
+               enddo
+             enddo
+           enddo
+         enddo
+
        case ('component_initialavgconc')
          if (chunkPos(1) /= phase_Ncomponents(phase) + 1_pInt) &
            call IO_error(150_pInt,ext_msg=trim(tag)//' ('//CHEMICALFE_THERMODYNAMIC_label//')')
@@ -265,19 +354,6 @@ subroutine chemicalFE_thermodynamic_init(fileUnit)
            tempGradCoeff(j,instance) = IO_floatValue(line,chunkPos,1_pInt+j)
          enddo
          
-       case ('component_interactione','component_interactionenergy')
-         if (chunkPos(1) /= phase_Ncomponents(phase)* &
-                            (phase_Ncomponents(phase) + 1_pInt)/2_pInt + 1_pInt) &
-           call IO_error(150_pInt,ext_msg=trim(tag)//' ('//CHEMICALFE_THERMODYNAMIC_label//')')
-         o = 0_pInt
-         do j = 1_pInt, phase_Ncomponents(phase)
-           do k = j, phase_Ncomponents(phase)
-             o = o + 1_pInt
-             tempInteractionEnergy(j,k,instance) = IO_floatValue(line,chunkPos,1_pInt+o)
-             tempInteractionEnergy(k,j,instance) = IO_floatValue(line,chunkPos,1_pInt+o)
-           enddo
-         enddo
-
        case default
 
      end select
@@ -291,19 +367,33 @@ subroutine chemicalFE_thermodynamic_init(fileUnit)
      param(instance)%OutputID = tempOutputID(1:chemicalFE_thermodynamic_Noutput(instance),instance)
      allocate(param(instance)%Mobility         (phase_Ncomponents(phase)))
      allocate(param(instance)%EffChargeNumber  (phase_Ncomponents(phase)))
-     allocate(param(instance)%SolutionEnergy   (phase_Ncomponents(phase)))
      allocate(param(instance)%InitialAvgConc   (phase_Ncomponents(phase)))
      allocate(param(instance)%InitialDeltaConc (phase_Ncomponents(phase)))
      allocate(param(instance)%GradientCoeff    (phase_Ncomponents(phase)))
-     allocate(param(instance)%InteractionEnergy(phase_Ncomponents(phase), &
+     allocate(param(instance)%UnaryEnergy      (phase_Ncomponents(phase)))
+     allocate(param(instance)%BinaryEnergy     (phase_Ncomponents(phase), &
+                                                phase_Ncomponents(phase)))
+     allocate(param(instance)%TernaryEnergy    (phase_Ncomponents(phase), &
+                                                phase_Ncomponents(phase), &
+                                                phase_Ncomponents(phase)))
+     allocate(param(instance)%QuaternaryEnergy (phase_Ncomponents(phase), &
+                                                phase_Ncomponents(phase), &
+                                                phase_Ncomponents(phase), &
                                                 phase_Ncomponents(phase)))
      param(instance)%Mobility          = tempMobility         (1:phase_Ncomponents(phase),instance)
      param(instance)%EffChargeNumber   = tempEffChargeNumber  (1:phase_Ncomponents(phase),instance)
-     param(instance)%SolutionEnergy    = tempSolutionEnergy   (1:phase_Ncomponents(phase),instance)
      param(instance)%InitialAvgConc    = tempInitialAvgConc   (1:phase_Ncomponents(phase),instance)
      param(instance)%InitialDeltaConc  = tempInitialDeltaConc (1:phase_Ncomponents(phase),instance)
      param(instance)%GradientCoeff     = tempGradCoeff        (1:phase_Ncomponents(phase),instance)
-     param(instance)%InteractionEnergy = tempInteractionEnergy(1:phase_Ncomponents(phase), &
+     param(instance)%UnaryEnergy       = tempUnaryEnergy      (1:phase_Ncomponents(phase),instance)
+     param(instance)%BinaryEnergy      = tempBinaryEnergy     (1:phase_Ncomponents(phase), &
+                                                               1:phase_Ncomponents(phase),instance)
+     param(instance)%TernaryEnergy     = tempTernaryEnergy    (1:phase_Ncomponents(phase), &
+                                                               1:phase_Ncomponents(phase), &
+                                                               1:phase_Ncomponents(phase),instance)
+     param(instance)%QuaternaryEnergy  = tempQuaternaryEnergy (1:phase_Ncomponents(phase), &
+                                                               1:phase_Ncomponents(phase), &
+                                                               1:phase_Ncomponents(phase), &
                                                                1:phase_Ncomponents(phase),instance)
      
      if (any(param(instance)%Mobility < 0.0_pReal)) &
@@ -425,7 +515,7 @@ function chemicalFE_thermodynamic_getEnergy(ipc,ip,el)
    conc, &
    chemPot
  integer(pInt) :: &
-   cpI, cpJ, &
+   cpI, cpJ, cpK, cpL, &
    phase, &
    instance    
 
@@ -439,11 +529,11 @@ function chemicalFE_thermodynamic_getEnergy(ipc,ip,el)
  chempot = 0.0_pReal
  do cpI = 1_pInt, phase_Ncomponents(phase)
    chemPot(cpI) = chemPot(cpI) + &
-                  param(instance)%SolutionEnergy(cpI) + &
+                  param(instance)%UnaryEnergy(cpI) + &
                   R*T*log(conc(cpI)/(1.0_pReal - sum(conc(1:phase_Ncomponents(phase))))) 
    do cpJ = 1_pInt, phase_Ncomponents(phase)
      chemPot(cpI) = chempot(cpI) + & 
-                    param(instance)%InteractionEnergy(cpI,cpJ)*conc(cpJ)
+                    param(instance)%BinaryEnergy(cpI,cpJ)*conc(cpJ)
    enddo
  enddo
  chemicalFE_thermodynamic_getEnergy = &
@@ -453,13 +543,26 @@ function chemicalFE_thermodynamic_getEnergy(ipc,ip,el)
  do cpI = 1_pInt, phase_Ncomponents(phase)
    chemicalFE_thermodynamic_getEnergy = &
      chemicalFE_thermodynamic_getEnergy + &
-     param(instance)%SolutionEnergy(cpI)*conc(cpI) + &
+     param(instance)%UnaryEnergy(cpI)*conc(cpI) + &
      R*T*conc(cpI)*log(conc(cpI)) - &
      chemPot(cpI)*conc(cpI)
    do cpJ = 1_pInt, phase_Ncomponents(phase)  
      chemicalFE_thermodynamic_getEnergy = &
        chemicalFE_thermodynamic_getEnergy + &
-       0.5_pReal*param(instance)%InteractionEnergy(cpI,cpJ)*conc(cpI)*conc(cpJ)
+       param(instance)%BinaryEnergy(cpI,cpJ)* &
+       conc(cpI)*conc(cpJ)/2.0_pReal
+     do cpK = 1_pInt, phase_Ncomponents(phase)  
+       chemicalFE_thermodynamic_getEnergy = &
+         chemicalFE_thermodynamic_getEnergy + &
+         param(instance)%TernaryEnergy(cpI,cpJ,cpK)* &
+         conc(cpI)*conc(cpJ)*conc(cpK)/6.0_pReal
+       do cpL = 1_pInt, phase_Ncomponents(phase) 
+         chemicalFE_thermodynamic_getEnergy = &
+           chemicalFE_thermodynamic_getEnergy + &
+           param(instance)%QuaternaryEnergy(cpI,cpJ,cpK,cpL)* &
+           conc(cpI)*conc(cpJ)*conc(cpK)*conc(cpL)/24.0_pReal
+       enddo
+     enddo   
    enddo
  enddo
  
@@ -516,7 +619,7 @@ subroutine chemicalFE_thermodynamic_calConcandTangent(Conc,dConcdChemPot,dConcdG
    StepLength
  integer(pInt) :: &
    iter, &
-   cpI, cpJ, &
+   cpI, cpJ, cpK, cpL, &
    phase, &
    instance, &
    ierr, &
@@ -541,15 +644,25 @@ subroutine chemicalFE_thermodynamic_calConcandTangent(Conc,dConcdChemPot,dConcdG
    do cpI = 1_pInt, phase_Ncomponents(phase)
      TempPerComponent(cpI) = &
        ChemPot(cpI) - &
-       param(instance)%SolutionEnergy(cpI) - &
+       param(instance)%UnaryEnergy(cpI) - &
        param(instance)%GradientCoeff(cpI)*(Conc(cpI) - GradC(cpI))/charLength/charLength - &
        IntfChemPot(cpI) - &
        param(instance)%MolarVolume*MechChemPot(cpI) - &
        ElectroChemPot(cpI)
      do cpJ = 1_pInt, phase_Ncomponents(phase)
        TempPerComponent(cpI) = &
-         tempPerComponent(cpI) - &
-         param(instance)%InteractionEnergy(cpI,cpJ)*Conc0(cpJ)
+         TempPerComponent(cpI) - &
+         param(instance)%BinaryEnergy(cpI,cpJ)*Conc0(cpJ)
+       do cpK = 1_pInt, phase_Ncomponents(phase)
+         TempPerComponent(cpI) = &
+           TempPerComponent(cpI) - &
+           param(instance)%TernaryEnergy(cpI,cpJ,cpK)*Conc0(cpJ)*Conc0(cpK)
+         do cpL = 1_pInt, phase_Ncomponents(phase)
+           TempPerComponent(cpI) = &
+             TempPerComponent(cpI) - &
+             param(instance)%QuaternaryEnergy(cpI,cpJ,cpK,cpL)*Conc0(cpJ)*Conc0(cpK)*Conc0(cpL)
+         enddo
+       enddo  
      enddo
    enddo
    Residual = Conc - &
