@@ -36,6 +36,7 @@ module chemicalFE_thermodynamic
    integer(pInt) :: &
      maxNIter = 20_pInt
    real(pReal) :: &
+     ConstantEnergy = 0.0_pReal, &
      MolarVolume, &
      aTol = 1e-12_pReal
    real(pReal), dimension(:,:), allocatable :: &
@@ -43,7 +44,6 @@ module chemicalFE_thermodynamic
    real(pReal), dimension(:  ), allocatable :: &
      Mobility, &
      EffChargeNumber, &
-     ConstantEnergy, &
      SolutionEnergy, &
      InitialAvgConc, &
      InitialDeltaConc, &
@@ -128,7 +128,6 @@ subroutine chemicalFE_thermodynamic_init(fileUnit)
  real(pReal), dimension(:,:), allocatable :: &
    tempMobility, &
    tempEffChargeNumber, &
-   tempConstantEnergy, &
    tempSolutionEnergy, &
    tempInitialAvgConc, &
    tempInitialDeltaConc, &
@@ -165,7 +164,6 @@ subroutine chemicalFE_thermodynamic_init(fileUnit)
  allocate(tempMobility         (phase_maxNcomponents,maxNinstance),source=0.0_pReal)
  allocate(tempEffChargeNumber  (phase_maxNcomponents,maxNinstance),source=0.0_pReal)
  allocate(tempSolutionEnergy   (phase_maxNcomponents,maxNinstance),source=0.0_pReal)
- allocate(tempConstantEnergy   (phase_maxNcomponents,maxNinstance),source=0.0_pReal)
  allocate(tempInitialAvgConc   (phase_maxNcomponents,maxNinstance),source=0.0_pReal)
  allocate(tempInitialDeltaConc (phase_maxNcomponents,maxNinstance),source=0.0_pReal)
  allocate(tempGradCoeff        (phase_maxNcomponents,maxNinstance),source=0.0_pReal)
@@ -244,11 +242,7 @@ subroutine chemicalFE_thermodynamic_init(fileUnit)
          enddo
          
         case ('component_constantenergy')
-         if (chunkPos(1) /= phase_Ncomponents(phase) + 1_pInt) &
-           call IO_error(150_pInt,ext_msg=trim(tag)//' ('//CHEMICALFE_THERMODYNAMIC_label//')')
-         do j = 1_pInt, phase_Ncomponents(phase)
-           tempConstantEnergy(j,instance) = IO_floatValue(line,chunkPos,1_pInt+j)
-         enddo  
+         param(instance)%ConstantEnergy = IO_floatValue(line,chunkPos,2_pInt)
          
        case ('component_initialavgconc')
          if (chunkPos(1) /= phase_Ncomponents(phase) + 1_pInt) &
@@ -297,7 +291,6 @@ subroutine chemicalFE_thermodynamic_init(fileUnit)
      param(instance)%OutputID = tempOutputID(1:chemicalFE_thermodynamic_Noutput(instance),instance)
      allocate(param(instance)%Mobility         (phase_Ncomponents(phase)))
      allocate(param(instance)%EffChargeNumber  (phase_Ncomponents(phase)))
-     allocate(param(instance)%ConstantEnergy   (phase_Ncomponents(phase)))
      allocate(param(instance)%SolutionEnergy   (phase_Ncomponents(phase)))
      allocate(param(instance)%InitialAvgConc   (phase_Ncomponents(phase)))
      allocate(param(instance)%InitialDeltaConc (phase_Ncomponents(phase)))
@@ -306,9 +299,7 @@ subroutine chemicalFE_thermodynamic_init(fileUnit)
                                                 phase_Ncomponents(phase)))
      param(instance)%Mobility          = tempMobility         (1:phase_Ncomponents(phase),instance)
      param(instance)%EffChargeNumber   = tempEffChargeNumber  (1:phase_Ncomponents(phase),instance)
-     param(instance)%ConstantEnergy    = tempConstantEnergy   (1:phase_Ncomponents(phase),instance)
      param(instance)%SolutionEnergy    = tempSolutionEnergy   (1:phase_Ncomponents(phase),instance)
-     param(instance)%ConstantEnergy    = tempConstantEnergy   (1:phase_Ncomponents(phase),instance)
      param(instance)%InitialAvgConc    = tempInitialAvgConc   (1:phase_Ncomponents(phase),instance)
      param(instance)%InitialDeltaConc  = tempInitialDeltaConc (1:phase_Ncomponents(phase),instance)
      param(instance)%GradientCoeff     = tempGradCoeff        (1:phase_Ncomponents(phase),instance)
@@ -457,11 +448,11 @@ function chemicalFE_thermodynamic_getEnergy(ipc,ip,el)
  enddo
  chemicalFE_thermodynamic_getEnergy = &
    R*T*(1.0_pReal - sum(conc(1:phase_Ncomponents(phase))))* &
-   log(1.0_pReal - sum(conc(1:phase_Ncomponents(phase))))
+   log(1.0_pReal - sum(conc(1:phase_Ncomponents(phase)))) + &
+   param(instance)%ConstantEnergy
  do cpI = 1_pInt, phase_Ncomponents(phase)
    chemicalFE_thermodynamic_getEnergy = &
      chemicalFE_thermodynamic_getEnergy + &
-     param(instance)%ConstantEnergy(cpI) + &
      param(instance)%SolutionEnergy(cpI)*conc(cpI) + &
      R*T*conc(cpI)*log(conc(cpI)) - &
      chemPot(cpI)*conc(cpI)
