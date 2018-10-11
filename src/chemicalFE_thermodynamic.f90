@@ -534,6 +534,14 @@ function chemicalFE_thermodynamic_getEnergy(ipc,ip,el)
    do cpJ = 1_pInt, phase_Ncomponents(phase)
      chemPot(cpI) = chempot(cpI) + & 
                     param(instance)%BinaryEnergy(cpI,cpJ)*conc(cpJ)
+     do cpK = 1_pInt, phase_Ncomponents(phase)
+       chemPot(cpI) = chemPot(cpI) + &
+         param(instance)%TernaryEnergy(cpI,cpJ,cpK)*conc(cpJ)*conc(cpK)
+       do cpL = 1_pInt, phase_Ncomponents(phase)
+         chemPot(cpI) = chemPot(cpI) + &
+           param(instance)%QuaternaryEnergy(cpI,cpJ,cpK,cpL)*conc(cpJ)*conc(cpK)*conc(cpL)
+       enddo
+     enddo  
    enddo
  enddo
  chemicalFE_thermodynamic_getEnergy = &
