@@ -496,8 +496,11 @@ end subroutine chemicalFE_thermodynamic_dotState
 !--------------------------------------------------------------------------------------------------
 function chemicalFE_thermodynamic_getEnergy(ipc,ip,el)
  use material, only: &
+   diffPotential, &
+   soluteMapping, &
    chemicalConc, &
    chemConcMapping, &
+   material_homog, &
    material_phase, &
    temperature, &
    thermalMapping, &
@@ -516,9 +519,10 @@ function chemicalFE_thermodynamic_getEnergy(ipc,ip,el)
    chemPot
  integer(pInt) :: &
    cpI, cpJ, cpK, cpL, &
-   phase, &
+   homog, phase, &
    instance    
 
+ homog = material_homog(ip,el)
  phase = material_phase(ipc,ip,el)
  instance = phase_chemicalFEInstance(phase)
  T = temperature(phase)%p(thermalMapping(phase)%p(ipc,ip,el))
@@ -526,24 +530,8 @@ function chemicalFE_thermodynamic_getEnergy(ipc,ip,el)
  do cpI = 1_pInt, phase_Ncomponents(phase)
    conc(cpI) = chemicalConc(phase)%p(cpI,chemConcMapping(phase)%p(ipc, ip, el))
  enddo
- chempot = 0.0_pReal
- do cpI = 1_pInt, phase_Ncomponents(phase)
-   chemPot(cpI) = chemPot(cpI) + &
-                  param(instance)%UnaryEnergy(cpI) + &
-                  R*T*log(conc(cpI)/(1.0_pReal - sum(conc(1:phase_Ncomponents(phase))))) 
-   do cpJ = 1_pInt, phase_Ncomponents(phase)
-     chemPot(cpI) = chempot(cpI) + & 
-                    param(instance)%BinaryEnergy(cpI,cpJ)*conc(cpJ)
-     do cpK = 1_pInt, phase_Ncomponents(phase)
-       chemPot(cpI) = chemPot(cpI) + &
-         param(instance)%TernaryEnergy(cpI,cpJ,cpK)*conc(cpJ)*conc(cpK)
-       do cpL = 1_pInt, phase_Ncomponents(phase)
-         chemPot(cpI) = chemPot(cpI) + &
-           param(instance)%QuaternaryEnergy(cpI,cpJ,cpK,cpL)*conc(cpJ)*conc(cpK)*conc(cpL)
-       enddo
-     enddo  
-   enddo
- enddo
+ chemPot = diffPotential(homog)%p(1:phase_Ncomponents(phase),soluteMapping(homog)%p(ip,el))
+
  chemicalFE_thermodynamic_getEnergy = &
    R*T*(1.0_pReal - sum(conc(1:phase_Ncomponents(phase))))* &
    log(1.0_pReal - sum(conc(1:phase_Ncomponents(phase)))) + &

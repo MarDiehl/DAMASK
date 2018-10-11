@@ -433,8 +433,11 @@ end subroutine chemicalFE_quadenergy_dotState
 !--------------------------------------------------------------------------------------------------
 function chemicalFE_quadenergy_getEnergy(ipc,ip,el)
  use material, only: &
+   diffPotential, &
+   soluteMapping, &
    chemicalConc, &
    chemConcMapping, &
+   material_homog, &
    material_phase, &
    phase_Ncomponents, &
    phase_chemicalFEInstance
@@ -449,25 +452,18 @@ function chemicalFE_quadenergy_getEnergy(ipc,ip,el)
    chemicalFE_quadenergy_getEnergy
  integer(pInt) :: &
    cpI, cpJ, &
-   phase, &
+   homog, phase, &
    instance    
 
+ homog = material_homog(ip,el)
  phase = material_phase(ipc,ip,el)
  instance = phase_chemicalFEInstance(phase)
  conc = 0.0_pReal
  do cpI = 1_pInt, phase_Ncomponents(phase)
    conc(cpI) = chemicalConc(phase)%p(cpI,chemConcMapping(phase)%p(ipc, ip, el))
  enddo
- chemPot = 0.0_pReal
- do cpI = 1_pInt, phase_Ncomponents(phase)
-   chemPot(cpI) = chemPot(cpI) + &
-                  param(instance)%LinearCoeff(cpI)
-    do cpJ = 1_pInt, phase_Ncomponents(phase)
-      chemPot(cpI) = chempot(cpI) + &
-                     param(instance)%QuadraticCoeff(cpI,cpJ)* &
-                     (conc(cpJ)-param(instance)%EqConc(cpJ))
-    enddo                 
- enddo
+ chemPot = diffPotential(homog)%p(1:phase_Ncomponents(phase),soluteMapping(homog)%p(ip,el))
+ 
  chemicalFE_quadenergy_getEnergy = &
    param(instance)%ConstantCoeff
  do cpI = 1_pInt, phase_Ncomponents(phase)
