@@ -2643,8 +2643,7 @@ pure function homogenization_multiphase_postResults(ip,el,avgP,avgF)
    phasefracMapping, &
    material_homog, &
    homogenization_Ngrains, &
-   homogenization_typeInstance, &
-   homogenization_Noutput
+   homogenization_typeInstance
  
  implicit none
  integer(pInt), intent(in) :: &
@@ -2665,7 +2664,7 @@ pure function homogenization_multiphase_postResults(ip,el,avgP,avgF)
  homID = homogenization_typeInstance(material_homog(ip,el))
  homogenization_multiphase_postResults = 0.0_pReal
  
- do o = 1_pInt,homogenization_Noutput(material_homog(ip,el))
+ do o = 1_pInt,size(param(homID)%outputID)
    select case(param(homID)%outputID(o))
      case (nconstituents_ID)
        homogenization_multiphase_postResults(c+1_pInt) = real(homogenization_Ngrains(material_homog(ip,el)),pReal)

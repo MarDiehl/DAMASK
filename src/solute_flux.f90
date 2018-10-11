@@ -577,8 +577,7 @@ function solute_flux_postResults(ip,el)
  use material, only: &
    material_homog, &
    homogenization_Ncomponents, &
-   solute_typeInstance, &
-   homogenization_Noutput
+   solute_typeInstance
  
  implicit none
  integer(pInt), intent(in) :: &
@@ -595,7 +594,7 @@ function solute_flux_postResults(ip,el)
  homID = solute_typeInstance(material_homog(ip,el))
  solute_flux_postResults = 0.0_pReal
  
- do o = 1_pInt,homogenization_Noutput(material_homog(ip,el))
+ do o = 1_pInt,size(param(homID)%outputID)
    select case(param(homID)%outputID(o))
      case (conc_ID)
        solute_flux_postResults(c+1_pInt:c+homogenization_Ncomponents(material_homog(ip,el))) = &
