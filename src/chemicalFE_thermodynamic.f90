@@ -565,6 +565,8 @@ function chemicalFE_thermodynamic_getEnergy(ipc,ip,el)
      enddo   
    enddo
  enddo
+ chemicalFE_thermodynamic_getEnergy = &
+   chemicalFE_thermodynamic_getEnergy/param(instance)%MolarVolume
  
 end function chemicalFE_thermodynamic_getEnergy
 

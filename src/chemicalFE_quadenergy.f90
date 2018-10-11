@@ -42,6 +42,7 @@ module chemicalFE_quadenergy
      LinearCoeff, &
      GradientCoeff
    real(pReal) :: &
+     MolarVolume, &
      ConstantCoeff, &
      aTol
  end type
@@ -216,6 +217,9 @@ subroutine chemicalFE_quadenergy_init(fileUnit)
 
 !--------------------------------------------------------------------------------------------------
 ! parameters depending on number of components
+       case ('molarvolume')
+         param(instance)%MolarVolume = IO_floatValue(line,chunkPos,2_pInt)
+         
        case ('component_tolerance')
          param(instance)%aTol = IO_floatValue(line,chunkPos,2_pInt)
          
@@ -481,6 +485,8 @@ function chemicalFE_quadenergy_getEnergy(ipc,ip,el)
        (conc(cpJ) - param(instance)%EqConc(cpJ))
    enddo
  enddo
+ chemicalFE_quadenergy_getEnergy = &
+   chemicalFE_quadenergy_getEnergy/param(instance)%MolarVolume
 
 end function chemicalFE_quadenergy_getEnergy
 
