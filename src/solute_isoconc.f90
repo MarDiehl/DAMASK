@@ -165,6 +165,11 @@ subroutine solute_isoconc_init(fileUnit)
      allocate(soluteState(homog)%subState0(sizeState,NofmySolute))
      allocate(soluteState(homog)%state    (sizeState,NofmySolute))
 
+     soluteMapping(homog)%p => mappingHomogenizationConst
+     allocate(diffPotential(homog)%p(homogenization_Ncomponents(homog),1))
+     diffPotential(homog)%p(1:homogenization_Ncomponents(homog),1) = &
+       param(instance)%initialChemPot(1:homogenization_Ncomponents(homog))
+
    endif mySolute
  enddo initializeInstances
  

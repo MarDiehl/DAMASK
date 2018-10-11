@@ -283,6 +283,7 @@ module material
 
  type(p_2Dvec),                             dimension(:),  allocatable,  public            :: &
    phasefrac, &                                                                                     !< phase fraction field
+   diffPotential, &                                                                                 !< diffusion potential field
    chemicalConc, &                                                                                  !< current component concentration field
    chemicalConc0, &                                                                                 !< previous component concentration field
    chemicalConcRate, &                                                                              !< component concentration rate field
@@ -430,12 +431,13 @@ subroutine material_init()
  allocate(homogState         (size(config_homogenization)))
  allocate(soluteState        (size(config_homogenization)))
  allocate(thermalState       (size(config_homogenization)))
+ allocate(electricalState    (size(config_homogenization)))
  allocate(soluteMapping      (size(config_homogenization)))
  allocate(phasefracMapping   (size(config_homogenization)))
- allocate(phasefrac          (size(config_homogenization)))
- allocate(electricalState    (size(config_homogenization)))
- allocate(electricPotential  (size(config_homogenization)))
  allocate(electricPotentialMapping(size(config_homogenization)))
+ allocate(phasefrac          (size(config_homogenization)))
+ allocate(diffPotential      (size(config_homogenization)))
+ allocate(electricPotential  (size(config_homogenization)))
 
 
  do m = 1_pInt,size(config_microstructure)
