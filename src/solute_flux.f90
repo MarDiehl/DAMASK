@@ -116,6 +116,7 @@ subroutine solute_flux_init
   allocate(param(instance)%interfaceChemPot(homogenization_Ncomponents(homog)))
   do cp = 1_pInt, homogenization_Ncomponents(homog)
     write(cpStr,'(i0)') cp
+    allocate(param(instance)%interfaceChemPot(cp)%p(homogenization_Ngrains(homog),homogenization_Ngrains(homog)))
     if (config_homogenization(homog)%keyExists('interface_chemicalpotential_'//trim(cpStr))) then
       param(instance)%interfaceChemPot(cp)%p = &
         math_VecMtoSymNN(config_homogenization(homog)%getFloats('interface_chemicalpotential_'//trim(cpStr)), &
