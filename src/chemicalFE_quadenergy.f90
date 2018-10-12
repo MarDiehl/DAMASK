@@ -475,7 +475,6 @@ function chemicalFE_quadenergy_getEnergy(ipc,ip,el)
    do cpJ = 1_pInt, phase_Ncomponents(phase)  
      chemicalFE_quadenergy_getEnergy = &
        chemicalFE_quadenergy_getEnergy + &
-       0.5_pReal* &
        param(instance)%QuadraticCoeff(cpI,cpJ)* &
        (conc(cpI) - param(instance)%EqConc(cpI))* &
        (conc(cpJ) - param(instance)%EqConc(cpJ))
@@ -528,7 +527,7 @@ subroutine chemicalFE_quadenergy_calConcandTangent(Conc,dConcdChemPot,dConcdGrad
    Conc(cpI) = param(instance)%EqConc(cpI)
    do cpJ = 1_pInt, phase_Ncomponents(phase)
      Conc(cpI) = Conc(cpI) + &
-                 param(instance)%QuadraticCoeffInv(cpI,cpJ)* &
+                 0.5_pReal*param(instance)%QuadraticCoeffInv(cpI,cpJ)* &
                  (ChemPot(cpJ) - MechChemPot(cpJ) - IntfChemPot(cpJ) - &
                   ElectroChemPot(cpJ) - param(instance)%LinearCoeff(cpJ) + &
                   GradC(cpJ)*param(instance)%GradientCoeff(cpJ)/charLength/charLength)
