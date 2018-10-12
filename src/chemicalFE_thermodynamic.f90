@@ -546,17 +546,17 @@ function chemicalFE_thermodynamic_getEnergy(ipc,ip,el)
      chemicalFE_thermodynamic_getEnergy = &
        chemicalFE_thermodynamic_getEnergy + &
        param(instance)%BinaryEnergy(cpI,cpJ)* &
-       conc(cpI)*conc(cpJ)/2.0_pReal
+       conc(cpI)*conc(cpJ)
      do cpK = 1_pInt, phase_Ncomponents(phase)  
        chemicalFE_thermodynamic_getEnergy = &
          chemicalFE_thermodynamic_getEnergy + &
          param(instance)%TernaryEnergy(cpI,cpJ,cpK)* &
-         conc(cpI)*conc(cpJ)*conc(cpK)/6.0_pReal
+         conc(cpI)*conc(cpJ)*conc(cpK)
        do cpL = 1_pInt, phase_Ncomponents(phase) 
          chemicalFE_thermodynamic_getEnergy = &
            chemicalFE_thermodynamic_getEnergy + &
            param(instance)%QuaternaryEnergy(cpI,cpJ,cpK,cpL)* &
-           conc(cpI)*conc(cpJ)*conc(cpK)*conc(cpL)/24.0_pReal
+           conc(cpI)*conc(cpJ)*conc(cpK)*conc(cpL)
        enddo
      enddo   
    enddo
@@ -650,15 +650,15 @@ subroutine chemicalFE_thermodynamic_calConcandTangent(Conc,dConcdChemPot,dConcdG
      do cpJ = 1_pInt, phase_Ncomponents(phase)
        TempPerComponent(cpI) = &
          TempPerComponent(cpI) - &
-         param(instance)%BinaryEnergy(cpI,cpJ)*Conc0(cpJ)
+         2.0_pReal*param(instance)%BinaryEnergy(cpI,cpJ)*Conc0(cpJ)
        do cpK = 1_pInt, phase_Ncomponents(phase)
          TempPerComponent(cpI) = &
            TempPerComponent(cpI) - &
-           param(instance)%TernaryEnergy(cpI,cpJ,cpK)*Conc0(cpJ)*Conc0(cpK)
+           3.0_pReal*param(instance)%TernaryEnergy(cpI,cpJ,cpK)*Conc0(cpJ)*Conc0(cpK)
          do cpL = 1_pInt, phase_Ncomponents(phase)
            TempPerComponent(cpI) = &
              TempPerComponent(cpI) - &
-             param(instance)%QuaternaryEnergy(cpI,cpJ,cpK,cpL)*Conc0(cpJ)*Conc0(cpK)*Conc0(cpL)
+             4.0_pReal*param(instance)%QuaternaryEnergy(cpI,cpJ,cpK,cpL)*Conc0(cpJ)*Conc0(cpK)*Conc0(cpL)
          enddo
        enddo  
      enddo
