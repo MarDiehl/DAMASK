@@ -532,9 +532,9 @@ subroutine chemicalFE_quadenergy_calConcandTangent(Conc,dConcdChemPot,dConcdGrad
                   ElectroChemPot(cpJ) - param(instance)%LinearCoeff(cpJ) + &
                   GradC(cpJ)*param(instance)%GradientCoeff(cpJ)/charLength/charLength)
      dConcdChemPot(cpI,cpJ) = &
-       param(instance)%QuadraticCoeffInv(cpI,cpJ)
+       0.5_pReal*param(instance)%QuadraticCoeffInv(cpI,cpJ)
      dConcdGradC  (cpI,cpJ) = &
-       param(instance)%QuadraticCoeffInv(cpI,cpJ)* &
+       0.5_pReal*param(instance)%QuadraticCoeffInv(cpI,cpJ)* &
        param(instance)%GradientCoeff(cpJ)/charLength/charLength
    enddo
  enddo
