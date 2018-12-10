@@ -546,12 +546,13 @@ subroutine constitutive_microstructure(orientations, Fe, Fp, ipc, ip, el)
    Fe, &                                                                                            !< elastic deformation gradient
    Fp                                                                                               !< plastic deformation gradient
  integer(pInt) :: &
-   tme                                                                                              !< thermal member position
+   tme, &                                                                                           !< thermal member position
+   jme                                                                                              !< current density member position
  real(pReal),   intent(in), dimension(:,:,:,:) :: &
    orientations                                                                                     !< crystal orientations as quaternions
 
  tme = thermalMapping(material_phase(ipc,ip,el))%p(ipc,ip,el)
-
+ 
  plasticityType: select case (phase_plasticity(material_phase(ipc,ip,el)))
    case (PLASTICITY_DISLOTWIN_ID) plasticityType
      call plastic_dislotwin_microstructure(temperature(material_phase(ipc,ip,el))%p(tme),ipc,ip,el)
@@ -580,6 +581,8 @@ subroutine constitutive_LpAndItsTangent(Lp, dLp_dTstar3333, dLp_dFi3333, Tstar_v
    material_phase, &
    temperature, &
    thermalMapping, &
+   currentDensityMapping, &
+   currentDensity, &
    PLASTICITY_NONE_ID, &
    PLASTICITY_ISOTROPIC_ID, &
    PLASTICITY_PHENOPOWERLAW_ID, &
@@ -621,12 +624,14 @@ subroutine constitutive_LpAndItsTangent(Lp, dLp_dTstar3333, dLp_dFi3333, Tstar_v
  real(pReal), dimension(3,3) :: &
    temp_33
  integer(pInt) :: &
-   tme                                                                                              !< thermal member position
+   tme, &                                                                                           !< thermal member position
+   jme                                                                                              !< thermal member position
  integer(pInt) :: &
    i, j
 
  tme = thermalMapping(material_phase(ipc,ip,el))%p(ipc,ip,el)
-
+ jme = currentDensityMapping(material_phase(ipc,ip,el))%p(ipc,ip,el)
+  
  Mstar_v = math_Mandel33to6(math_mul33x33(math_mul33x33(transpose(Fi),Fi),math_Mandel6to33(Tstar_v)))
 
  plasticityType: select case (phase_plasticity(material_phase(ipc,ip,el)))
@@ -644,7 +649,8 @@ subroutine constitutive_LpAndItsTangent(Lp, dLp_dTstar3333, dLp_dFi3333, Tstar_v
                                                    temperature(material_phase(ipc,ip,el))%p(tme),ip,el)
    case (PLASTICITY_DISLOTWIN_ID) plasticityType
      call plastic_dislotwin_LpAndItsTangent       (Lp,dLp_dMstar,Mstar_v, &
-                                                   temperature(material_phase(ipc,ip,el))%p(tme),ipc,ip,el)
+                                                   temperature(material_phase(ipc,ip,el))%p(tme), &
+                                                   currentDensity(material_phase(ipc,ip,el))%p(1:3,jme),ipc,ip,el)
    case (PLASTICITY_DISLOUCLA_ID) plasticityType
      call plastic_disloucla_LpAndItsTangent       (Lp,dLp_dMstar,Mstar_v, &
                                                    temperature(material_phase(ipc,ip,el))%p(tme), ipc,ip,el)
@@ -916,6 +922,8 @@ subroutine constitutive_collectDotState(Tstar_v, Lp, FeArray, FpArray, subdt, su
    material_phase, &
    temperature, &
    thermalMapping, &
+   currentDensityMapping, &
+   currentDensity, &
    homogenization_maxNgrains, &
    PLASTICITY_none_ID, &
    PLASTICITY_isotropic_ID, &
@@ -981,12 +989,15 @@ subroutine constitutive_collectDotState(Tstar_v, Lp, FeArray, FpArray, subdt, su
    maxticks
  integer(pInt) :: &
    tme, &                                                                                           !< thermal member position
+   jme, &                                                                                           !< current density member position                               
    s                                                                                                !< counter in source loop
 
  if (iand(debug_level(debug_constitutive), debug_levelBasic) /= 0_pInt) &
    call system_clock(count=tick,count_rate=tickrate,count_max=maxticks)
 
  tme = thermalMapping(material_phase(ipc,ip,el))%p(ipc,ip,el)
+ jme = currentDensityMapping(material_phase(ipc,ip,el))%p(ipc,ip,el)
+  
 
  plasticityType: select case (phase_plasticity(material_phase(ipc,ip,el)))
    case (PLASTICITY_ISOTROPIC_ID) plasticityType
@@ -997,6 +1008,7 @@ subroutine constitutive_collectDotState(Tstar_v, Lp, FeArray, FpArray, subdt, su
      call plastic_kinehardening_dotState(Tstar_v,ipc,ip,el)
    case (PLASTICITY_DISLOTWIN_ID) plasticityType
      call plastic_dislotwin_dotState    (Tstar_v,temperature(material_phase(ipc,ip,el))%p(tme), &
+                                         currentDensity(material_phase(ipc,ip,el))%p(1:3,jme), & 
                                          ipc,ip,el)
    case (PLASTICITY_DISLOUCLA_ID) plasticityType
      call plastic_disloucla_dotState    (Tstar_v,temperature(material_phase(ipc,ip,el))%p(tme), &
@@ -1110,6 +1122,8 @@ function constitutive_postResults(Tstar_v, FeArray, ipc, ip, el)
    material_phase, &
    temperature, &
    thermalMapping, &
+   currentDensityMapping, &
+   currentDensity, &
    homogenization_maxNgrains, &
    PLASTICITY_NONE_ID, &
    PLASTICITY_ISOTROPIC_ID, &
@@ -1168,11 +1182,13 @@ function constitutive_postResults(Tstar_v, FeArray, ipc, ip, el)
    startPos, endPos
  integer(pInt) :: &
    tme, &                                                                                           !< thermal member position
+   jme, &                                                                                           !< current density member position
    s                                                                                                !< counter in source loop
 
  constitutive_postResults = 0.0_pReal
 
  tme = thermalMapping(material_phase(ipc,ip,el))%p(ipc,ip,el)
+ jme = currentDensityMapping(material_phase(ipc,ip,el))%p(ipc,ip,el)
 
  startPos = 1_pInt
  endPos = plasticState(material_phase(ipc,ip,el))%sizePostResults
@@ -1188,7 +1204,8 @@ function constitutive_postResults(Tstar_v, FeArray, ipc, ip, el)
        plastic_kinehardening_postResults(Tstar_v,ipc,ip,el)    
    case (PLASTICITY_DISLOTWIN_ID) plasticityType
      constitutive_postResults(startPos:endPos) = &
-       plastic_dislotwin_postResults(Tstar_v,temperature(material_phase(ipc,ip,el))%p(tme),ipc,ip,el)
+       plastic_dislotwin_postResults(Tstar_v,temperature(material_phase(ipc,ip,el))%p(tme), &
+                                    currentDensity(material_phase(ipc,ip,el))%p(1:3,jme),ipc,ip,el)
    case (PLASTICITY_DISLOUCLA_ID) plasticityType
      constitutive_postResults(startPos:endPos) = &
        plastic_disloucla_postResults(Tstar_v,temperature(material_phase(ipc,ip,el))%p(tme),ipc,ip,el)

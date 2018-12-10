@@ -46,6 +46,10 @@ module plastic_dislotwin
    plastic_dislotwin_Cmfptwin, &                                                               !<
    plastic_dislotwin_Cthresholdtwin, &                                                         !<
    plastic_dislotwin_SolidSolutionStrength, &                                                  !< Strength due to elements in solid solution
+   plastic_dislotwin_SolidSolutionStrength_Molotskii, &                                           !< Modified solid solution strength     
+   plastic_dislotwin_j0, &                                                                     !< Characteristic current density
+   plastic_dislotwin_factorSolidSolution_Molotskii, &                                          !< Factor to turn on or off the change in solid solution strength
+   plastic_dislotwin_factorVelocity_Molotskii, &                                               !< Factor to turn on or off the change in dislocation velocity
    plastic_dislotwin_L0_twin, &                                                                !< Length of twin nuclei in Burgers vectors
    plastic_dislotwin_L0_trans, &                                                               !< Length of trans nuclei in Burgers vectors
    plastic_dislotwin_xc_twin, &                                                                !< critical distance for formation of twin nucleus
@@ -86,6 +90,7 @@ module plastic_dislotwin
    plastic_dislotwin_QedgePerSlipSystem, &                                                     !< activation energy for glide [J] for each slip system and instance
    plastic_dislotwin_v0PerSlipFamily, &                                                        !< dislocation velocity prefactor [m/s] for each family and instance
    plastic_dislotwin_v0PerSlipSystem, &                                                        !< dislocation velocity prefactor [m/s] for each slip system and instance
+   plastic_dislotwin_v0PerSlipSystem_Molotskii, &                                              !< Modified dislocation velocity under electropulsing
    plastic_dislotwin_tau_peierlsPerSlipFamily, &                                               !< Peierls stress [Pa] for each family and instance
    plastic_dislotwin_Ndot0PerTwinFamily, &                                                     !< twin nucleation rate [1/m³s] for each twin family and instance
    plastic_dislotwin_Ndot0PerTwinSystem, &                                                     !< twin nucleation rate [1/m³s] for each twin system and instance
@@ -304,6 +309,10 @@ subroutine plastic_dislotwin_init(fileUnit)
  allocate(plastic_dislotwin_Cmfptwin(maxNinstance),                            source=0.0_pReal)
  allocate(plastic_dislotwin_Cthresholdtwin(maxNinstance),                      source=0.0_pReal)
  allocate(plastic_dislotwin_SolidSolutionStrength(maxNinstance),               source=0.0_pReal)
+ allocate(plastic_dislotwin_SolidSolutionStrength_Molotskii(maxNinstance),     source=0.0_pReal)
+ allocate(plastic_dislotwin_j0(maxNinstance),                                  source=1.0e09_pReal)
+ allocate(plastic_dislotwin_factorSolidSolution_Molotskii(maxNinstance),       source=0.0_pReal)
+ allocate(plastic_dislotwin_factorVelocity_Molotskii(maxNinstance),            source=0.0_pReal)
  allocate(plastic_dislotwin_L0_twin(maxNinstance),                             source=0.0_pReal)
  allocate(plastic_dislotwin_L0_trans(maxNinstance),                            source=0.0_pReal)
  allocate(plastic_dislotwin_xc_twin(maxNinstance),                             source=0.0_pReal)
@@ -683,6 +692,12 @@ subroutine plastic_dislotwin_init(fileUnit)
          plastic_dislotwin_Cthresholdtwin(instance) = IO_floatValue(line,chunkPos,2_pInt)
        case ('solidsolutionstrength')
          plastic_dislotwin_SolidSolutionStrength(instance) = IO_floatValue(line,chunkPos,2_pInt)
+       case ('j0')
+         plastic_dislotwin_j0(instance) = IO_floatValue(line,chunkPos,2_pInt)  
+       case ('fac_solidsolution')
+         plastic_dislotwin_factorSolidSolution_Molotskii(instance) = IO_floatValue(line,chunkPos,2_pInt)   
+       case ('fac_velocity')
+         plastic_dislotwin_factorVelocity_Molotskii(instance) = IO_floatValue(line,chunkPos,2_pInt)     
        case ('l0_twin')
          plastic_dislotwin_L0_twin(instance) = IO_floatValue(line,chunkPos,2_pInt)
        case ('l0_trans')
@@ -813,6 +828,7 @@ subroutine plastic_dislotwin_init(fileUnit)
  allocate(plastic_dislotwin_burgersPerTransSystem(maxTotalNtrans, maxNinstance),  source=0.0_pReal)
  allocate(plastic_dislotwin_QedgePerSlipSystem(maxTotalNslip, maxNinstance),      source=0.0_pReal)
  allocate(plastic_dislotwin_v0PerSlipSystem(maxTotalNslip, maxNinstance),         source=0.0_pReal)
+ allocate(plastic_dislotwin_v0PerSlipSystem_Molotskii(maxTotalNslip, maxNinstance),source=0.0_pReal)
  allocate(plastic_dislotwin_Ndot0PerTwinSystem(maxTotalNtwin, maxNinstance),      source=0.0_pReal)
  allocate(plastic_dislotwin_Ndot0PerTransSystem(maxTotalNtrans, maxNinstance),    source=0.0_pReal)
  allocate(plastic_dislotwin_tau_r_twin(maxTotalNtwin, maxNinstance),              source=0.0_pReal)
@@ -951,9 +967,9 @@ subroutine plastic_dislotwin_init(fileUnit)
          plasticState(phase)%dotState(offset_slip+1:offset_slip+plasticState(phase)%nslip,1:NofMyPhase)
      plasticState(phase)%accumulatedSlip => &
          plasticState(phase)%state   (offset_slip+1:offset_slip+plasticState(phase)%nslip,1:NofMyPhase)
-
+         
     !* Process slip related parameters ------------------------------------------------ 
-     slipFamiliesLoop: do f = 1_pInt,lattice_maxNslipFamily
+    slipFamiliesLoop: do f = 1_pInt,lattice_maxNslipFamily
        index_myFamily = sum(plastic_dislotwin_Nslip(1:f-1_pInt,instance))                      ! index in truncated slip system list
        slipSystemsLoop: do j = 1_pInt,plastic_dislotwin_Nslip(f,instance)
 
@@ -1633,7 +1649,7 @@ end subroutine plastic_dislotwin_microstructure
 !--------------------------------------------------------------------------------------------------
 !> @brief calculates plastic velocity gradient and its tangent
 !--------------------------------------------------------------------------------------------------
-subroutine plastic_dislotwin_LpAndItsTangent(Lp,dLp_dTstar99,Tstar_v,Temperature,ipc,ip,el)
+subroutine plastic_dislotwin_LpAndItsTangent(Lp,dLp_dTstar99,Tstar_v,Temperature,CurrentDensity,ipc,ip,el)
  use prec, only: &
    tol_math_check, &
    dNeq0
@@ -1644,7 +1660,8 @@ subroutine plastic_dislotwin_LpAndItsTangent(Lp,dLp_dTstar99,Tstar_v,Temperature
    math_eigenValuesVectorsSym, &
    math_tensorproduct33, &
    math_symmetric33, &
-   math_mul33x3
+   math_mul33x3, &
+   math_mul3X3
  use material, only: &
    material_phase, &
    phase_plasticityInstance, &
@@ -1670,6 +1687,7 @@ subroutine plastic_dislotwin_LpAndItsTangent(Lp,dLp_dTstar99,Tstar_v,Temperature
  implicit none
  integer(pInt), intent(in)                  :: ipc,ip,el
  real(pReal), intent(in)                    :: Temperature
+ real(pReal), dimension(3),   intent(in)    :: CurrentDensity
  real(pReal), dimension(6),   intent(in)    :: Tstar_v
  real(pReal), dimension(3,3), intent(out)   :: Lp
  real(pReal), dimension(9,9), intent(out)   :: dLp_dTstar99
@@ -1687,6 +1705,8 @@ subroutine plastic_dislotwin_LpAndItsTangent(Lp,dLp_dTstar99,Tstar_v,Temperature
  real(pReal), dimension(6) :: gdot_sb,dgdot_dtausb,tau_sb
  real(pReal), dimension(3,3) :: eigVectors, sb_Smatrix
  real(pReal), dimension(3)   :: eigValues, sb_s, sb_m
+ real(pReal) :: Molotskii_factor_solidSolution, &
+                Molotskii_factor_velocity   
  logical :: error
  real(pReal), dimension(3,6), parameter :: &
    sb_sComposition = &
@@ -1727,7 +1747,30 @@ subroutine plastic_dislotwin_LpAndItsTangent(Lp,dLp_dTstar99,Tstar_v,Temperature
    index_myFamily = sum(lattice_NslipSystem(1:f-1_pInt,ph)) ! at which index starts my family
    slipSystemsLoop: do i = 1_pInt,plastic_dislotwin_Nslip(f,instance)
       j = j+1_pInt
- 
+      
+      !Calculation of the Molotskii_factors
+      Molotskii_factor_solidSolution = &
+       1.0_pReal + &
+           plastic_dislotwin_factorSolidSolution_Molotskii(instance) * &
+          (math_mul3x3(currentDensity,CurrentDensity) / &
+           (plastic_dislotwin_j0(instance)**2.0_pReal))
+           
+      Molotskii_factor_velocity = &
+       1.0_pReal + &
+           plastic_dislotwin_factorVelocity_Molotskii(instance) * &
+          (math_mul3x3(currentDensity,CurrentDensity) / &
+           (plastic_dislotwin_j0(instance)**2.0_pReal))     
+                   
+      !Calculation of the new solid solution strength due to electroplasticity
+      plastic_dislotwin_SolidSolutionStrength_Molotskii(instance) = &
+         plastic_dislotwin_SolidSolutionStrength(instance) / &
+         Molotskii_factor_solidSolution
+         
+      !Calculation of the new velocity
+      plastic_dislotwin_v0PerSlipSystem_Molotskii(j,instance) = &
+        plastic_dislotwin_v0PerSlipSystem(j,instance) * &
+        (Molotskii_factor_velocity**2_pInt)
+            
       !* Calculation of Lp
       !* Resolved shear stress on slip system
       tau_slip(j) = dot_product(Tstar_v,lattice_Sslip_v(:,1,index_myFamily+i,ph))
@@ -1735,7 +1778,8 @@ subroutine plastic_dislotwin_LpAndItsTangent(Lp,dLp_dTstar99,Tstar_v,Temperature
       if((abs(tau_slip(j))-state(instance)%threshold_stress_slip(j,of)) > tol_math_check) then
       !* Stress ratios
         stressRatio =((abs(tau_slip(j))- state(instance)%threshold_stress_slip(j,of))/&
-          (plastic_dislotwin_SolidSolutionStrength(instance)+plastic_dislotwin_tau_peierlsPerSlipFamily(f,instance)))
+          (plastic_dislotwin_SolidSolutionStrength_Molotskii(instance) + & 
+          plastic_dislotwin_tau_peierlsPerSlipFamily(f,instance)))
         StressRatio_p       = stressRatio** plastic_dislotwin_pPerSlipFamily(f,instance)
         StressRatio_pminus1 = stressRatio**(plastic_dislotwin_pPerSlipFamily(f,instance)-1.0_pReal)
       !* Boltzmann ratio
@@ -1743,7 +1787,7 @@ subroutine plastic_dislotwin_LpAndItsTangent(Lp,dLp_dTstar99,Tstar_v,Temperature
       !* Initial shear rates
         DotGamma0 = &
           state(instance)%rhoEdge(j,of)*plastic_dislotwin_burgersPerSlipSystem(j,instance)*&
-          plastic_dislotwin_v0PerSlipSystem(j,instance)
+          plastic_dislotwin_v0PerSlipSystem_Molotskii(j,instance) 
  
         !* Shear rates due to slip
         gdot_slip(j) = DotGamma0 &
@@ -1754,7 +1798,8 @@ subroutine plastic_dislotwin_LpAndItsTangent(Lp,dLp_dTstar99,Tstar_v,Temperature
         dgdot_dtauslip(j) = &
           abs(gdot_slip(j))*BoltzmannRatio*plastic_dislotwin_pPerSlipFamily(f,instance)&
           *plastic_dislotwin_qPerSlipFamily(f,instance)/&
-          (plastic_dislotwin_SolidSolutionStrength(instance)+plastic_dislotwin_tau_peierlsPerSlipFamily(f,instance))*&
+          (plastic_dislotwin_SolidSolutionStrength_Molotskii(instance) + &
+          plastic_dislotwin_tau_peierlsPerSlipFamily(f,instance))*&
           StressRatio_pminus1*(1-StressRatio_p)**(plastic_dislotwin_qPerSlipFamily(f,instance)-1.0_pReal)
       endif
  
@@ -1947,12 +1992,13 @@ end subroutine plastic_dislotwin_LpAndItsTangent
 !--------------------------------------------------------------------------------------------------
 !> @brief calculates the rate of change of microstructure
 !--------------------------------------------------------------------------------------------------
-subroutine plastic_dislotwin_dotState(Tstar_v,Temperature,ipc,ip,el)
+subroutine plastic_dislotwin_dotState(Tstar_v,Temperature,CurrentDensity,ipc,ip,el)
  use prec, only: &
    tol_math_check, &
    dEq0
  use math, only: &
-   pi
+   pi, &
+   math_mul3X3
  use material, only: &
    material_phase, &
    phase_plasticityInstance, &
@@ -1981,6 +2027,8 @@ subroutine plastic_dislotwin_dotState(Tstar_v,Temperature,ipc,ip,el)
    Tstar_v                                                                                          !< 2nd Piola Kirchhoff stress tensor in Mandel notation
  real(pReal),                intent(in) :: &
    temperature                                                                                      !< temperature at integration point
+ real(pReal), dimension(3),  intent(in) :: &
+   CurrentDensity  
  integer(pInt),              intent(in) :: &
    ipc, &                                                                                           !< component-ID of integration point
    ip, &                                                                                            !< integration point
@@ -1993,6 +2041,10 @@ subroutine plastic_dislotwin_dotState(Tstar_v,Temperature,ipc,ip,el)
              EdgeDipMinDistance,AtomicVolume,VacancyDiffusion,StressRatio_r,Ndot0_twin,stressRatio,&
              Ndot0_trans,StressRatio_s,EdgeDipDistance, ClimbVelocity,DotRhoEdgeDipClimb,DotRhoEdgeDipAnnihilation, &
              DotRhoDipFormation,DotRhoMultiplication,DotRhoEdgeEdgeAnnihilation
+  
+ real(pReal) :: Molotskii_factor_solidSolution, &
+                Molotskii_factor_velocity
+            
  real(pReal), dimension(plastic_dislotwin_totalNslip(phase_plasticityInstance(material_phase(ipc,ip,el)))) :: &
  gdot_slip,tau_slip
 
@@ -2024,6 +2076,30 @@ subroutine plastic_dislotwin_dotState(Tstar_v,Temperature,ipc,ip,el)
    index_myFamily = sum(lattice_NslipSystem(1:f-1_pInt,ph))   ! at which index starts my family
    do i = 1_pInt,plastic_dislotwin_Nslip(f,instance)          ! process each (active) slip system in family
       j = j+1_pInt
+      
+      !Calculation of the Molotskii_factor
+      Molotskii_factor_solidSolution = &
+       1.0_pReal + &
+           plastic_dislotwin_factorSolidSolution_Molotskii(instance) * &
+          (math_mul3x3(currentDensity,CurrentDensity) / &
+           (plastic_dislotwin_j0(instance)**2.0_pReal))
+      
+      !Calculation of the Molotskii_factor
+      Molotskii_factor_velocity = &
+       1.0_pReal + &
+           plastic_dislotwin_factorVelocity_Molotskii(instance) * &
+          (math_mul3x3(currentDensity,CurrentDensity) / &
+           (plastic_dislotwin_j0(instance)**2.0_pReal))
+                   
+      !Calculation of the new solid solution strength due to electroplasticity
+      plastic_dislotwin_SolidSolutionStrength_Molotskii(instance) = &
+         plastic_dislotwin_SolidSolutionStrength(instance) / &
+         Molotskii_factor_solidSolution
+         
+      !Calculation of the new velocity
+      plastic_dislotwin_v0PerSlipSystem_Molotskii(j,instance) = &
+        plastic_dislotwin_v0PerSlipSystem(j,instance) * &
+        (Molotskii_factor_velocity**2.0_pInt)
  
       !* Resolved shear stress on slip system
       tau_slip(j) = dot_product(Tstar_v,lattice_Sslip_v(:,1,index_myFamily+i,ph))
@@ -2031,7 +2107,8 @@ subroutine plastic_dislotwin_dotState(Tstar_v,Temperature,ipc,ip,el)
       if((abs(tau_slip(j))-state(instance)%threshold_stress_slip(j,of)) > tol_math_check) then
       !* Stress ratios
         stressRatio =((abs(tau_slip(j))- state(instance)%threshold_stress_slip(j,of))/&
-          (plastic_dislotwin_SolidSolutionStrength(instance)+plastic_dislotwin_tau_peierlsPerSlipFamily(f,instance)))
+          (plastic_dislotwin_SolidSolutionStrength_Molotskii(instance) + &
+          plastic_dislotwin_tau_peierlsPerSlipFamily(f,instance)))
         StressRatio_p       = stressRatio** plastic_dislotwin_pPerSlipFamily(f,instance)
         StressRatio_pminus1 = stressRatio**(plastic_dislotwin_pPerSlipFamily(f,instance)-1.0_pReal)
       !* Boltzmann ratio
@@ -2039,7 +2116,7 @@ subroutine plastic_dislotwin_dotState(Tstar_v,Temperature,ipc,ip,el)
       !* Initial shear rates
         DotGamma0 = &
           plasticState(ph)%state(j, of)*plastic_dislotwin_burgersPerSlipSystem(j,instance)*&
-          plastic_dislotwin_v0PerSlipSystem(j,instance)
+          plastic_dislotwin_v0PerSlipSystem_Molotskii(j,instance)
  
       !* Shear rates due to slip
         gdot_slip(j) = DotGamma0*exp(-BoltzmannRatio*(1_pInt-StressRatio_p)** &
@@ -2195,7 +2272,7 @@ end subroutine plastic_dislotwin_dotState
 !--------------------------------------------------------------------------------------------------
 !> @brief return array of constitutive results
 !--------------------------------------------------------------------------------------------------
-function plastic_dislotwin_postResults(Tstar_v,Temperature,ipc,ip,el)
+function plastic_dislotwin_postResults(Tstar_v,Temperature,CurrentDensity,ipc,ip,el)
  use prec, only: &
    tol_math_check, &
    dEq0
@@ -2203,7 +2280,8 @@ function plastic_dislotwin_postResults(Tstar_v,Temperature,ipc,ip,el)
    pi, &
    math_Mandel6to33, &
    math_eigenValuesSym33, &
-   math_eigenValuesVectorsSym33
+   math_eigenValuesVectorsSym33,  &
+   math_mul3X3
  use material, only: &
    material_phase, &
    phase_plasticityInstance,& 
@@ -2226,6 +2304,8 @@ function plastic_dislotwin_postResults(Tstar_v,Temperature,ipc,ip,el)
    Tstar_v                                                                                          !< 2nd Piola Kirchhoff stress tensor in Mandel notation
  real(pReal),                intent(in) :: &
    temperature                                                                                      !< temperature at integration point
+ real(pReal), dimension(3),  intent(in) :: &
+   CurrentDensity
  integer(pInt),              intent(in) :: &
    ipc, &                                                                                           !< component-ID of integration point
    ip, &                                                                                            !< integration point
@@ -2246,6 +2326,8 @@ function plastic_dislotwin_postResults(Tstar_v,Temperature,ipc,ip,el)
    gdot_slip
  real(pReal), dimension(3,3) :: eigVectors
  real(pReal), dimension (3) :: eigValues
+ real(pReal) :: Molotskii_factor_solidSolution, &
+                Molotskii_factor_velocity
  
  !* Shortened notation
  of = phasememberAt(ipc,ip,el)
@@ -2276,6 +2358,29 @@ function plastic_dislotwin_postResults(Tstar_v,Temperature,ipc,ip,el)
            index_myFamily = sum(lattice_NslipSystem(1:f-1_pInt,ph))                                 ! at which index starts my family
            do i = 1_pInt,plastic_dislotwin_Nslip(f,instance)                                        ! process each (active) slip system in family
               j = j + 1_pInt                                                                        ! could be taken from state by now!
+              
+              !Calculation of the Molotskii_factors
+              Molotskii_factor_solidSolution = &
+                1.0_pReal + &
+                plastic_dislotwin_factorSolidSolution_Molotskii(instance) * &
+                (math_mul3x3(currentDensity,CurrentDensity) / &
+                (plastic_dislotwin_j0(instance)**2.0_pReal))
+                
+              Molotskii_factor_Velocity = &
+                1.0_pReal + &
+                plastic_dislotwin_factorVelocity_Molotskii(instance) * &
+                (math_mul3x3(currentDensity,CurrentDensity) / &
+                (plastic_dislotwin_j0(instance)**2.0_pReal))   
+                   
+              !Calculation of the new solid solution strength due to electroplasticity
+              plastic_dislotwin_SolidSolutionStrength_Molotskii(instance) = &
+                plastic_dislotwin_SolidSolutionStrength(instance) / &
+                Molotskii_factor_solidSolution
+                
+              !Calculation of the new velocity
+              plastic_dislotwin_v0PerSlipSystem_Molotskii(j,instance) = &
+                plastic_dislotwin_v0PerSlipSystem(j,instance) * &
+                (Molotskii_factor_velocity**2.0_pInt)   
  
               !* Resolved shear stress on slip system
               tau = dot_product(Tstar_v,lattice_Sslip_v(:,1,index_myFamily+i,ph))
@@ -2283,7 +2388,7 @@ function plastic_dislotwin_postResults(Tstar_v,Temperature,ipc,ip,el)
               if((abs(tau)-state(instance)%threshold_stress_slip(j,of)) > tol_math_check) then
               !* Stress ratios
                 stressRatio = ((abs(tau)-state(ph)%threshold_stress_slip(j,of))/&
-                                (plastic_dislotwin_SolidSolutionStrength(instance)+&
+                                (plastic_dislotwin_SolidSolutionStrength_Molotskii(instance)+&
                                  plastic_dislotwin_tau_peierlsPerSlipFamily(f,instance)))
                 StressRatio_p       = stressRatio** plastic_dislotwin_pPerSlipFamily(f,instance)
                 StressRatio_pminus1 = stressRatio**(plastic_dislotwin_pPerSlipFamily(f,instance)-1.0_pReal)
@@ -2292,7 +2397,7 @@ function plastic_dislotwin_postResults(Tstar_v,Temperature,ipc,ip,el)
               !* Initial shear rates
                 DotGamma0 = &
                   state(instance)%rhoEdge(j,of)*plastic_dislotwin_burgersPerSlipSystem(j,instance)* &
-                  plastic_dislotwin_v0PerSlipSystem(j,instance)
+                  plastic_dislotwin_v0PerSlipSystem_Molotskii(j,instance)
  
               !* Shear rates due to slip
                 plastic_dislotwin_postResults(c+j) = &
