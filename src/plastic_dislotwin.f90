@@ -20,6 +20,7 @@ module plastic_dislotwin
    
  real(pReal),                                                 parameter,           private :: &
    kB = 1.38e-23_pReal                                                                         !< Boltzmann constant in J/Kelvin
+  
 
  integer(pInt),                       dimension(:),           allocatable, target, public :: &
    plastic_dislotwin_Noutput                                                                   !< number of outputs per instance of this plasticity 
@@ -50,6 +51,7 @@ module plastic_dislotwin
    plastic_dislotwin_j0, &                                                                     !< Characteristic current density
    plastic_dislotwin_factorSolidSolution_Molotskii, &                                          !< Factor to turn on or off the change in solid solution strength
    plastic_dislotwin_factorVelocity_Molotskii, &                                               !< Factor to turn on or off the change in dislocation velocity
+   plastic_dislotwin_factorForestDis_Molotskii, &                                              !< Factor to turn on or off the change in solid solution strength
    plastic_dislotwin_L0_twin, &                                                                !< Length of twin nuclei in Burgers vectors
    plastic_dislotwin_L0_trans, &                                                               !< Length of trans nuclei in Burgers vectors
    plastic_dislotwin_xc_twin, &                                                                !< critical distance for formation of twin nucleus
@@ -312,6 +314,7 @@ subroutine plastic_dislotwin_init(fileUnit)
  allocate(plastic_dislotwin_SolidSolutionStrength_Molotskii(maxNinstance),     source=0.0_pReal)
  allocate(plastic_dislotwin_j0(maxNinstance),                                  source=1.0e09_pReal)
  allocate(plastic_dislotwin_factorSolidSolution_Molotskii(maxNinstance),       source=0.0_pReal)
+ allocate(plastic_dislotwin_factorForestDis_Molotskii(maxNinstance),           source=0.0_pReal)
  allocate(plastic_dislotwin_factorVelocity_Molotskii(maxNinstance),            source=0.0_pReal)
  allocate(plastic_dislotwin_L0_twin(maxNinstance),                             source=0.0_pReal)
  allocate(plastic_dislotwin_L0_trans(maxNinstance),                            source=0.0_pReal)
@@ -696,8 +699,10 @@ subroutine plastic_dislotwin_init(fileUnit)
          plastic_dislotwin_j0(instance) = IO_floatValue(line,chunkPos,2_pInt)  
        case ('fac_solidsolution')
          plastic_dislotwin_factorSolidSolution_Molotskii(instance) = IO_floatValue(line,chunkPos,2_pInt)   
+       case ('fac_forestdis')
+         plastic_dislotwin_factorForestDis_Molotskii(instance) = IO_floatValue(line,chunkPos,2_pInt)     
        case ('fac_velocity')
-         plastic_dislotwin_factorVelocity_Molotskii(instance) = IO_floatValue(line,chunkPos,2_pInt)     
+         plastic_dislotwin_factorVelocity_Molotskii(instance) = IO_floatValue(line,chunkPos,2_pInt)   
        case ('l0_twin')
          plastic_dislotwin_L0_twin(instance) = IO_floatValue(line,chunkPos,2_pInt)
        case ('l0_trans')
@@ -1465,9 +1470,10 @@ function plastic_dislotwin_homogenizedC(ipc,ip,el)
 !--------------------------------------------------------------------------------------------------
 !> @brief calculates derived quantities from state
 !--------------------------------------------------------------------------------------------------
-subroutine plastic_dislotwin_microstructure(temperature,ipc,ip,el)
+subroutine plastic_dislotwin_microstructure(temperature,CurrentDensity,ipc,ip,el)
  use math, only: &
-   pi
+   pi, &
+   math_mul3X3
  use material, only: &
    material_phase, &
    phase_plasticityInstance, &
@@ -1484,7 +1490,10 @@ subroutine plastic_dislotwin_microstructure(temperature,ipc,ip,el)
    el                                                                                               !< element
  real(pReal),   intent(in) :: &
    temperature                                                                                      !< temperature at IP 
-
+ real(pReal), dimension(3),   intent(in)  :: &
+   CurrentDensity
+ real(pReal) :: Molotskii_factor_forestDis
+   
  integer(pInt) :: &
    instance, &
    ns,nt,nr,s,t,r, &
@@ -1527,11 +1536,19 @@ subroutine plastic_dislotwin_microstructure(temperature,ipc,ip,el)
       plastic_dislotwin_lamellarsizePerTransSystem(r,instance)
  
  !* 1/mean free distance between 2 forest dislocations seen by a moving dislocation
+ !Calculation of the Molotskii_factor
+ Molotskii_factor_forestDis = &
+   1.0_pReal + &
+   plastic_dislotwin_factorForestDis_Molotskii(instance) * &
+   (math_mul3x3(currentDensity,CurrentDensity) / &
+   (plastic_dislotwin_j0(instance)**2.0_pReal))
+  
  forall (s = 1_pInt:ns) &
    state(instance)%invLambdaSlip(s,of) = &
      sqrt(dot_product((state(instance)%rhoEdge(1_pInt:ns,of)+state(instance)%rhoEdgeDip(1_pInt:ns,of)),&
                       plastic_dislotwin_forestProjectionEdge(1:ns,s,instance)))/ &
-     plastic_dislotwin_CLambdaSlipPerSlipSystem(s,instance)
+     (plastic_dislotwin_CLambdaSlipPerSlipSystem(s,instance) * &
+      Molotskii_factor_forestDis)
 
  !* 1/mean free distance between 2 twin stacks from different systems seen by a moving dislocation
  !$OMP CRITICAL (evilmatmul)
@@ -1589,7 +1606,7 @@ subroutine plastic_dislotwin_microstructure(temperature,ipc,ip,el)
  !* threshold stress for dislocation motion
  forall (s = 1_pInt:ns) &
    state(instance)%threshold_stress_slip(s,of) = &
-     lattice_mu(ph)*plastic_dislotwin_burgersPerSlipSystem(s,instance)*&
+     lattice_mu(ph)*(plastic_dislotwin_burgersPerSlipSystem(s,instance)/Molotskii_factor_forestDis) * &
      sqrt(dot_product((state(instance)%rhoEdge(1_pInt:ns,of)+state(instance)%rhoEdgeDip(1_pInt:ns,of)),&
                       plastic_dislotwin_interactionMatrix_SlipSlip(s,1:ns,instance)))
 
@@ -1706,7 +1723,8 @@ subroutine plastic_dislotwin_LpAndItsTangent(Lp,dLp_dTstar99,Tstar_v,Temperature
  real(pReal), dimension(3,3) :: eigVectors, sb_Smatrix
  real(pReal), dimension(3)   :: eigValues, sb_s, sb_m
  real(pReal) :: Molotskii_factor_solidSolution, &
-                Molotskii_factor_velocity   
+                Molotskii_factor_velocity
+                
  logical :: error
  real(pReal), dimension(3,6), parameter :: &
    sb_sComposition = &
@@ -2077,20 +2095,19 @@ subroutine plastic_dislotwin_dotState(Tstar_v,Temperature,CurrentDensity,ipc,ip,
    do i = 1_pInt,plastic_dislotwin_Nslip(f,instance)          ! process each (active) slip system in family
       j = j+1_pInt
       
-      !Calculation of the Molotskii_factor
+      !Calculation of the Molotskii_factors
       Molotskii_factor_solidSolution = &
        1.0_pReal + &
            plastic_dislotwin_factorSolidSolution_Molotskii(instance) * &
           (math_mul3x3(currentDensity,CurrentDensity) / &
            (plastic_dislotwin_j0(instance)**2.0_pReal))
       
-      !Calculation of the Molotskii_factor
       Molotskii_factor_velocity = &
        1.0_pReal + &
            plastic_dislotwin_factorVelocity_Molotskii(instance) * &
           (math_mul3x3(currentDensity,CurrentDensity) / &
            (plastic_dislotwin_j0(instance)**2.0_pReal))
-                   
+           
       !Calculation of the new solid solution strength due to electroplasticity
       plastic_dislotwin_SolidSolutionStrength_Molotskii(instance) = &
          plastic_dislotwin_SolidSolutionStrength(instance) / &

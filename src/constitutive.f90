@@ -527,6 +527,8 @@ subroutine constitutive_microstructure(orientations, Fe, Fp, ipc, ip, el)
    material_phase, &
    temperature, &
    thermalMapping, &
+   currentDensityMapping, &
+   currentDensity, &
    PLASTICITY_dislotwin_ID, &
    PLASTICITY_disloucla_ID, &
    PLASTICITY_nonlocal_ID
@@ -552,10 +554,12 @@ subroutine constitutive_microstructure(orientations, Fe, Fp, ipc, ip, el)
    orientations                                                                                     !< crystal orientations as quaternions
 
  tme = thermalMapping(material_phase(ipc,ip,el))%p(ipc,ip,el)
+ jme = currentDensityMapping(material_phase(ipc,ip,el))%p(ipc,ip,el)
  
  plasticityType: select case (phase_plasticity(material_phase(ipc,ip,el)))
    case (PLASTICITY_DISLOTWIN_ID) plasticityType
-     call plastic_dislotwin_microstructure(temperature(material_phase(ipc,ip,el))%p(tme),ipc,ip,el)
+     call plastic_dislotwin_microstructure(temperature(material_phase(ipc,ip,el))%p(tme), &
+                                          currentDensity(material_phase(ipc,ip,el))%p(1:3,jme), ipc,ip,el)
    case (PLASTICITY_DISLOUCLA_ID) plasticityType
      call plastic_disloucla_microstructure(temperature(material_phase(ipc,ip,el))%p(tme),ipc,ip,el)
    case (PLASTICITY_NONLOCAL_ID) plasticityType
