@@ -20,7 +20,6 @@ module plastic_dislotwin
    
  real(pReal),                                                 parameter,           private :: &
    kB = 1.38e-23_pReal                                                                         !< Boltzmann constant in J/Kelvin
-  
 
  integer(pInt),                       dimension(:),           allocatable, target, public :: &
    plastic_dislotwin_Noutput                                                                   !< number of outputs per instance of this plasticity 
@@ -51,7 +50,7 @@ module plastic_dislotwin
    plastic_dislotwin_j0, &                                                                     !< Characteristic current density
    plastic_dislotwin_factorSolidSolution_Molotskii, &                                          !< Factor to turn on or off the change in solid solution strength
    plastic_dislotwin_factorVelocity_Molotskii, &                                               !< Factor to turn on or off the change in dislocation velocity
-   plastic_dislotwin_factorForestDis_Molotskii, &                                              !< Factor to turn on or off the change in solid solution strength
+   plastic_dislotwin_factorForestDis_Molotskii, &                                              !< Factor to turn on or off the scaling of the forest dislocation hardening 
    plastic_dislotwin_L0_twin, &                                                                !< Length of twin nuclei in Burgers vectors
    plastic_dislotwin_L0_trans, &                                                               !< Length of trans nuclei in Burgers vectors
    plastic_dislotwin_xc_twin, &                                                                !< critical distance for formation of twin nucleus
@@ -994,7 +993,7 @@ subroutine plastic_dislotwin_init(fileUnit)
  
          plastic_dislotwin_CLambdaSlipPerSlipSystem(index_myFamily+j,instance) = &
          plastic_dislotwin_CLambdaSlipPerSlipFamily(f,instance)
-  
+           
        !* Calculation of forest projections for edge dislocations
        !* Interaction matrices
          do o = 1_pInt,lattice_maxNslipFamily
@@ -1432,7 +1431,7 @@ function plastic_dislotwin_homogenizedC(ipc,ip,el)
     ipc, &                                                                                          !< component-ID of integration point
     ip, &                                                                                           !< integration point
     el                                                                                              !< element
-
+    
  integer(pInt) :: instance,ns,nt,nr,i, &
                   ph, &
                   of
@@ -1493,7 +1492,6 @@ subroutine plastic_dislotwin_microstructure(temperature,CurrentDensity,ipc,ip,el
  real(pReal), dimension(3),   intent(in)  :: &
    CurrentDensity
  real(pReal) :: Molotskii_factor_forestDis
-   
  integer(pInt) :: &
    instance, &
    ns,nt,nr,s,t,r, &
@@ -1512,7 +1510,7 @@ subroutine plastic_dislotwin_microstructure(temperature,CurrentDensity,ipc,ip,el
  ns = plastic_dislotwin_totalNslip(instance)
  nt = plastic_dislotwin_totalNtwin(instance)
  nr = plastic_dislotwin_totalNtrans(instance)
-
+ 
  !* Total twin volume fraction
  sumf = sum(state(instance)%twinFraction(1_pInt:nt,of)) ! safe for nt == 0
  
@@ -1542,13 +1540,13 @@ subroutine plastic_dislotwin_microstructure(temperature,CurrentDensity,ipc,ip,el
    plastic_dislotwin_factorForestDis_Molotskii(instance) * &
    (math_mul3x3(currentDensity,CurrentDensity) / &
    (plastic_dislotwin_j0(instance)**2.0_pReal))
-  
+   
  forall (s = 1_pInt:ns) &
    state(instance)%invLambdaSlip(s,of) = &
+     Molotskii_factor_forestDis * &
      sqrt(dot_product((state(instance)%rhoEdge(1_pInt:ns,of)+state(instance)%rhoEdgeDip(1_pInt:ns,of)),&
-                      plastic_dislotwin_forestProjectionEdge(1:ns,s,instance)))/ &
-     (plastic_dislotwin_CLambdaSlipPerSlipSystem(s,instance) * &
-      Molotskii_factor_forestDis)
+                      plastic_dislotwin_forestProjectionEdge(1:ns,s,instance))) / &
+                      plastic_dislotwin_CLambdaSlipPerSlipSystem(s,instance)
 
  !* 1/mean free distance between 2 twin stacks from different systems seen by a moving dislocation
  !$OMP CRITICAL (evilmatmul)
@@ -1606,9 +1604,10 @@ subroutine plastic_dislotwin_microstructure(temperature,CurrentDensity,ipc,ip,el
  !* threshold stress for dislocation motion
  forall (s = 1_pInt:ns) &
    state(instance)%threshold_stress_slip(s,of) = &
-     lattice_mu(ph)*(plastic_dislotwin_burgersPerSlipSystem(s,instance)/Molotskii_factor_forestDis) * &
+     Molotskii_factor_forestDis * &
+     lattice_mu(ph)*plastic_dislotwin_burgersPerSlipSystem(s,instance) * &
      sqrt(dot_product((state(instance)%rhoEdge(1_pInt:ns,of)+state(instance)%rhoEdgeDip(1_pInt:ns,of)),&
-                      plastic_dislotwin_interactionMatrix_SlipSlip(s,1:ns,instance)))
+                      plastic_dislotwin_interactionMatrix_SlipSlip(s,1:ns,instance)))                     
 
  !* threshold stress for growing twin
  forall (t = 1_pInt:nt) &
