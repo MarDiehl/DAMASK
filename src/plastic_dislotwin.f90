@@ -1859,8 +1859,7 @@ subroutine plastic_dislotwin_LpAndItsTangent(Lp,dLp_dTstar99,Tstar_v,Temperature
           *plastic_dislotwin_qPerSlipFamily(f,instance)/&
           (plastic_dislotwin_SolidSolutionStrength_Molotskii(instance) + &
           plastic_dislotwin_tau_peierlsPerSlipFamily(f,instance))*&
-          StressRatio_pminus1*(1-StressRatio_p)**(plastic_dislotwin_qPerSlipFamily(f,instance)-1.0_pReal) * &
-          Electron_wind_term
+          StressRatio_pminus1*(1-StressRatio_p)**(plastic_dislotwin_qPerSlipFamily(f,instance)-1.0_pReal)
       endif
  
       !* Plastic velocity gradient for dislocation glide
