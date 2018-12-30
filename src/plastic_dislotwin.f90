@@ -50,6 +50,7 @@ module plastic_dislotwin
    plastic_dislotwin_SolidSolutionStrength_Molotskii, &                                        !< Modified solid solution strength     
    plastic_dislotwin_j0, &                                                                     !< Characteristic current density
    plastic_dislotwin_factorSolidSolution_Molotskii, &                                          !< Factor to turn on or off the change in solid solution strength
+   plastic_dislotwin_factorQedge_Molotskii, &                                                  !< Factor to turn on or off the change in Qedge
    plastic_dislotwin_factorVelocity_Molotskii, &                                               !< Factor to turn on or off the change in dislocation velocity
    plastic_dislotwin_factorForestDis_Molotskii, &                                              !< Factor to turn on or off the scaling of the forest dislocation hardening 
    plastic_dislotwin_spDisloResistivity, &                                                     !< specific dislocation resistivity
@@ -316,6 +317,7 @@ subroutine plastic_dislotwin_init(fileUnit)
  allocate(plastic_dislotwin_SolidSolutionStrength_Molotskii(maxNinstance),     source=0.0_pReal)
  allocate(plastic_dislotwin_j0(maxNinstance),                                  source=1.0e09_pReal)
  allocate(plastic_dislotwin_factorSolidSolution_Molotskii(maxNinstance),       source=0.0_pReal)
+ allocate(plastic_dislotwin_factorQedge_Molotskii(maxNinstance),               source=0.0_pReal)
  allocate(plastic_dislotwin_factorForestDis_Molotskii(maxNinstance),           source=0.0_pReal)
  allocate(plastic_dislotwin_factorVelocity_Molotskii(maxNinstance),            source=0.0_pReal)
  allocate(plastic_dislotwin_spDisloResistivity(maxNinstance),                  source=0.0_pReal)
@@ -703,6 +705,8 @@ subroutine plastic_dislotwin_init(fileUnit)
          plastic_dislotwin_j0(instance) = IO_floatValue(line,chunkPos,2_pInt)  
        case ('fac_solidsolution')
          plastic_dislotwin_factorSolidSolution_Molotskii(instance) = IO_floatValue(line,chunkPos,2_pInt)   
+       case ('fac_qedge')
+         plastic_dislotwin_factorQedge_Molotskii(instance) = IO_floatValue(line,chunkPos,2_pInt)     
        case ('fac_forestdis')
          plastic_dislotwin_factorForestDis_Molotskii(instance) = IO_floatValue(line,chunkPos,2_pInt)     
        case ('fac_velocity')
@@ -1732,13 +1736,14 @@ subroutine plastic_dislotwin_LpAndItsTangent(Lp,dLp_dTstar99,Tstar_v,Temperature
  real(pReal), dimension(3,3) :: eigVectors, sb_Smatrix
  real(pReal), dimension(3)   :: eigValues, sb_s, sb_m
  real(pReal) :: Molotskii_factor_solidSolution, &
+                Molotskii_factor_Qedge, &
                 Molotskii_factor_velocity, &
                 Molotskii_factor_activation_area, &
                 F_ew, &
                 Activation_area0,  &
-                Activation_area_j, &
                 Tau_eff, &
-                Electron_wind_term
+                Electron_wind_term, &
+                plastic_dislotwin_QedgePerSlipSystem_Molotskii
                 
  logical :: error
  real(pReal), dimension(3,6), parameter :: &
@@ -1794,6 +1799,12 @@ subroutine plastic_dislotwin_LpAndItsTangent(Lp,dLp_dTstar99,Tstar_v,Temperature
           (math_mul3x3(currentDensity,CurrentDensity) / &
            (plastic_dislotwin_j0(instance)**2.0_pReal))
            
+      Molotskii_factor_Qedge = &
+       1.0_pReal + &
+           plastic_dislotwin_factorQedge_Molotskii(instance) * &
+          (math_mul3x3(currentDensity,CurrentDensity) / &
+           (plastic_dislotwin_j0(instance)**2.0_pReal))     
+           
       Molotskii_factor_velocity = &
        1.0_pReal + &
            plastic_dislotwin_factorVelocity_Molotskii(instance) * &
@@ -1813,7 +1824,13 @@ subroutine plastic_dislotwin_LpAndItsTangent(Lp,dLp_dTstar99,Tstar_v,Temperature
       !Calculation of the new velocity
       plastic_dislotwin_v0PerSlipSystem_Molotskii(j,instance) = &
         plastic_dislotwin_v0PerSlipSystem(j,instance) * &
-        (Molotskii_factor_velocity**2_pReal)
+        Molotskii_factor_velocity
+        
+      !Calculation of the new Qedge  
+      plastic_dislotwin_QedgePerSlipSystem_Molotskii = &
+        plastic_dislotwin_QedgePerSlipSystem(j,instance) * &
+        Molotskii_factor_Qedge
+        
             
       !* Calculation of Lp
       !* Resolved shear stress on slip system
@@ -1827,7 +1844,7 @@ subroutine plastic_dislotwin_LpAndItsTangent(Lp,dLp_dTstar99,Tstar_v,Temperature
         StressRatio_p       = stressRatio** plastic_dislotwin_pPerSlipFamily(f,instance)
         StressRatio_pminus1 = stressRatio**(plastic_dislotwin_pPerSlipFamily(f,instance)-1.0_pReal)
       !* Boltzmann ratio
-        BoltzmannRatio = plastic_dislotwin_QedgePerSlipSystem(j,instance)/(kB*Temperature)
+        BoltzmannRatio = plastic_dislotwin_QedgePerSlipSystem_Molotskii/(kB*Temperature)
       !* Initial shear rates
         DotGamma0 = &
           state(instance)%rhoEdge(j,of)*plastic_dislotwin_burgersPerSlipSystem(j,instance)*&
@@ -1835,16 +1852,17 @@ subroutine plastic_dislotwin_LpAndItsTangent(Lp,dLp_dTstar99,Tstar_v,Temperature
           
       !*Calculation of the activation area
       Tau_eff = abs(tau_slip(j)) - state(instance)%threshold_stress_slip(j,of) 
+                                   
+      Activation_area0 = plastic_dislotwin_QedgePerSlipSystem_Molotskii * &
+                         plastic_dislotwin_pPerSlipFamily(f,instance) * &
+                         plastic_dislotwin_qPerSlipFamily(f,instance) * &
+                         StressRatio_pminus1 * &
+                         ((1.0_pReal - StressRatio_p) ** & 
+                         (plastic_dislotwin_qPerSlipFamily(f,instance)-1.0_pReal)) / &
+                         (plastic_dislotwin_SolidSolutionStrength_Molotskii(instance) * &
+                          plastic_dislotwin_burgersPerSlipSystem(j,instance))
       
-      Activation_area0 = plastic_dislotwin_QedgePerSlipSystem(j,instance) * &
-        (1.0_pReal - ((1.0_pReal-StressRatio_p) ** &
-        plastic_dislotwin_qPerSlipFamily(f,instance))) / &
-        (Tau_eff * plastic_dislotwin_burgersPerSlipSystem(j,instance))
-        
-      Activation_area_j =  Activation_area0 * &
-        Molotskii_factor_activation_area 
-      
-      Electron_wind_term = cosh(F_ew * Activation_area_j / &
+      Electron_wind_term = cosh(F_ew * Activation_area0 / &
            (kB*Temperature))
  
         !* Shear rates due to slip
@@ -2103,13 +2121,14 @@ subroutine plastic_dislotwin_dotState(Tstar_v,Temperature,CurrentDensity,ipc,ip,
              DotRhoDipFormation,DotRhoMultiplication,DotRhoEdgeEdgeAnnihilation
   
  real(pReal) :: Molotskii_factor_solidSolution, &
+                Molotskii_factor_Qedge, &
                 Molotskii_factor_velocity, &
                 Molotskii_factor_activation_area, &
                 F_ew, &
                 Activation_area0,  &
-                Activation_area_j, &
                 Tau_eff, &
-                Electron_wind_term
+                Electron_wind_term, &
+                plastic_dislotwin_QedgePerSlipSystem_Molotskii
             
  real(pReal), dimension(plastic_dislotwin_totalNslip(phase_plasticityInstance(material_phase(ipc,ip,el)))) :: &
  gdot_slip,tau_slip
@@ -2155,6 +2174,12 @@ subroutine plastic_dislotwin_dotState(Tstar_v,Temperature,CurrentDensity,ipc,ip,
            plastic_dislotwin_factorSolidSolution_Molotskii(instance) * &
           (math_mul3x3(currentDensity,CurrentDensity) / &
            (plastic_dislotwin_j0(instance)**2.0_pReal))
+           
+      Molotskii_factor_Qedge = &
+       1.0_pReal + &
+           plastic_dislotwin_factorQedge_Molotskii(instance) * &
+          (math_mul3x3(currentDensity,CurrentDensity) / &
+           (plastic_dislotwin_j0(instance)**2.0_pReal))     
       
       Molotskii_factor_velocity = &
        1.0_pReal + &
@@ -2175,8 +2200,13 @@ subroutine plastic_dislotwin_dotState(Tstar_v,Temperature,CurrentDensity,ipc,ip,
       !Calculation of the new velocity
       plastic_dislotwin_v0PerSlipSystem_Molotskii(j,instance) = &
         plastic_dislotwin_v0PerSlipSystem(j,instance) * &
-        (Molotskii_factor_velocity**2.0_pReal)
- 
+        Molotskii_factor_velocity
+        
+      !Calculation of the new Qedge  
+      plastic_dislotwin_QedgePerSlipSystem_Molotskii = &
+        plastic_dislotwin_QedgePerSlipSystem(j,instance) * &
+        Molotskii_factor_Qedge
+        
       !* Resolved shear stress on slip system
       tau_slip(j) = dot_product(Tstar_v,lattice_Sslip_v(:,1,index_myFamily+i,ph))
 
@@ -2188,7 +2218,7 @@ subroutine plastic_dislotwin_dotState(Tstar_v,Temperature,CurrentDensity,ipc,ip,
         StressRatio_p       = stressRatio** plastic_dislotwin_pPerSlipFamily(f,instance)
         StressRatio_pminus1 = stressRatio**(plastic_dislotwin_pPerSlipFamily(f,instance)-1.0_pReal)
       !* Boltzmann ratio
-        BoltzmannRatio = plastic_dislotwin_QedgePerSlipSystem(j,instance)/(kB*Temperature)
+        BoltzmannRatio = plastic_dislotwin_QedgePerSlipSystem_Molotskii/(kB*Temperature)
       !* Initial shear rates
         DotGamma0 = &
           plasticState(ph)%state(j, of)*plastic_dislotwin_burgersPerSlipSystem(j,instance)*&
@@ -2197,15 +2227,16 @@ subroutine plastic_dislotwin_dotState(Tstar_v,Temperature,CurrentDensity,ipc,ip,
       !*Calculation of the activation area
       Tau_eff = abs(tau_slip(j)) - state(instance)%threshold_stress_slip(j,of) 
       
-      Activation_area0 = plastic_dislotwin_QedgePerSlipSystem(j,instance) * &
-        (1.0_pReal - ((1.0_pReal-StressRatio_p) ** &
-        plastic_dislotwin_qPerSlipFamily(f,instance))) / &
-        (Tau_eff * plastic_dislotwin_burgersPerSlipSystem(j,instance))
-        
-      Activation_area_j =  Activation_area0 * &
-        Molotskii_factor_activation_area 
+      Activation_area0 = plastic_dislotwin_QedgePerSlipSystem_Molotskii * &
+                         plastic_dislotwin_pPerSlipFamily(f,instance) * &
+                         plastic_dislotwin_qPerSlipFamily(f,instance) * &
+                         StressRatio_pminus1 * &
+                         ((1.0_pReal - StressRatio_p) ** & 
+                         (plastic_dislotwin_qPerSlipFamily(f,instance)-1.0_pReal)) / &
+                         (plastic_dislotwin_SolidSolutionStrength_Molotskii(instance) * &
+                          plastic_dislotwin_burgersPerSlipSystem(j,instance))
       
-      Electron_wind_term = cosh(F_ew * Activation_area_j / &
+      Electron_wind_term = cosh(F_ew * Activation_area0 / &
            (kB*Temperature))   
  
       !* Shear rates due to slip
@@ -2419,13 +2450,14 @@ function plastic_dislotwin_postResults(Tstar_v,Temperature,CurrentDensity,ipc,ip
  real(pReal), dimension(3,3) :: eigVectors
  real(pReal), dimension (3) :: eigValues
  real(pReal) :: Molotskii_factor_solidSolution, &
+                Molotskii_factor_Qedge, &
                 Molotskii_factor_velocity, &
                 Molotskii_factor_activation_area, &
                 F_ew, &
                 Activation_area0,  &
-                Activation_area_j, &
                 Tau_eff, &
-                Electron_wind_term
+                Electron_wind_term, &
+                plastic_dislotwin_QedgePerSlipSystem_Molotskii
  
  !* Shortened notation
  of = phasememberAt(ipc,ip,el)
@@ -2480,6 +2512,12 @@ function plastic_dislotwin_postResults(Tstar_v,Temperature,CurrentDensity,ipc,ip
                1.0_pReal + &
                (math_mul3x3(currentDensity,CurrentDensity) / &
                (plastic_dislotwin_j0(instance)**2.0_pReal))
+                    
+              Molotskii_factor_Qedge = &
+                1.0_pReal + &
+                plastic_dislotwin_factorQedge_Molotskii(instance) * &
+                (math_mul3x3(currentDensity,CurrentDensity) / &
+                (plastic_dislotwin_j0(instance)**2.0_pReal))       
                    
               !Calculation of the new solid solution strength due to electroplasticity
               plastic_dislotwin_SolidSolutionStrength_Molotskii(instance) = &
@@ -2489,7 +2527,12 @@ function plastic_dislotwin_postResults(Tstar_v,Temperature,CurrentDensity,ipc,ip
               !Calculation of the new velocity
               plastic_dislotwin_v0PerSlipSystem_Molotskii(j,instance) = &
                 plastic_dislotwin_v0PerSlipSystem(j,instance) * &
-                (Molotskii_factor_velocity**2.0_pReal)   
+                Molotskii_factor_velocity  
+                
+              !Calculation of the new Qedge  
+              plastic_dislotwin_QedgePerSlipSystem_Molotskii = &
+                plastic_dislotwin_QedgePerSlipSystem(j,instance) * &
+                Molotskii_factor_Qedge  
  
               !* Resolved shear stress on slip system
               tau = dot_product(Tstar_v,lattice_Sslip_v(:,1,index_myFamily+i,ph))
@@ -2502,7 +2545,7 @@ function plastic_dislotwin_postResults(Tstar_v,Temperature,CurrentDensity,ipc,ip
                 StressRatio_p       = stressRatio** plastic_dislotwin_pPerSlipFamily(f,instance)
                 StressRatio_pminus1 = stressRatio**(plastic_dislotwin_pPerSlipFamily(f,instance)-1.0_pReal)
               !* Boltzmann ratio
-                BoltzmannRatio = plastic_dislotwin_QedgePerSlipSystem(j,instance)/(kB*Temperature)
+                BoltzmannRatio = plastic_dislotwin_QedgePerSlipSystem_Molotskii/(kB*Temperature)
               !* Initial shear rates
                 DotGamma0 = &
                   state(instance)%rhoEdge(j,of)*plastic_dislotwin_burgersPerSlipSystem(j,instance)* &
@@ -2511,15 +2554,16 @@ function plastic_dislotwin_postResults(Tstar_v,Temperature,CurrentDensity,ipc,ip
               !*Calculation of the activation area
               Tau_eff = abs(tau) - state(instance)%threshold_stress_slip(j,of) 
       
-              Activation_area0 = plastic_dislotwin_QedgePerSlipSystem(j,instance) * &
-                (1.0_pReal - ((1.0_pReal-StressRatio_p) ** &
-                plastic_dislotwin_qPerSlipFamily(f,instance))) / &
-                (Tau_eff * plastic_dislotwin_burgersPerSlipSystem(j,instance))
-        
-              Activation_area_j =  Activation_area0 * &
-               Molotskii_factor_activation_area 
+             Activation_area0 = plastic_dislotwin_QedgePerSlipSystem_Molotskii * &
+                         plastic_dislotwin_pPerSlipFamily(f,instance) * &
+                         plastic_dislotwin_qPerSlipFamily(f,instance) * &
+                         StressRatio_pminus1 * &
+                         ((1.0_pReal - StressRatio_p) ** & 
+                         (plastic_dislotwin_qPerSlipFamily(f,instance)-1.0_pReal)) / &
+                         (plastic_dislotwin_SolidSolutionStrength_Molotskii(instance) * &
+                          plastic_dislotwin_burgersPerSlipSystem(j,instance))
       
-              Electron_wind_term = cosh(F_ew * Activation_area_j / &
+              Electron_wind_term = cosh(F_ew * Activation_area0 / &
                (kB*Temperature))       
  
               !* Shear rates due to slip
