@@ -53,6 +53,7 @@ module plastic_dislotwin
    plastic_dislotwin_factorQedge_Molotskii, &                                                  !< Factor to turn on or off the change in Qedge
    plastic_dislotwin_factorVelocity_Molotskii, &                                               !< Factor to turn on or off the change in dislocation velocity
    plastic_dislotwin_factorForestDis_Molotskii, &                                              !< Factor to turn on or off the scaling of the forest dislocation hardening 
+   plastic_dislotwin_factorMeanFreePath_Molotskii, &                                           !< Factor to turn on or off the scaling of the Mean free path
    plastic_dislotwin_spDisloResistivity, &                                                     !< specific dislocation resistivity
    plastic_dislotwin_electronDensity, &                                                        !< electron density
    plastic_dislotwin_L0_twin, &                                                                !< Length of twin nuclei in Burgers vectors
@@ -319,6 +320,7 @@ subroutine plastic_dislotwin_init(fileUnit)
  allocate(plastic_dislotwin_factorSolidSolution_Molotskii(maxNinstance),       source=0.0_pReal)
  allocate(plastic_dislotwin_factorQedge_Molotskii(maxNinstance),               source=0.0_pReal)
  allocate(plastic_dislotwin_factorForestDis_Molotskii(maxNinstance),           source=0.0_pReal)
+ allocate(plastic_dislotwin_factorMeanFreePath_Molotskii(maxNinstance),        source=0.0_pReal)
  allocate(plastic_dislotwin_factorVelocity_Molotskii(maxNinstance),            source=0.0_pReal)
  allocate(plastic_dislotwin_spDisloResistivity(maxNinstance),                  source=0.0_pReal)
  allocate(plastic_dislotwin_electronDensity(maxNinstance),                     source=0.0_pReal)
@@ -709,6 +711,8 @@ subroutine plastic_dislotwin_init(fileUnit)
          plastic_dislotwin_factorQedge_Molotskii(instance) = IO_floatValue(line,chunkPos,2_pInt)     
        case ('fac_forestdis')
          plastic_dislotwin_factorForestDis_Molotskii(instance) = IO_floatValue(line,chunkPos,2_pInt)     
+       case ('fac_mfp')
+         plastic_dislotwin_factorMeanFreePath_Molotskii(instance) = IO_floatValue(line,chunkPos,2_pInt)       
        case ('fac_velocity')
          plastic_dislotwin_factorVelocity_Molotskii(instance) = IO_floatValue(line,chunkPos,2_pInt)   
        case ('sp_disloresis')
@@ -1504,7 +1508,8 @@ subroutine plastic_dislotwin_microstructure(temperature,CurrentDensity,ipc,ip,el
    temperature                                                                                      !< temperature at IP 
  real(pReal), dimension(3),   intent(in)  :: &
    CurrentDensity
- real(pReal) :: Molotskii_factor_forestDis
+ real(pReal) :: Molotskii_factor_forestDis, &
+                Molotskii_factor_MFP
  integer(pInt) :: &
    instance, &
    ns,nt,nr,s,t,r, &
@@ -1548,18 +1553,18 @@ subroutine plastic_dislotwin_microstructure(temperature,CurrentDensity,ipc,ip,el
  
  !* 1/mean free distance between 2 forest dislocations seen by a moving dislocation
  !Calculation of the Molotskii_factor
- Molotskii_factor_forestDis = &
+ Molotskii_factor_MFP = &
    1.0_pReal + &
-   plastic_dislotwin_factorForestDis_Molotskii(instance) * &
+   plastic_dislotwin_factorMeanFreePath_Molotskii(instance) * &
    (math_mul3x3(currentDensity,CurrentDensity) / &
    (plastic_dislotwin_j0(instance)**2.0_pReal))
    
  forall (s = 1_pInt:ns) &
    state(instance)%invLambdaSlip(s,of) = &
-     Molotskii_factor_forestDis * &
      sqrt(dot_product((state(instance)%rhoEdge(1_pInt:ns,of)+state(instance)%rhoEdgeDip(1_pInt:ns,of)),&
                       plastic_dislotwin_forestProjectionEdge(1:ns,s,instance))) / &
-                      plastic_dislotwin_CLambdaSlipPerSlipSystem(s,instance)
+                      (plastic_dislotwin_CLambdaSlipPerSlipSystem(s,instance) * &
+                       Molotskii_factor_MFP)
 
  !* 1/mean free distance between 2 twin stacks from different systems seen by a moving dislocation
  !$OMP CRITICAL (evilmatmul)
@@ -1615,6 +1620,13 @@ subroutine plastic_dislotwin_microstructure(temperature,CurrentDensity,ipc,ip,el
       (1.0_pReal+plastic_dislotwin_GrainSize(instance)*state(instance)%invLambdaTrans(r,of))
 
  !* threshold stress for dislocation motion
+ !Calculation of the Molotskii_factor
+ Molotskii_factor_forestDis = &
+   1.0_pReal + &
+   plastic_dislotwin_factorForestDis_Molotskii(instance) * &
+   (math_mul3x3(currentDensity,CurrentDensity) / &
+   (plastic_dislotwin_j0(instance)**2.0_pReal))
+   
  forall (s = 1_pInt:ns) &
    state(instance)%threshold_stress_slip(s,of) = &
      Molotskii_factor_forestDis * &
