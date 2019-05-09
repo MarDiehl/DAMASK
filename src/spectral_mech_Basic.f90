@@ -66,8 +66,6 @@ module spectral_mech_basic
    basic_init, &
    basic_solution, &
    basic_forward
- external :: &
-   PETScErrorF                                                                                      ! is called in the CHKERRQ macro
 
 contains
 

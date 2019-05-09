@@ -37,8 +37,6 @@ module spectral_solute
    spectral_solute_init, &
    spectral_solute_solution, &
    spectral_solute_forward
- external :: &
-   PETScErrorF
 
 contains
 

@@ -158,8 +158,6 @@ module spectral_utilities
    FIELD_ELECTRICAL_ID
  private :: &
    utilities_getFreqDerivative
- external :: &
-   PETScErrorF                                                                                      ! is called in the CHKERRQ macro
 
 contains
 

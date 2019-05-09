@@ -73,8 +73,6 @@ module spectral_mech_Polarisation
    Polarisation_init, &
    Polarisation_solution, &
    Polarisation_forward
- external :: &
-   PETScErrorF                                                                                      ! is called in the CHKERRQ macro
 
 contains
 

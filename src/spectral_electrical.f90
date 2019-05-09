@@ -52,8 +52,6 @@ use PETScsnes
    spectral_electrical_init, &
    spectral_electrical_solution, &
    spectral_electrical_forward
- external :: &
-   PETScErrorF
 
 contains
 

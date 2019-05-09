@@ -50,8 +50,6 @@ module spectral_thermal
    spectral_thermal_init, &
    spectral_thermal_solution, &
    spectral_thermal_forward
- external :: &
-   PETScErrorF                                                                                      ! is called in the CHKERRQ macro
 
 contains
 
@@ -190,11 +188,6 @@ type(tSolutionState) function spectral_thermal_solution(timeinc,timeinc_old,load
 ! PETSc Data
  PetscErrorCode :: ierr   
  SNESConvergedReason :: reason
-
- external :: &
-   VecMin, &
-   VecMax, &
-   SNESSolve
 
  spectral_thermal_solution%converged =.false.
  

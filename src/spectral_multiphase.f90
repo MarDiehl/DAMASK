@@ -42,8 +42,6 @@ module spectral_multiphase
    spectral_multiphase_init, &
    spectral_multiphase_solution, &
    spectral_multiphase_forward
- external :: &
-   PETScErrorF
 
 contains
 

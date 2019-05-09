@@ -43,11 +43,7 @@ subroutine DAMASK_interface_init()
  use, intrinsic :: &
    iso_fortran_env
 #include <petsc/finclude/petscsys.h>
-#if PETSC_VERSION_MAJOR!=3 || PETSC_VERSION_MINOR!=9
-=================================================================================================== 
-=========================   THIS VERSION OF DAMASK REQUIRES PETSc 3.9.x   ========================= 
-===================================================================================================
-#endif
+
  use PETScSys
  use system_routines, only: &
    getHostName
@@ -75,9 +71,7 @@ subroutine DAMASK_interface_init()
  PetscErrorCode :: ierr
  logical        :: error
  external :: &
-   quit,&
-   PETScErrorF, &                                                                                   ! is called in the CHKERRQ macro
-   PETScInitialize
+   quit
 
  open(6, encoding='UTF-8')                                                                          ! for special characters in output
 

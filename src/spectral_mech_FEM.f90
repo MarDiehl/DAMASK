@@ -62,8 +62,6 @@ module spectral_mech_FEM
    FEM_init, &
    FEM_solution, &
    FEM_forward
- external :: &
-   PETScErrorF
 
 contains
 
