@@ -219,7 +219,7 @@ subroutine kinematics_solute_strain_LiAndItsTangent(Li, dLi_dTstar3333, ipc, ip,
  do cp = 1_pInt, phase_Ncomponents(phase)
    Li = Li + &
         param(instance)%StrainCoeff(cp)* &
-        chemicalConcRate(phase)%p(cp,chemConcMapping(phase)%p(ipc,ip,el))
+        chemicalConcRate(phase)%p(cp,chemConcMapping(phase)%p(ipc,ip,el))*math_I3
  enddo
  dLi_dTstar3333 = 0.0_pReal 
   
