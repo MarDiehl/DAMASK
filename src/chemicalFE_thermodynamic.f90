@@ -485,8 +485,9 @@ subroutine chemicalFE_thermodynamic_dotState(ipc,ip,el)
 
  phase = material_phase(ipc,ip,el) 
  do cp = 1_pInt, phase_Ncomponents(phase)
-   chemicalState(phase)%dotState(cp,chemConcMapping(phase)%p(ipc,ip,el)) = &
-     chemicalConcRate(phase)%p(cp,chemConcMapping(phase)%p(ipc,ip,el))
+   chemicalState(phase)%dotState(cp,chemConcMapping(phase)%p(ipc,ip,el)) = 0.0
+   !chemicalState(phase)%dotState(cp,chemConcMapping(phase)%p(ipc,ip,el)) = &
+   !  chemicalConcRate(phase)%p(cp,chemConcMapping(phase)%p(ipc,ip,el))
  enddo
 
 end subroutine chemicalFE_thermodynamic_dotState

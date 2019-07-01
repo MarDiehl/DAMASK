@@ -182,7 +182,7 @@ type(tSolutionState) function spectral_solute_solution(timeinc,timeinc_old)
    timeinc_old                                                                                      !< increment in time of last increment
  DM :: da_local
  PetscScalar, pointer :: x_scal_current(:,:,:,:), x_scal_lastInc(:,:,:,:)
- real(pReal), dimension(Ncomponents) :: stagNorm, minConc, maxConc, avgConc
+ real(pReal), dimension(Ncomponents) :: stagNorm, minConc, maxConc, avgConc, maxConc_diff
  integer(pInt) :: i, j, k, cell, comp
 
 !--------------------------------------------------------------------------------------------------
@@ -215,6 +215,7 @@ type(tSolutionState) function spectral_solute_solution(timeinc,timeinc_old)
  avgConc  =  0.0_pReal
  minConc  =  huge(1.0_pReal)
  maxConc  = -huge(1.0_pReal)
+ maxConc_diff = -huge(1.0_pReal)
  stagNorm = -huge(1.0_pReal)
  cell = 0
  do k = zstart, zend; do j = ystart, yend; do i = xstart, xend
@@ -224,6 +225,8 @@ type(tSolutionState) function spectral_solute_solution(timeinc,timeinc_old)
      maxConc (comp) = max(maxConc(comp),conc_current(comp,i,j,k))
      avgConc (comp) = avgConc(comp) + conc_current(comp,i,j,k)
      stagNorm(comp) = max(stagNorm(comp),abs(conc_current(comp,i,j,k) - conc_stagInc(comp,i,j,k)))
+     maxConc_diff (comp) = max(maxConc_diff(comp),abs(conc_current(comp,i,j,k) - &
+                                                      x_scal_current(comp-1+Ncomponents,i,j,k) ))
    enddo    
    call solute_flux_calAndPutComponentConcRate(x_scal_current(          0:  Ncomponents-1,i,j,k), &
                                                x_scal_current(Ncomponents:2*Ncomponents-1,i,j,k), &
@@ -231,6 +234,7 @@ type(tSolutionState) function spectral_solute_solution(timeinc,timeinc_old)
  enddo; enddo; enddo
  call MPI_Allreduce(MPI_IN_PLACE,minConc ,Ncomponents  ,MPI_DOUBLE,MPI_MIN,PETSC_COMM_WORLD,ierr)
  call MPI_Allreduce(MPI_IN_PLACE,maxConc ,Ncomponents  ,MPI_DOUBLE,MPI_MAX,PETSC_COMM_WORLD,ierr)
+ call MPI_Allreduce(MPI_IN_PLACE,maxConc_diff ,Ncomponents  ,MPI_DOUBLE,MPI_MAX,PETSC_COMM_WORLD,ierr)
  call MPI_Allreduce(MPI_IN_PLACE,avgConc ,Ncomponents  ,MPI_DOUBLE,MPI_SUM,PETSC_COMM_WORLD,ierr)
  call MPI_Allreduce(MPI_IN_PLACE,stagNorm,Ncomponents  ,MPI_DOUBLE,MPI_MAX,PETSC_COMM_WORLD,ierr)
 
@@ -251,6 +255,7 @@ type(tSolutionState) function spectral_solute_solution(timeinc,timeinc_old)
    do comp = 1, Ncomponents
      write(6,'(/,a,e12.5,2x,e12.5,2x,e11.4,/)',advance='no') ' Minimum|Maximum|Avg Conc          = ',&
        minConc(comp), maxConc(comp), avgConc(comp)*wgt
+     write(*,*) 'maxConc_diff',  maxConc_diff(comp)
    enddo
    write(6,'(/,a)') ' ==========================================================================='
    flush(6) 

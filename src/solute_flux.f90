@@ -528,6 +528,7 @@ subroutine solute_flux_calAndPutComponentConcRate(ChemPot,GradC,dt,ip,el)
    soluteMapping, &
    chemicalConcRate, &
    chemicalConc0, &
+   chemicalConc, &
    chemConcMapping
  implicit none
  integer(pInt),                                         intent(in) :: &
@@ -556,6 +557,8 @@ subroutine solute_flux_calAndPutComponentConcRate(ChemPot,GradC,dt,ip,el)
                                                      dConcdChemPot_local,dConcdGradC_local, & 
                                                      ChemPot,GradC,gr,ip,el)
    do cp = 1_pInt, homogenization_maxNcomponents
+     chemicalConc(phase)%p(cp,chemConcMapping(phase)%p(gr,ip,el)) = &
+       Conc_local(cp)
      chemicalConcRate(phase)%p(cp,chemConcMapping(phase)%p(gr,ip,el)) = &
        (Conc_local(cp) - chemicalConc0(phase)%p(cp,chemConcMapping(phase)%p(gr,ip,el)))/dt
    enddo
