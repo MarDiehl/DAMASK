@@ -131,7 +131,7 @@ jobs:
         run: |
           cd petsc-${PETSC_VERSION}
           ./configure --with-fc=gfortran-${GCC_V} --with-cc=gcc-${GCC_V} --with-cxx=g++-${GCC_V} \
-          --download-openmpi --download-fftw --download-hdf5 --download-hdf5-fortran-bindings=1 --download-zlib \
+          --download-mpich --download-fftw --download-hdf5 --download-hdf5-fortran-bindings=1 --download-zlib \
           --with-mpi-f90module-visibility=1
           make all
 
