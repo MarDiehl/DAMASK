@@ -47,7 +47,7 @@ jobs:
       - name: PETSc - Download
         if: steps.petsc-download.outputs.cache-hit != 'true'
         run: |
-          wget -q https://ftp.mcs.anl.gov/pub/petsc/release-snapshots/petsc-${PETSC_VERSION}.tar.gz -P download
+          wget -q https://web.cels.anl.gov/projects/petsc/download/release-snapshots/petsc-{PETSC_VERSION}.tar.gz -P download
 
       - name: PETSc - Prepare
         run: |
@@ -110,7 +110,7 @@ jobs:
 
       - name: PETSc - Download
         run: |
-          wget -q https://ftp.mcs.anl.gov/pub/petsc/release-snapshots/petsc-${PETSC_VERSION}.tar.gz -P download
+          wget -q https://web.cels.anl.gov/projects/petsc/download/release-snapshots/petsc-{PETSC_VERSION}.tar.gz -P download
 
       - name: PETSc - Prepare
         run: |
@@ -134,7 +134,7 @@ jobs:
           --with-zlib-dir=$(brew --prefix zlib) \
           --with-fftw-dir=$(brew --prefix fftw) \
           --with-hdf5-dir=$(brew --prefix hdf5-mpi) --with-hdf5-fortran-bindings=1
-          make all
+          qmake all
 
       - name: DAMASK - Compile
         run: |
@@ -182,7 +182,7 @@ jobs:
       - name: PETSc - Download
         if: steps.petsc-download.outputs.cache-hit != 'true'
         run: |
-          wget -q https://ftp.mcs.anl.gov/pub/petsc/release-snapshots/petsc-${PETSC_VERSION}.tar.gz -P download
+          wget -q https://web.cels.anl.gov/projects/petsc/download/release-snapshots/petsc-{PETSC_VERSION}.tar.gz -P download
 
       - name: PETSc - Prepare
         run: |
