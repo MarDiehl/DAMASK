@@ -108,6 +108,10 @@ jobs:
           path: download
           key: petsc-${{ env.PETSC_VERSION }}.tar.gz
 
+      - name: install prerequisites
+        run: |
+          brew install pkg-config make cmake zlib wget openmpi fftw hdf5-mpi
+
       - name: PETSc - Download
         if: steps.petsc-download.outputs.cache-hit != 'true'
         run: |
@@ -130,9 +134,10 @@ jobs:
       - name: PETSc - Installation
         run: |
           cd petsc-${PETSC_VERSION}
-          ./configure
-          --download-fftw --download-hdf5 --download-zlib --download-make \
-          --download-hdf5-fortran-bindings=1 --with-mpi-f90module-visibility=1
+          ./configure \
+          --with-zlib-dir=$(brew --prefix zlib) \
+          --with-fftw-dir=$(brew --prefix fftw) \
+          --with-hdf5-dir=$(brew --prefix hdf5-mpi) --with-hdf5-fortran-bindings=1
           make all
 
       - name: DAMASK - Compile
