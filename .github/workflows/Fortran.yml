@@ -106,7 +106,7 @@ jobs:
 
       - name: install prerequisites
         run: |
-          brew install pkg-config make cmake zlib wget openmpi fftw hdf5-mpi
+          brew install pkg-config make cmake zlib wget mpich fftw hdf5-mpi
 
       - name: PETSc - Download
         run: |
