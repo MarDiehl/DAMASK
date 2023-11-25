@@ -121,7 +121,7 @@ jobs:
       - name: PETSc - Prepare
         run: |
           tar -xf download/petsc-${PETSC_VERSION}.tar.gz -C .
-          sed -i "1805s/if not os.path.isfile(os.path.join(self.packageDir,'configure')):/if True:/g" \
+          sed -i "1805s/if not os.path.isfile(os.path.join(self.packageDir,self.configureName)):/if True:/g" \
           ./petsc-${PETSC_VERSION}/config/BuildSystem/config/package.py
           export PETSC_DIR=${PWD}/petsc-${PETSC_VERSION}
           export PETSC_ARCH=intel
