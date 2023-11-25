@@ -47,7 +47,7 @@ jobs:
       - name: PETSc - Download
         if: steps.petsc-download.outputs.cache-hit != 'true'
         run: |
-          wget -q https://web.cels.anl.gov/projects/petsc/download/release-snapshots/petsc-{PETSC_VERSION}.tar.gz -P download
+          wget -q https://web.cels.anl.gov/projects/petsc/download/release-snapshots/petsc-${PETSC_VERSION}.tar.gz -P download
 
       - name: PETSc - Prepare
         run: |
@@ -110,7 +110,7 @@ jobs:
 
       - name: PETSc - Download
         run: |
-          wget -q https://web.cels.anl.gov/projects/petsc/download/release-snapshots/petsc-{PETSC_VERSION}.tar.gz -P download
+          wget -q https://web.cels.anl.gov/projects/petsc/download/release-snapshots/petsc-${PETSC_VERSION}.tar.gz -P download
 
       - name: PETSc - Prepare
         run: |
@@ -182,7 +182,7 @@ jobs:
       - name: PETSc - Download
         if: steps.petsc-download.outputs.cache-hit != 'true'
         run: |
-          wget -q https://web.cels.anl.gov/projects/petsc/download/release-snapshots/petsc-{PETSC_VERSION}.tar.gz -P download
+          wget -q https://web.cels.anl.gov/projects/petsc/download/release-snapshots/petsc-${PETSC_VERSION}.tar.gz -P download
 
       - name: PETSc - Prepare
         run: |
