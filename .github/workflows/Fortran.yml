@@ -67,8 +67,8 @@ jobs:
         run: |
           cd petsc-${PETSC_VERSION}
           ./configure --with-fc=gfortran --with-cc=gcc --with-cxx=g++ \
-          --download-openmpi --download-fftw --download-hdf5 --download-hdf5-fortran-bindings=1 --download-zlib \
-          --with-mpi-f90module-visibility=1
+          --download-openmpi --download-fftw --download-hdf5 --download-zlib \
+          --download-hdf5-fortran-bindings=1 --with-mpi-f90module-visibility=1
           make all
 
       - name: DAMASK - Compile
@@ -131,8 +131,8 @@ jobs:
         run: |
           cd petsc-${PETSC_VERSION}
           ./configure --with-fc=gfortran-${GCC_V} --with-cc=gcc-${GCC_V} --with-cxx=g++-${GCC_V} \
-          --download-mpich --download-fftw --download-hdf5 --download-hdf5-fortran-bindings=1 --download-zlib \
-          --with-mpi-f90module-visibility=1
+          --download-openmpi --download-fftw --download-hdf5 --download-zlib --download-make \
+          --download-hdf5-fortran-bindings=1 --with-mpi-f90module-visibility=1
           make all
 
       - name: DAMASK - Compile
@@ -203,10 +203,9 @@ jobs:
         run: |
           cd petsc-${PETSC_VERSION}
           ./configure \
-          --with-fc='mpiifort -fc=ifx' \
-          --with-cc='mpiicc -cc=icx' \
-          --with-cxx='mpiicpc -cxx=icpx' \
-          --download-fftw --download-hdf5 --download-hdf5-fortran-bindings=1 --download-zlib
+          --with-fc='mpiifort -fc=ifx' --with-cc='mpiicc -cc=icx' --with-cxx='mpiicpc -cxx=icpx' \
+          --download-fftw --download-hdf5 --download-zlib \
+          --download-hdf5-fortran-bindings=1
           make all
 
       # ifx has issue with openMP
