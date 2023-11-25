@@ -90,12 +90,8 @@ jobs:
     runs-on: macos-12
 
     strategy:
-      matrix:
-        gcc_v: [11, 12, 13]
       fail-fast: false
 
-    env:
-      GCC_V: ${{ matrix.gcc_v }}
 
     steps:
 
@@ -120,7 +116,7 @@ jobs:
         run: |
           tar -xf download/petsc-${PETSC_VERSION}.tar.gz -C .
           export PETSC_DIR=${PWD}/petsc-${PETSC_VERSION}
-          export PETSC_ARCH=gcc${GCC_V}
+          export PETSC_ARCH=openmpi
           printenv >> $GITHUB_ENV
 
           #- name: PETSc - Cache Installation
