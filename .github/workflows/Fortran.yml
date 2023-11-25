@@ -106,7 +106,7 @@ jobs:
 
       - name: install prerequisites
         run: |
-          brew install pkg-config make cmake zlib wget mpich fftw hdf5-mpi
+          brew install pkg-config make cmake zlib wget open-mpi fftw hdf5-mpi
 
       - name: PETSc - Download
         run: |
@@ -187,7 +187,6 @@ jobs:
       - name: PETSc - Prepare
         run: |
           tar -xf download/petsc-${PETSC_VERSION}.tar.gz -C .
-          ./petsc-${PETSC_VERSION}/config/BuildSystem/config/package.py
           export PETSC_DIR=${PWD}/petsc-${PETSC_VERSION}
           export PETSC_ARCH=intel
           printenv >> $GITHUB_ENV
