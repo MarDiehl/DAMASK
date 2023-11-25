@@ -130,6 +130,7 @@ jobs:
         run: |
           cd petsc-${PETSC_VERSION}
           ./configure \
+          --with-fc=mpifort --with-cc=mpicc -with-cxx=mpicxx \
           --with-zlib-dir=$(brew --prefix zlib) \
           --with-fftw-dir=$(brew --prefix fftw) \
           --with-hdf5-dir=$(brew --prefix hdf5-mpi) --with-hdf5-fortran-bindings=1
