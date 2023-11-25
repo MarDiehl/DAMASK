@@ -103,7 +103,7 @@ jobs:
 
       - name: PETSc - Cache download
         id: petsc-download
-        uses: actions/cache@v3
+          #uses: actions/cache@v3
         with:
           path: download
           key: petsc-${{ env.PETSC_VERSION }}.tar.gz
@@ -124,12 +124,12 @@ jobs:
           export PETSC_ARCH=gcc${GCC_V}
           printenv >> $GITHUB_ENV
 
-      - name: PETSc - Cache Installation
-        id: petsc-install
-        uses: actions/cache@v3
-        with:
-          path: petsc-${{ env.PETSC_VERSION }}
-          key: petsc-${{ env.PETSC_VERSION }}-gcc${{ matrix.gcc_v }}-${{ hashFiles('**/petscversion.h') }}
+          #- name: PETSc - Cache Installation
+          #  id: petsc-install
+          #  uses: actions/cache@v3
+          #  with:
+          #    path: petsc-${{ env.PETSC_VERSION }}
+          #    key: petsc-${{ env.PETSC_VERSION }}-gcc${{ matrix.gcc_v }}-${{ hashFiles('**/petscversion.h') }}
 
       - name: PETSc - Installation
         run: |
