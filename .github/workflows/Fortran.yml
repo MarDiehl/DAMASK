@@ -114,7 +114,7 @@ jobs:
 
       - name: PETSc - Download
         run: |
-          wget -q https://ftp.mcs.anl.gov/pub/petsc/release-snapshots/petsc-${PETSC_VERSION}.tar.gz
+          wget -q https://ftp.mcs.anl.gov/pub/petsc/release-snapshots/petsc-${PETSC_VERSION}.tar.gz -P download
 
       - name: PETSc - Prepare
         run: |
