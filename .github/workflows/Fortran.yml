@@ -134,8 +134,7 @@ jobs:
         run: |
           cd petsc-${PETSC_VERSION}
           ./configure \
-          --with-fc=gfortran --with-cc=clang -with-cxx=clang++ \
-          --with-mpi-dir=/usr/local/Cellar/open-mpi/4.1.6 \
+          --with-mpi-dir=/usr/local/opt/open-mpi/ \
           --with-zlib-dir=$(brew --prefix zlib) \
           --with-fftw-dir=$(brew --prefix fftw) \
           --with-hdf5-dir=$(brew --prefix hdf5-mpi) --with-hdf5-fortran-bindings=1
