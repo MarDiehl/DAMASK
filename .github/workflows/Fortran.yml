@@ -130,9 +130,8 @@ jobs:
       - name: PETSc - Installation
         run: |
           cd petsc-${PETSC_VERSION}
-          ./configure --with-fc=gfortran-${GCC_V} --with-cc=gcc-${GCC_V} --with-cxx=g++-${GCC_V} \
-          --CFLAGS='-O0' --CXXFLAGS='-O0' --FFLAGS='-O0' \
-          --download-openmpi --download-fftw --download-hdf5 --download-zlib --download-make \
+          ./configure
+          --download-fftw --download-hdf5 --download-zlib --download-make \
           --download-hdf5-fortran-bindings=1 --with-mpi-f90module-visibility=1
           make all
 
